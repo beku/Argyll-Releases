@@ -3,7 +3,7 @@
   <head>
     <title>oeminst</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -16,7 +16,7 @@
     list (<b>-y</b> option).<br>
     For the Spyder 2, it can install the instrument manufacturers PLD
     firmware pattern, which is necessary for it to operate.<br>
-    For the Spyder 4, it can enable the full range of manufacturers
+    For the Spyder 4 or 5, it can enable the full range of manufacturers
     colorimeter calibration selections, as well as install CCSS files.<br>
     For the eye-one display 3 it can&nbsp; locate and translate X-Rite
     .EDR files to CCSS files and install them to enable a full range of
@@ -38,8 +38,10 @@
 
 
 
+
       Verbose</span><br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -52,6 +54,7 @@
       Don't install, show where files would be installed</span><br>
     <span style="font-family: monospace;">&nbsp;-c
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -74,9 +77,11 @@
 
 
 
+
       Specify the install scope u = user (def.), l = local system]</span><br
       style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;infile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -97,9 +102,11 @@
 
 
 
+
       EDR file(s) to translate and install or CCSS or CCMX files to
       install</span><br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -151,6 +158,7 @@
 
 
 
+
         2</span> instrument cannot function without the presence of the
       instrument vendors PLD firmware pattern for the device. This
       firmware is not provided with Argyll, since it has not been made
@@ -187,6 +195,7 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
 
 
 
+
         Base Directory specifications</a> are used as a basis for
       storing the file). Programs that access instruments such as&nbsp;
       <span style="font-weight: bold;">spotread</span>, <span
@@ -214,15 +223,17 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
 
 
 
-        4</span> instrument does not have the full range of vendor
-      instrument calibration options without the presence of the
-      instrument vendors calibration information for the device. This
-      calibration information is not provided with Argyll, since it has
-      not been made available under a compatible license.<br>
+
+        4</span>&nbsp; or <u><b>Spyder 5</b></u> instrument does not
+      have the full range of vendor instrument calibration options
+      without the presence of the instrument vendors calibration
+      information for the device. This calibration information is not
+      provided with Argyll, since it has not been made available under a
+      compatible license.<br>
       <br>
-      The purchaser of a Spyder 4 instrument should have received a copy
-      of this calibration information along with their instrument from
-      the original vendor, and <span style="font-weight: bold;">oeminst</span>
+      The purchaser of a Spyder 4 or 5 instrument should have received a
+      copy of this calibration information along with their instrument
+      from the original vendor, and <span style="font-weight: bold;">oeminst</span>
       enables the full range of calibration choice for their instrument,
       by locating the necessary information in the users copy of the
       instrument install files.</p>
@@ -233,8 +244,12 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
       drivers have not been installed, or the user does not wish to
       install them, or no vendors drivers are available for the users
       platform (i.e. Linux), then <span style="font-weight: bold;">oeminst</span>
-      will also attempt to locate the Spyder 4 installation CDROM, and
-      make use of the calibration information from there.</p>
+      will also attempt to locate the Spyder 4 or 5 installation CDROM,
+      and make use of the calibration information from there. If you
+      have downloaded the OEM software from the vendors website, then
+      you should run <b>oeminst</b> on the install package you
+      downloaded.<br>
+    </p>
     <br>
     <span style="font-weight: bold;"></span>The <span
       style="font-weight: bold; text-decoration: underline;">i1d3</span>
@@ -279,6 +294,7 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
 
 
 
+
       Base Directory specifications</a> are used as a basis for storing
     the file). Programs that access instruments such as&nbsp; <span
       style="font-weight: bold;">spotread</span>, <span
@@ -295,8 +311,7 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
     colorimeter model that they were created for.<br>
     <br>
     If you are going to use the same CCSS or CCMX file all the time,
-    then you may want to set the <a
-      href="Environment.html">ARGYLL_COLMTER_CAL_SPEC_SET</a>
+    then you may want to set the <a href="Environment.html">ARGYLL_COLMTER_CAL_SPEC_SET</a>
     environment variable.<br>
     <br>
     <br>

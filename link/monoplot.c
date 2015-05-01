@@ -28,6 +28,7 @@
 #include "aconfig.h"
 #include "icc.h"
 #include "plot.h"
+#include "ui.h"
 
 #define PRES 100
 

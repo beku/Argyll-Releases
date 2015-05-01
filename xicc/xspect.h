@@ -47,7 +47,7 @@ typedef struct {
 	int    spec_n;					/* Number of spectral bands, 0 if not valid */
 	double spec_wl_short;			/* First reading wavelength in nm (shortest) */
 	double spec_wl_long;			/* Last reading wavelength in nm (longest) */
-	double norm;					/* Normalising scale value */
+	double norm;					/* Normalising scale value, ie. 1, 100 etc. */
 	double spec[XSPECT_MAX_BANDS];	/* Spectral value, shortest to longest */
 } xspect;
 
@@ -113,6 +113,9 @@ void xspect_denorm(xspect *sp);
 #ifndef SALONEINSTLIB
 /* Convert from one xspect type to another */
 void xspect2xspect(xspect *dst, xspect *targ, xspect *src);
+
+/* Plot up to 3 spectra */
+void xspect_plot(xspect *sp1, xspect *sp2, xspect *sp3);
 #endif /* !SALONEINSTLIB*/
 
 /* ------------------------------------------------------------------------------ */
@@ -129,16 +132,18 @@ typedef enum {
 	icxIT_C          = 4,	/* Standard Illuminant C */
     icxIT_D50		 = 5,	/* Daylight 5000K */
     icxIT_D50M2		 = 6,	/* Daylight 5000K, UV filtered (M2) */
-    icxIT_D65		 = 7,	/* Daylight 6500K */
-    icxIT_E		     = 8,	/* Equal Energy */
+    icxIT_D55		 = 7,	/* Daylight 5500K (use specified temperature) */
+    icxIT_D65		 = 8,	/* Daylight 6500K */
+    icxIT_D75		 = 9,	/* Daylight 7500K (uses specified temperature) */
+    icxIT_E		     = 10,	/* Equal Energy = flat = 1.0 */
 #ifndef SALONEINSTLIB
-    icxIT_F5		 = 9,	/* Fluorescent, Standard, 6350K, CRI 72 */
-    icxIT_F8		 = 10,	/* Fluorescent, Broad Band 5000K, CRI 95 */
-    icxIT_F10		 = 11,	/* Fluorescent Narrow Band 5000K, CRI 81 */
-	icxIT_Spectrocam = 12,	/* Spectrocam Xenon Lamp */
-    icxIT_Dtemp		 = 13,	/* Daylight at specified temperature */
+    icxIT_F5		 = 11,	/* Fluorescent, Standard, 6350K, CRI 72 */
+    icxIT_F8		 = 12,	/* Fluorescent, Broad Band 5000K, CRI 95 */
+    icxIT_F10		 = 13,	/* Fluorescent Narrow Band 5000K, CRI 81 */
+	icxIT_Spectrocam = 14,	/* Spectrocam Xenon Lamp */
+    icxIT_Dtemp		 = 15,	/* Daylight at specified temperature */
 #endif /* !SALONEINSTLIB*/
-    icxIT_Ptemp		 = 14	/* Planckian at specified temperature */
+    icxIT_Ptemp		 = 16	/* Planckian at specified temperature */
 } icxIllumeType;
 
 /* Fill in an xpsect with a standard illuminant spectrum */
@@ -200,6 +205,7 @@ struct _xsp2cie {
 	xspect emits;	/* Estimated FWA emmission spectrum */
 	xspect media;	/* Estimated base media (ie. minus FWA) */
 	xspect tillum;	/* Y = 1 Normalised target/simulated instrument illuminant spectrum */
+					/* Use oillum if tillum spec_n = 0 */
 	xspect oillum;	/* Y = 1 Normalised observer illuminant spectrum */
 	double Sm;		/* FWA Stimulation level for emits contribution */
 	double FWAc;	/* FWA content (informational) */
@@ -230,14 +236,13 @@ struct _xsp2cie {
 	                 xspect *in				/* Spectrum to be converted, normalised by norm */
 	                );
 
-#ifndef SALONEINSTLIB
-	/* Set Media White. This enables extracting and applying the */
-	/* colorant reflectance value from/to the meadia. */
-	/* return NZ if error */
-	int (*set_mw) (struct _xsp2cie *p,	/* this */
-	                xspect *white		/* Spectrum of plain media */
-	                );
+	/* Get the XYZ of the illuminant being used to compute the CIE XYZ */
+	/* value. */
+	void (*get_cie_il)(struct _xsp2cie *p,	/* this */
+	                   double *xyz			/* Return the XYZ */
+	                   );
 
+#ifndef SALONEINSTLIB
 	/* Set Fluorescent Whitening Agent compensation */
 	/* return NZ if error */
 	int (*set_fwa) (struct _xsp2cie *p,	/* this */
@@ -247,19 +252,28 @@ struct _xsp2cie {
 	                xspect *white		/* Spectrum of plain media */
 	                );
 
-	/* Set FWA given updated conversion illuminant. */
+	/* Set FWA given updated conversion illuminants. */
 	/* (We assume that xsp2cie_set_fwa has been called first) */
 	/* return NZ if error */
 	int (*update_fwa_custillum) (struct _xsp2cie *p,
 					xspect *tillum,		/* Spectrum of target/simulated instrument illuminant, */
 										/* NULL to use set_fwa() value. */
 	                xspect *custIllum	/* Spectrum of observer illuminant */
+										/* NULL to use new_xsp2cie() value. */
 	                );	
 
 	/* Get Fluorescent Whitening Agent compensation information */
 	/* return NZ if error */
 	void (*get_fwa_info) (struct _xsp2cie *p,	/* this */
 					double *FWAc		/* FWA content as a ratio. */
+	                );
+
+
+	/* Set Media White. This enables extracting and applying the */
+	/* colorant reflectance value from/to the meadia. */
+	/* return NZ if error */
+	int (*set_mw) (struct _xsp2cie *p,	/* this */
+	                xspect *white		/* Spectrum of plain media */
 	                );
 
 	/* Extract the colorant reflectance value from the media. Takes FWA */
@@ -309,6 +323,20 @@ double xyz[3],			/* Input XYZ value */
 int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 );
 
+/* Given a choice of temperature dependent illuminant (icxIT_Dtemp or icxIT_Ptemp), */
+/* a color temperature and a Y value, return the corresponding XYZ */
+/* An observer type can be chosen for interpretting the spectrum of the input and */
+/* the illuminant. */
+/* Return xyz[0] = -1.0 on erorr */
+void icx_ill_ct2XYZ(
+double xyz[3],			/* Return the XYZ value */
+icxIllumeType ilType,	/* Type of illuminant, icxIT_Dtemp or icxIT_Ptemp */
+icxObserverType obType,	/* Observer, CIE_1931_2 or CIE_1964_10 */
+int viscct,				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
+double tin,				/* Input temperature */
+double Yin				/* Input Y value */
+);
+
 /* --------------------------- */
 /* Spectrum locus              */
 
@@ -334,7 +362,7 @@ typedef enum {
     icxLT_plankian	 = 3
 } icxLocusType;
 
-/* Return a pointer to the chromaticity locus object */
+/* Return a pointer to the (static) chromaticity locus object */
 /* return NULL on failure. */
 xslpoly *chrom_locus_poligon(icxLocusType locus_type, icxObserverType obType, int cspace);
 
@@ -371,8 +399,16 @@ double *in				/* Input XYZ values */
 /* return sRGB values */
 void icx_XYZ2sRGB(
 double *out,			/* Return sRGB value */
-double *wp,				/* Input XYZ white point (may be NULL) */
+double *wp,				/* Input XYZ white point (D65 used if NULL) */
 double *in				/* Input XYZ values */
+);
+
+/* Given an RGB value, return XYZ values. */
+/* This is a little slow */
+void icx_sRGB2XYZ(
+double *out,			/* Return XYZ values */
+double *wp,				/* Output XYZ white point (D65 used if NULL) */
+double *in				/* Input sRGB values */
 );
 
 /* Given an XYZ value, return approximate RGB value */

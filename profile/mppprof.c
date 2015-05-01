@@ -62,7 +62,8 @@
 #include "numlib.h"
 #include "xicc.h"
 #include "prof.h"
-#include "../h/sort.h"
+#include "sort.h"
+#include "ui.h"
 
 void
 usage(void) {

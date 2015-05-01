@@ -1,6 +1,18 @@
 
  Change History: (See ArgyllCMS log.txt too)
 
+ 2.20
+   Add better cross compatibility with non-Argyll ICC profiles:
+   + Use "wrong Von Kries" media white point adapation for non-Argyll non-display profile
+   + Optionally create "wrong Von Kries" media white point adapation profiles
+     using the "ARGYLL_CREATE_WRONG_VON_KRIES_OUTPUT_CLASS_REL_WP" env. variable,
+     while maintaining ArgyllCMS compatibility using the 'arts' tag.
+   + Implement proper absolute colorimetric intent for ICCV2 Display profiles
+     that use the ICCV4 style of have a media white od D50 and storing the
+     media chromatic trasnform in the 'chad' tag.
+   + Optionally create such ICCV4 style V2 Display profiles by using the
+     "ARGYLL_CREATE_DISPLAY_PROFILE_WITH_CHAD" env. variable.
+	
  2.16
 	Clean up cLUT read code to make sanity checking
 	more explicit and remove redundant code.

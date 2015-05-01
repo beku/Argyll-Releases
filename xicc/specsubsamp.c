@@ -21,7 +21,7 @@
 #include <math.h>
 #include "xspect.h"
 #include "numlib.h"
-
+#include "ui.h"
 
 void usage(void) {
 	fprintf(stderr,"Downsample spectral data\n");

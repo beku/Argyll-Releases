@@ -35,8 +35,6 @@
 #endif
 
 /* =========================================================== */
-/* Should this go in spectro/conv.h ??                         */
-/* =========================================================== */
 /* Platform specific primitive defines. */
 /* This really needs checking for each different platform. */
 /* Using C99 and MSC covers a lot of cases, */
@@ -45,7 +43,16 @@
 /* so long shouldn't really be used in any code.... */
 /* (duplicated in icc.h) */ 
 
-#if (__STDC_VERSION__ >= 199901L)	/* C99 */
+/* Use __LP64__ as cross platform 64 bit pointer #define */
+#if !defined(__LP64__) && defined(_WIN64)
+# define __LP64__ 1
+#endif
+
+#ifndef ORD32
+
+#if (__STDC_VERSION__ >= 199901L)	/* C99 */		\
+ || defined(_STDINT_H_) || defined(_STDINT_H)		\
+ || defined(_SYS_TYPES_H)
 
 #include <stdint.h> 
 
@@ -60,17 +67,11 @@
 
 #define PNTR intptr_t
 
-/* printf format precision specifier */
-#define PF64PREC "ll"
-
-/* Constant precision specifier */
-#define CF64PREC "LL"
-
-#ifndef ATTRIBUTE_NORETURN
-# define ATTRIBUTE_NORETURN __declspec(noreturn)
-#endif
+#define PF64PREC "ll"		/* printf format precision specifier */
+#define CF64PREC "LL"		/* Constant precision specifier */
 
 #else  /* !__STDC_VERSION__ */
+
 #ifdef _MSC_VER
 
 #define INR8   __int8				/* 8 bit signed */
@@ -86,15 +87,8 @@
 
 #define vsnprintf _vsnprintf
 
-/* printf format precision specifier */
-#define PF64PREC "I64"
-
-/* Constant precision specifier */
-#define CF64PREC "LL"
-
-#ifndef ATTRIBUTE_NORETURN
-# define ATTRIBUTE_NORETURN __declspec(noreturn)
-#endif
+#define PF64PREC "I64"				/* printf format precision specifier */
+#define CF64PREC "LL"				/* Constant precision specifier */
 
 #else  /* !_MSC_VER */
 
@@ -109,26 +103,87 @@
 #define ORD32  unsigned int		/* 32 bit unsigned */
 
 #ifdef __GNUC__
-#define INR64  long long			/* 64 bit signed - not used in icclib */
-#define ORD64  unsigned long long	/* 64 bit unsigned - not used in icclib */
-
-/* printf format precision specifier */
-#define PF64PREC "ll"
-
-/* Constant precision specifier */
-#define CF64PREC "LL"
-
-#ifndef ATTRIBUTE_NORETURN
-#define ATTRIBUTE_NORETURN __attribute__((noreturn))
-#endif
-
-#endif	/* __GNUC__ */
-/* =========================================================== */
+# define INR64  long long			/* 64 bit signed - not used in icclib */
+# define ORD64  unsigned long long	/* 64 bit unsigned - not used in icclib */
+# define PF64PREC "ll"			/* printf format precision specifier */
+# define CF64PREC "LL"			/* Constant precision specifier */
+#endif /* __GNUC__ */
 
 #define PNTR unsigned long 
 
 #endif /* !_MSC_VER */
 #endif /* !__STDC_VERSION__ */
+#endif /* !ORD32 */
+
+#ifdef _MSC_VER
+#ifndef ATTRIBUTE_NORETURN
+# define ATTRIBUTE_NORETURN __declspec(noreturn)
+#endif
+#endif
+
+#ifdef __GNUC__
+#ifndef ATTRIBUTE_NORETURN
+# define ATTRIBUTE_NORETURN __attribute__((noreturn))
+#endif
+#endif
+
+/* =========================================================== */
+/* System compatibility #defines */
+#if defined (NT)
+
+#ifndef sys_stat
+# define sys_stat _stat
+#endif
+#ifndef sys_mkdir
+# define sys_mkdir _mkdir
+#endif
+#ifndef sys_read
+# define sys_read _read
+#endif
+#ifndef sys_utime
+# define sys_utime _utime
+# define sys_utimbuf _utimbuf
+#endif
+#ifndef sys_access
+# define sys_access _access
+#endif
+
+#ifndef snprintf
+# define snprintf _snprintf
+# define vsnprintf _vsnprintf
+#endif
+#ifndef stricmp
+# define stricmp _stricmp
+#endif
+
+#endif	/* NT */
+
+#if defined (UNIX)
+
+#ifndef sys_stat
+# define sys_stat stat
+#endif
+#ifndef sys_mkdir
+# define sys_mkdir mkdir
+#endif
+#ifndef sys_read
+# define sys_read read
+#endif
+#ifndef sys_utime
+# define sys_utime utime
+# define sys_utimbuf utimbuf
+#endif
+#ifndef sys_access
+# define sys_access access
+#endif
+
+#ifndef stricmp
+# define stricmp strcasecmp
+#endif
+
+#endif	/* UNIX */
+
+/* =========================================================== */
 /* Some default math limits and constants */
 #ifndef DBL_EPSILON
 #define DBL_EPSILON     2.2204460492503131e-016		/* 1.0+DBL_EPSILON != 1.0 */
@@ -235,7 +290,7 @@ a1log *new_a1log_d(a1log *log);
 /* Returns NULL */
 a1log *del_a1log(a1log *log);
 
-/* Set the tag. Note that the tage string is NOT copied, just referenced */
+/* Set the tag. Note that the tag string is NOT copied, just referenced */
 void a1log_tag(a1log *log, char *tag);
 
 /* Log a verbose message if level >= verb */
@@ -279,12 +334,15 @@ extern char cr_char;
 
 /* =========================================================== */
 
+
+/* =========================================================== */
+
 /* reallocate and clear new allocation */
 void *recalloc(		/* Return new address */
-void *ptr,					/* Current address */
-size_t cnum,				/* Current number and unit size */
+void *ptr,			/* Current address */
+size_t cnum,		/* Current number and unit size */
 size_t csize,
-size_t nnum,				/* New number and unit size */
+size_t nnum,		/* New number and unit size */
 size_t nsize
 ); 
 
@@ -437,6 +495,15 @@ INR64 read_INR64_be(ORD8 *p);
 INR64 read_INR64_le(ORD8 *p);
 void write_INR64_be(INR64 d, ORD8 *p);
 void write_INR64_le(INR64 d, ORD8 *p);
+
+/*******************************************/
+/* Numerical diagnostics */
+
+#ifndef isNan
+#define isNan(x) ((x) != (x))
+#define isFinite(x) ((x) == 0.0 || (x) * 1.0000001 != (x))
+#endif
+
 
 #ifdef __cplusplus
 	}

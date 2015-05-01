@@ -91,10 +91,12 @@ typedef struct {
 	/* Cusp alignment control */
 	struct {
 		iweight w;			/* Component alignment weights, 0 - 1 */
+		double tw;			/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */ 
+							/* Use > 0 to make cusp alignment only affect surface colors. */
 		double cx;			/* Chroma expansion, 1 = none, > 1 = more */
 	} c;
 
-	/* Radial weighting */
+	/* Radial weighting (This seems to be not working at the moment ?) */
 	/* Weight to give to minimizing delta E to source mapped radially */
 	struct {
 		double o;			/* Overall Radial weight */
@@ -102,7 +104,7 @@ typedef struct {
 		double l;			/* l dominance vs, c, 0 - 1 */
 	} l;
 
-	/* Absolute error weighting */
+	/* Absolute error weighting. */
 	/* Weight given to minimizing delta E to destination closest point */
 	struct {
 		double o;			/* Overall Absolute weight */
@@ -166,7 +168,7 @@ struct _nearsmth {
   /* Public: */
 	int    gflag;		/* Gamut direction flag. 0 = not determinable, 1 = comp., 2 = exp. */
 	int    vflag;		/* Vector direction flag. 0 = not determinable, 1 = comp., 2 = exp. */
-						/* sv2 & dv2 are valid if vflag != 0 */
+						/* sv2, dv2, sd3 etc. are valid if vflag != 0 */
 
 	/* Gamut surface mapping guide point */
 	double sv[3];		/* Source value (input, cusp aligned during fwd optimization) */
@@ -179,9 +181,12 @@ struct _nearsmth {
 
 	/* Gamut sub-surface mapping guide point (knee shape controlled by gamcknf & gamxknf) */
 	double sv2[3];		/* Sub-surface source value */
-	double dv2[3];		/* Sub-surface destination value */
+	double dv2[3];		/* Sub-surface knee'd adjusted destination value */
 	double div2[3];		/* gam[cx]pf moderated dv2[] value */
-	double w2;			/* Sub-surface weight */
+	double w2;			/* Sub-surface weight (fixed in nearsmth) */
+
+	double sd3[3];		/* Deep sub-surface source & destination value */
+	double w3;			/* Deep sub-surface weight */
 
 	/* Diagnostic points */
 	double csv[3];		/* Non-cusp mapped source value */
@@ -214,6 +219,8 @@ struct _nearsmth {
 
 	double dcratio;		/* Depth compression ratio */ 
 	double dxratio;		/* Depth expansion ratio */ 
+
+	int mapres;			/* Target grid res for 3D RSPL */
 
 	int debug;
 	double dbgv[4];		/* Error components va, vr, vl, vd on last itteration */

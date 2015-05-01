@@ -50,7 +50,7 @@ void
 usage(void) {
 	fprintf(stderr,"Split a .ti3 into two, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	fprintf(stderr,"usage: splitcgats [-options] input.ti3 output1.ti3 output2.ti3\n");
+	fprintf(stderr,"usage: splitti3 [-options] input.ti3 output1.ti3 output2.ti3\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n no           Put no sets in first file, and balance in second file.\n");
 	fprintf(stderr," -p percent      Put percent%% sets in first file, and balance in second file. (def. 50%%)\n");

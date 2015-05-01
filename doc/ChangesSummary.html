@@ -16,6 +16,53 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.6.3 -&gt; V1.7.0] 1st May 2015</h1>
+    <ul>
+      <li>Improved gamut mapping to reduce unnecessary changes to less
+        saturated colors&nbsp; such as skin tones.</li>
+      <li>Add support for DataColor Spyder 5.</li>
+      <li>Add support for ColorHug2 colorimeter.</li>
+      <li>Add support for Klein K10-A colorimeter.</li>
+      <li>Added Google ChromeCast as a test patch generator for Video
+        displays.</li>
+      <li>Added ls2ti3 tool to convert LightSpace .bcs files to .ti3.</li>
+      <li>Added IRIDAS .cube 3DLut format support to collink.</li>
+      <li>Add X3D and X3DOM support as an alternative to VRML, and make
+        X3DOM the default.</li>
+      <li>Add better cross compatibility with non-Argyll ICC profiles
+        using ArgyllCMS 'arts' tag to mark 'wtpt' Absolute Colorimetric
+        chromaticity transform, as well as implement proper absolute
+        colorimetric intent for Display profiles use the 'chad' tag.
+        Note that the standard ICC profiles provided by ArgyllCMS in the
+        ref directory (such as sRGB etc.) now include an 'arts' tag.</li>
+      <li>Ignore any patches that have zero values for creating Display
+        profiles, unless they are for device zero. </li>
+      <li>Fix various instrument communications problems for JETI
+        specbos, DTP20, DTP92 &amp; DTP94.</li>
+      <li>Fix gestaltSystemVersion warning on OS X 10.10.</li>
+      <li>Fix very major bug in illumread. It wasn't actually working at
+        all since V1.4.0.</li>
+      <li>Added collink -I[gG][:p.p]:x.x options that allows an output
+        offset gamma curve be targetted instead of BT1886.</li>
+      <li>Added dispcal and collink -b black point hack. This forces the
+        input zero to map to the output zero for well behaved displays,
+        reducing dependence on the instrument accuracy for a very dark
+        black point.</li>
+      <li>Added preset list of display techologies to select from in
+        ccxxmake.</li>
+      <li>Added a -P prune option to profcheck, that creates a .ti3 file
+        pruned of any patches that have a delta E fit error greater than
+        a threshold. This may be of use in eliminating bad reading
+        values from a measurement set.</li>
+      <li>Added histogram plot option -h to both profcheck and verify.</li>
+      <li>Added a dispread &amp; fakeread -Z option to set the number of
+        bits to quantize the test values to. </li>
+      <li>Fixed bug in targen - the -V dark emphasis wasn't being
+        applied to OFPS generated points.</li>
+      <li>Make sure that if an instrument display reading is interrupted
+        by a forced calibration, that the user is asked to place it back
+        on the display before resuming the measurements.</li>
+    </ul>
     <h1>[V1.6.2 -&gt; V1.6.3] 26th January 2014</h1>
     <ul>
       <li>Added ProPhoto.icm and ProPhotoLin.icm to ref profiles.</li>
@@ -874,6 +921,9 @@
 
 
 
+
+
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -888,6 +938,9 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
+
+
 
 
 

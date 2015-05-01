@@ -168,7 +168,8 @@ inst_code inst_handle_calibrate(
 	inst_cal_cond calc,		/* Current current condition */
 	inst_code (*disp_setup) (inst *p,inst_cal_cond calc, disp_win_info *dwi),
 							/* Callback for handling a display calibration - May be NULL */
-	disp_win_info *dwi		/* Information to be able to open a display test patch - May be NULL */
+	disp_win_info *dwi,		/* Information to be able to open a display test patch - May be NULL */
+	int doimmediately		/* If nz, don't wait for user, calibrate immediatley */
 ) {
 	inst_code rv = inst_ok, ev;
 	int usermes = 0;		/* User was given a message */
@@ -210,6 +211,10 @@ inst_code inst_handle_calibrate(
 
 			printf("Calibration failed with '%s' (%s)\n",
 				       p->inst_interp_error(p, ev), p->interp_error(p, ev));
+
+			if (doimmediately)
+				return inst_user_abort;
+
 			printf("Hit any key to retry, or Esc or Q to abort:\n");
 
 			empty_con_chars();
@@ -262,14 +267,14 @@ inst_code inst_handle_calibrate(
 
 				case inst_calc_man_em_dark:
 					printf("Place cap on the instrument, or place on a dark surface,\n");
-					printf("or place on the white calibration reference,\n");
+					printf("or place on the calibration reference,\n");
 					printf(" and then hit any key to continue,\n"); 
 					printf(" or hit Esc or Q to abort: "); 
 					break;
 
 				case inst_calc_man_am_dark:
 					printf("Place ambient adapter and cap on the instrument,\n");
-					printf("or place on the white calibration reference,\n");
+					printf("or place on the calibration reference,\n");
 					printf(" and then hit any key to continue,\n"); 
 					printf(" or hit Esc or Q to abort: "); 
 					break;
@@ -389,7 +394,8 @@ inst_code inst_handle_calibrate(
 
 			usermes = 1;
 
-			if (calc != inst_calc_man_ref_whitek) {
+			if (!doimmediately
+			 && calc != inst_calc_man_ref_whitek) {
 				empty_con_chars();
 				ch = next_con_char();
 				printf("\n");

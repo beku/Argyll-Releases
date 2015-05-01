@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "vrml.h"
 #include "icc.h"
 
 void error(char *fmt, ...), warning(char *fmt, ...);
@@ -31,24 +32,18 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 void usage(void) {
 	fprintf(stderr,"Check device to PCS monotonicity of a CMYK ICC file, V%s\n",ICCLIB_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill\n");
-	fprintf(stderr,"usage: kcheck [-v] [-w] infile\n");
+	fprintf(stderr,"usage: mcheck [-v] [-w] infile\n");
 	fprintf(stderr," -v        verbose\n");
 	fprintf(stderr," -c        Check just Cyan monotonicity\n");
 	fprintf(stderr," -m        Check just Magenta monotonicity\n");
 	fprintf(stderr," -y        Check just Yellow monotonicity\n");
 	fprintf(stderr," -k        Check just Black monotonicity\n");
-	fprintf(stderr," -w        create VRML visualisation\n");
+	fprintf(stderr," -w        create %s visualisation\n",vrml_format());
+	fprintf(stderr," -x        use %s axes\n",vrml_format());
 	exit(1);
 }
 
-#define MGR 50		/* Maximum grid resolution handled */
-
-
-FILE *start_vrml(char *name, int doaxes);
-void start_line_set(FILE *wrl);
-void add_vertex(FILE *wrl, double pp[3]);
-void make_lines(FILE *wrl, int ppset);
-void end_vrml(FILE *wrl);
+#define MGR 50			/* Maximum grid resolution handled */
 
 int
 main(
@@ -73,7 +68,7 @@ main(
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 	int inn;							/* Number of input chanels */
 	icmLuAlgType alg;
-	FILE *wrl;
+	vrml *wrl;
 	int dx[4];			/* Device index mapping */
 	int chan, cs, ce;
 	
@@ -101,7 +96,7 @@ main(
 			if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
 			}
-			/* VRML */
+			/* VRML/X3D */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				dovrml = 1;
 			}
@@ -121,6 +116,9 @@ main(
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				cchan = 3;
 			}
+			else if (argv[fa][1] == 'x') {
+				doaxes = 1;
+			}
 			else if (argv[fa][1] == '?')
 				usage();
 			else 
@@ -136,7 +134,7 @@ main(
 	strcpy(out_name, in_name);
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
-	strcpy(xl,".wrl");
+	xl[0] = '\000';			/* Remove extension */
 
 	/* Open up the file for reading */
 	if ((rd_fp = new_icmFileStd_name(in_name,"r")) == NULL)
@@ -177,8 +175,10 @@ main(
 	}
 
 	if (dovrml) {
-		wrl = start_vrml(out_name, doaxes);
-		start_line_set(wrl);
+		wrl = new_vrml(out_name, doaxes, vrml_lab);
+		if (wrl == NULL)
+			error("new_vrml for '%s%s' failed",out_name,vrml_ext());
+		wrl->start_line_set(wrl, 0);
 	}
 
 	/* For all the device chanels chosen */
@@ -237,7 +237,7 @@ main(
 							error ("%d, %s",rd_icco->errc,rd_icco->err);
 
 //						if (dovrml)
-//							add_vertex(wrl, pcs[ck]);
+//							wrl->add_vertex(wrl, 0, pcs[ck]);
 					}
 
 					/* Compute average vector direction */
@@ -276,7 +276,7 @@ main(
 					/* Display just the non mono threads */
 					if (nm && dovrml) {
 						for (j = 0; j < gres; j++)
-							add_vertex(wrl, pcs[j]);
+							wrl->add_vertex(wrl, 0, pcs[j]);
 					}
 					if (verb) {
 						printf("."); fflush(stdout);
@@ -287,8 +287,8 @@ main(
 	}
 
 	if (dovrml) {
-		make_lines(wrl, gres);
-		end_vrml(wrl);
+		wrl->make_lines(wrl, 0, gres);
+		wrl->del(wrl);
 	}
 
 	/* Done with lookup object */
@@ -299,218 +299,6 @@ main(
 
 	return 0;
 }
-
-/* ------------------------------------------------ */
-/* Some simple functions to do basix VRML work */
-
-#define GAMUT_LCENT 50.0
-static int npoints = 0;
-static int paloc = 0;
-static struct { double pp[3]; } *pary;
-
-static void Lab2RGB(double *out, double *in);
-
-FILE *start_vrml(char *name, int doaxes) {
-	FILE *wrl;
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-	};
-	int i;
-	
-	if ((wrl = fopen(name,"w")) == NULL)
-		error("Error opening VRML file '%s'\n",name);
-
-	npoints = 0;
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-	fprintf(wrl,"children [\n");
-	fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
-		}
-		fprintf(wrl,"\n");
-	}
-
-	return wrl;
-}
-
-void
-start_line_set(FILE *wrl) {
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"Shape {\n");
-	fprintf(wrl,"  geometry IndexedLineSet { \n");
-	fprintf(wrl,"    coord Coordinate { \n");
-	fprintf(wrl,"	   point [\n");
-}
-
-void add_vertex(FILE *wrl, double pp[3]) {
-
-	fprintf(wrl,"%f %f %f,\n",pp[1], pp[2], pp[0]-GAMUT_LCENT);
-	
-	if (paloc < (npoints+1)) {
-		paloc = (paloc + 10) * 2;
-		if (pary == NULL)
-			pary = malloc(paloc * 3 * sizeof(double));
-		else
-			pary = realloc(pary, paloc * 3 * sizeof(double));
-
-		if (pary == NULL)
-			error ("Malloc failed");
-	}
-	pary[npoints].pp[0] = pp[0];
-	pary[npoints].pp[1] = pp[1];
-	pary[npoints].pp[2] = pp[2];
-	npoints++;
-}
-
-
-void make_lines(FILE *wrl, int ppset) {
-	int i, j;
-
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"  coordIndex [\n");
-
-	for (i = 0; i < npoints;) {
-		for (j = 0; j < ppset; j++, i++) {
-			fprintf(wrl,"%d, ", i);
-		}
-		fprintf(wrl,"-1,\n");
-	}
-	fprintf(wrl,"    ]\n");
-
-	/* Color */
-	fprintf(wrl,"            colorPerVertex TRUE\n");
-	fprintf(wrl,"            color Color {\n");
-	fprintf(wrl,"              color [			# RGB colors of each vertex\n");
-
-	for (i = 0; i < npoints; i++) {
-		double rgb[3], Lab[3];
-		Lab[0] = pary[i].pp[0];
-		Lab[1] = pary[i].pp[1];
-		Lab[2] = pary[i].pp[2];
-		Lab2RGB(rgb, Lab);
-		fprintf(wrl,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-	}
-	fprintf(wrl,"              ] \n");
-	fprintf(wrl,"            }\n");
-	/* End color */
-
-	fprintf(wrl,"  }\n");
-	fprintf(wrl,"} # end shape\n");
-
-}
-
-void end_vrml(FILE *wrl) {
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0)
-		error("Error closing VRML file\n");
-}
-
-
-/* Convert a gamut Lab value to an RGB value for display purposes */
-static void
-Lab2RGB(double *out, double *in) {
-	double L = in[0], a = in[1], b = in[2];
-	double x,y,z,fx,fy,fz;
-	double R, G, B;
-
-	/* Scale so that black is visible */
-	L = L * (100 - 40.0)/100.0 + 40.0;
-
-	/* First convert to XYZ using D50 white point */
-	if (L > 8.0) {
-		fy = (L + 16.0)/116.0;
-		y = pow(fy,3.0);
-	} else {
-		y = L/903.2963058;
-		fy = 7.787036979 * y + 16.0/116.0;
-	}
-
-	fx = a/500.0 + fy;
-	if (fx > 24.0/116.0)
-		x = pow(fx,3.0);
-	else
-		x = (fx - 16.0/116.0)/7.787036979;
-
-	fz = fy - b/200.0;
-	if (fz > 24.0/116.0)
-		z = pow(fz,3.0);
-	else
-		z = (fz - 16.0/116.0)/7.787036979;
-
-	x *= 0.9642;	/* Multiply by white point, D50 */
-	y *= 1.0;
-	z *= 0.8249;
-
-	/* Now convert to sRGB values */
-	R = x * 3.2410  + y * -1.5374 + z * -0.4986;
-	G = x * -0.9692 + y * 1.8760  + z * 0.0416;
-	B = x * 0.0556  + y * -0.2040 + z * 1.0570;
-
-	if (R < 0.0)
-		R = 0.0;
-	else if (R > 1.0)
-		R = 1.0;
-
-	if (G < 0.0)
-		G = 0.0;
-	else if (G > 1.0)
-		G = 1.0;
-
-	if (B < 0.0)
-		B = 0.0;
-	else if (B > 1.0)
-		B = 1.0;
-
-	R = pow(R, 1.0/2.2);
-	G = pow(G, 1.0/2.2);
-	B = pow(B, 1.0/2.2);
-
-	out[0] = R;
-	out[1] = G;
-	out[2] = B;
-}
-
 
 /* ------------------------------------------------ */
 /* Basic printf type error() and warning() routines */

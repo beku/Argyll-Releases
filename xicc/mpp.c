@@ -90,9 +90,17 @@
 						/* accuracy worse!) */
 
 						/* Transfer curve parameter (wiggle) minimisation weight */
-#define TRANS_BASE  0.2	/* 0 & 1 harmonic parameter weight */
-#define TRANS_HBASE 0.8	/* 2nd harmonic and above base parameter weight */
-#define SHAPE_PMW 0.2	/* Shape parameter (wiggle) minimisation weight */
+//#define TRANS_BASE  0.2	/* 0 & 1 harmonic parameter weight */
+//#define TRANS_HBASE 0.8	/* 2nd harmonic and above base parameter weight */
+#define TRANS_HW01		  0.01		/* 0 & 1 harmonic weights */
+#define TRANS_HBREAK	  3			/* Harmonic that has HWBR */
+//#define TRANS_HWBR        0.5		/* Base weight of harmonics HBREAK up */
+//#define TRANS_HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
+#define TRANS_HWBR        0.5		/* Base weight of harmonics HBREAK up */
+#define TRANS_HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
+
+//#define SHAPE_PMW 0.2	/* Shape parameter (wiggle) minimisation weight */
+#define SHAPE_PMW 10.0	/* Shape parameter (wiggle) minimisation weight */
 #define COMB_PMW 0.008	/* Primary combination anchor point distance weight */
 
 #define verbo stdout
@@ -1916,7 +1924,20 @@ static double efunc2(void *adata, double pv[]) {
 		double w;
 		for (k = 0; k < p->cord; k++) {
 			i = m * p->cord + k;
+
+#ifdef NEVER
 			w = (k < 2) ? TRANS_BASE : k * TRANS_HBASE; 	/* Increase weight with harmonics */
+#else
+			/* Weigh to suppress ripples */
+			if (k <= 1) {						/* Use TRANS_HW01 */
+				w = TRANS_HW01;
+			} else if (k <= TRANS_HBREAK) {	/* Blend from TRANS_HW01 to TRANS_HWBR */
+				double bl = (k - 1.0)/(TRANS_HBREAK - 1.0);
+				w = (1.0 - bl) * TRANS_HW01 + bl * TRANS_HWBR;
+			} else {				/* Use TRANS_HWBR */
+				w = TRANS_HWBR + (k-TRANS_HBREAK) * TRANS_HWINC;
+			}
+#endif
 			smv += w * pv[i] * pv[i];
 		}
 	}
@@ -2224,7 +2245,19 @@ for (m = 0; m < p->n; m++) {
 		double w;
 		for (k = 0; k < p->cord; k++) {
 			i = m * p->cord + k;
+#ifdef NEVER
 			w = (k < 2) ? TRANS_BASE : k * TRANS_HBASE; 	/* Increase weight with harmonics */
+#else
+			/* Weigh to suppress ripples */
+			if (k <= 1) {						/* Use TRANS_HW01 */
+				w = TRANS_HW01;
+			} else if (k <= TRANS_HBREAK) {	/* Blend from TRANS_HW01 to TRANS_HWBR */
+				double bl = (k - 1.0)/(TRANS_HBREAK - 1.0);
+				w = (1.0 - bl) * TRANS_HW01 + bl * TRANS_HWBR;
+			} else {				/* Use TRANS_HWBR */
+				w = TRANS_HWBR + (k-TRANS_HBREAK) * TRANS_HWINC;
+			}
+#endif
 			dv[i] += w * tt * pv[i];				/* Del in rv due to del in pv */
 			smv += w * pv[i] * pv[i];
 		}
@@ -3597,24 +3630,24 @@ static int create(
 	switch (quality) {
 		case 0:				/* Low */
 			useshape = 0;
-			mxtcord = 3;
-			maxit = 2;
+			mxtcord = 8;
+			maxit = 3;
 			break;
 		case 1:
 		default:			/* Medium */
 			useshape = 1;
-			mxtcord = 4;
-			maxit = 2;
+			mxtcord = 10;
+			maxit = 4;
 			break;
 		case 2:				/* High */
 			useshape = 1;
-			mxtcord = 5;
-			maxit = 3;
+			mxtcord = 14;
+			maxit = 5;
 			break;
 		case 3:				/* Ultra high */
 			useshape = 1;
-			mxtcord = 10;	/* Is more actually better ? */
-			maxit = 8;
+			mxtcord = 20;	/* Is more actually better ? */
+			maxit = 10;
 			break;
 		case 99:				/* Special, simple model */
 			useshape = 0;

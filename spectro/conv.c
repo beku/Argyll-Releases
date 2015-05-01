@@ -137,8 +137,9 @@ static int th_read_char(void *pp) {
   	char buf[1];
 	DWORD bread;
 
-	if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+	if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE) {
 		return 0;
+	}
 
 	if (ReadFile(stdinh, buf, 1, &bread, NULL)
 	 && bread == 1
@@ -168,7 +169,7 @@ int poll_con_char(void) {
 				return 0;
 			}
 
-			Sleep(1);			/* We just hope 1 msec is enough for the thread to start */
+			Sleep(100);			/* We just hope 1 msec is enough for the thread to start */
 			CancelIo(stdinh);
 			getch_thread->del(getch_thread);
 			return c;
@@ -274,6 +275,23 @@ void msec_beep(int delay, int freq, int msec) {
 	} else {
 		Beep(freq, msec);
 	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+int acond_timedwait_imp(HANDLE cond, CRITICAL_SECTION *lock, int msec) {
+	int rv;
+	LeaveCriticalSection(lock);
+	rv = WaitForSingleObject(cond, msec);
+	EnterCriticalSection(lock);
+
+	if (rv == WAIT_TIMEOUT)
+		return 1;
+
+	if (rv != WAIT_OBJECT_0)
+		return 2;
+
+	return 0;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -544,24 +562,48 @@ void msec_sleep(unsigned int msec) {
 #endif
 }
 
-/* Provide substitute for clock_gettime() in OS X */
 
 #if defined(__APPLE__) && !defined(CLOCK_MONOTONIC)
+
 #include <mach/mach_time.h>
-#define CLOCK_REALTIME 0
-#define CLOCK_MONOTONIC 0
-static int clock_gettime(int clk_id, struct timespec *t){
+
+unsigned int msec_time() {
     mach_timebase_info_data_t timebase;
-    mach_timebase_info(&timebase);
+    static uint64_t startup = 0;
     uint64_t time;
+	double msec;
+
     time = mach_absolute_time();
-    double nseconds = ((double)time * (double)timebase.numer)/((double)timebase.denom);
-    double seconds = ((double)time * (double)timebase.numer)/((double)timebase.denom * 1e9);
-    t->tv_sec = seconds;
-    t->tv_nsec = nseconds;
-    return 0;
+	if (startup == 0)
+		startup = time;
+
+    mach_timebase_info(&timebase);
+	time -= startup;
+    msec = ((double)time * (double)timebase.numer)/((double)timebase.denom * 1e6);
+
+    return (unsigned int)floor(msec + 0.5);
 }
-#endif
+
+/* Return the current time in usec */
+/* since the first invokation of usec_time() */
+double usec_time() {
+    mach_timebase_info_data_t timebase;
+    static uint64_t startup = 0;
+    uint64_t time;
+	double usec;
+
+    time = mach_absolute_time();
+	if (startup == 0)
+		startup = time;
+
+    mach_timebase_info(&timebase);
+	time -= startup;
+    usec = ((double)time * (double)timebase.numer)/((double)timebase.denom * 1e3);
+
+    return usec;
+}
+
+#else
 
 /* Return the current time in msec */
 /* since the first invokation of msec_time() */
@@ -580,7 +622,7 @@ unsigned int msec_time() {
 	cv.tv_sec -= startup.tv_sec;
 	if (startup.tv_nsec > cv.tv_nsec) {
 		cv.tv_sec--;
-		cv.tv_nsec += 100000000;
+		cv.tv_nsec += 1000000000;
 	}
 	cv.tv_nsec -= startup.tv_nsec;
 
@@ -613,6 +655,29 @@ double usec_time() {
 
 	/* Convert to usec */
 	rv = cv.tv_sec * 1000000.0 + cv.tv_nsec/1000;
+
+	return rv;
+}
+
+#endif
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+int acond_timedwait_imp(pthread_cond_t *cond, pthread_mutex_t *lock, int msec) {
+	struct timeval tv;
+	struct timespec ts;
+	int rv;
+
+	// this is unduly complicated...
+	gettimeofday(&tv, NULL);
+	ts.tv_sec = tv.tv_sec + msec/1000;
+	ts.tv_nsec = (tv.tv_usec + (msec % 1000) * 1000) * 1000L;
+	if (ts.tv_nsec > 1000000000L) {
+		ts.tv_nsec -= 1000000000L;
+		ts.tv_sec++;
+	}
+
+	rv = pthread_cond_timedwait(cond, lock, &ts);
 
 	return rv;
 }
@@ -907,8 +972,11 @@ int create_parent_directories(char *path) {
 static int th_kkill_nprocess(void *pp) {
 	kkill_nproc_ctx *ctx = (kkill_nproc_ctx *)pp;
 
+	/* set result to 0 if it ever suceeds or there was no such process */
+	ctx->th->result = -1;
 	while(ctx->stop == 0) {
-		kill_nprocess(ctx->pname, ctx->log);
+		if (kill_nprocess(ctx->pname, ctx->log) >= 0)
+			ctx->th->result = 0;
 		msec_sleep(20);			/* Don't hog the CPU */
 	}
 	ctx->done = 1;
@@ -1120,6 +1188,10 @@ sa_XYZNumber sa_D50 = {
     0.9642, 1.0000, 0.8249
 };
 
+sa_XYZNumber sa_D65 = {
+    0.9505, 1.0000, 1.0890
+};
+
 void sa_SetUnity3x3(double mat[3][3]) {
 	int i, j;
 	for (j = 0; j < 3; j++) {
@@ -1292,6 +1364,36 @@ double sa_LabDE(double *Lab0, double *Lab1) {
 	rv += tt * tt;
 
 	return sqrt(rv);
+}
+
+/* CIE XYZ to perceptual CIE 1976 L*a*b* */
+void
+sa_XYZ2Lab(icmXYZNumber *w, double *out, double *in) {
+	double X = in[0], Y = in[1], Z = in[2];
+	double x,y,z,fx,fy,fz;
+
+	x = X/w->X;
+	y = Y/w->Y;
+	z = Z/w->Z;
+
+	if (x > 0.008856451586)
+		fx = pow(x,1.0/3.0);
+	else
+		fx = 7.787036979 * x + 16.0/116.0;
+
+	if (y > 0.008856451586)
+		fy = pow(y,1.0/3.0);
+	else
+		fy = 7.787036979 * y + 16.0/116.0;
+
+	if (z > 0.008856451586)
+		fz = pow(z,1.0/3.0);
+	else
+		fz = 7.787036979 * z + 16.0/116.0;
+
+	out[0] = 116.0 * fy - 16.0;
+	out[1] = 500.0 * (fx - fy);
+	out[2] = 200.0 * (fy - fz);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1478,5 +1580,33 @@ int sa_lu_psinvert(double **out, double **in, int m, int n) {
 
 #endif /* SALONEINSTLIB */
 /* ============================================================= */
+
+/* Diagnostic aids */
+
+// Print bytes as hex to debug log */
+void adump_bytes(a1log *log, char *pfx, unsigned char *buf, int base, int len) {
+	int i, j, ii;
+	char oline[200] = { '\000' }, *bp = oline;
+	for (i = j = 0; i < len; i++) {
+		if ((i % 16) == 0)
+			bp += sprintf(bp,"%s%04x:",pfx,base+i);
+		bp += sprintf(bp," %02x",buf[i]);
+		if ((i+1) >= len || ((i+1) % 16) == 0) {
+			for (ii = i; ((ii+1) % 16) != 0; ii++)
+				bp += sprintf(bp,"   ");
+			bp += sprintf(bp,"  ");
+			for (; j <= i; j++) {
+				if (!(buf[j] & 0x80) && isprint(buf[j]))
+					bp += sprintf(bp,"%c",buf[j]);
+				else
+					bp += sprintf(bp,".");
+			}
+			bp += sprintf(bp,"\n");
+			a1logd(log,0,"%s",oline);
+			bp = oline;
+		}
+	}
+}
+
 
 

@@ -35,6 +35,10 @@
 	Using adaptive patch creation for grey colorspace is broken.
 	This should be fixed.
 
+	Would be nice to have a generator of "well behaved" device
+	gamut surface points. Would need a way of creating
+	a gamut surface from the .ti3 file though.
+
  */
 
 /* NOTE:
@@ -101,7 +105,7 @@
 
 #undef DEBUG
 
-#define VRML_DIAG		/* Enable option to dump a VRML of the resulting full spread points */
+#define VRML_DIAG		/* Enable option to dump a VRML/X3D of the resulting full spread points */
 #undef ADDRECCLIPPOINTS	/* Add ink limited clipping points to regular grid */
 #define EMPH_NEUTRAL	/* Emphasise neutral axis, like CIE94 does */
 #define NEMPH_DEFAULT 0.5	/* Default neutral axis emphasis == 2 x CIE94 */
@@ -112,10 +116,14 @@
 #define MATCH_TOLL 1e-3	/* Tollerance of device value to consider a patch a duplicate */
 
 /* Display rise and fall time delay model. This is CRT like */
-#define DISPLAY_RISE_TIME 0.03		/* Assumed rise time to 90% of target level */ 
-#define DISPLAY_FALL_TIME 0.12		/* Assumed fall time to 90% of target level */
-#define DISPLAY_SETTLE_AIM 0.01		/* Aim for 1% of true level */
-#define DISPLAY_ABS_AIM 0.0001		/* Aim for .01% of true absolute level */
+#define DISPLAY_RISE_TIME DISPTECH_WORST_RISE		/* Assumed rise time to 90% of target level */ 
+#define DISPLAY_FALL_TIME DISPTECH_WORST_FALL		/* Assumed fall time to 90% of target level */
+#define DISPLAY_SETTLE_AIM 0.1		/* Aim for 0.2 Delta E */
+
+#ifdef NEVER	/* Old delay time code */
+#define DISPLAY_SETTLE_AIM2 0.01		/* Aim for 1% of true level */
+#define DISPLAY_ABS_AIM2 0.0001		/* Aim for .01% of true absolute level */
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,6 +139,7 @@
 #include "cgats.h"
 #include "icc.h"
 #include "xicc.h"
+#include "disptechs.h"
 #include "targen.h"
 //#include "ppoint.h"
 #include "ofps.h"
@@ -138,6 +147,7 @@
 #include "simplat.h"
 #include "simdlat.h"
 #include "prand.h"
+#include "ui.h"
 
 #include <stdarg.h>
 
@@ -174,7 +184,7 @@ struct _pcpt {
 
 	/* Tuning parameters */
 	double nemph;		/* neutral emphasis, 0.0 - 1.0. Default 0.35 for == CIE94 */
-	double idemph;		/* inv. dark emphasis, 1.0 - 4.0. Default 1.0 == none */
+	double idemph;		/* inv. of dark emphasis, 1.0 - 4.0. Default 1.0 == none */
 	double ixpow;		/* inv. extra power Default 1.0 == none */
 
 	/* ICC profile based */
@@ -233,7 +243,7 @@ pcpt_to_XYZ(pcpt *s, double *out, double *in) {
 
 /* Relative Lab conversion function */
 /* Internal device values 0.0 - 1.0 are converted into Lab values */
-/* (Used for VRML visualisation checking) */
+/* (Used for VRML/X3D visualisation checking) */
 static void
 pcpt_to_rLab(pcpt *s, double *out, double *in) {
 	int e; 
@@ -663,7 +673,7 @@ double xpow				/* Extra device power, default = none */
 
 	if (demph < 0.0)
 		demph = DEMPH_DEFAULT;
-	s->idemph = demph;
+	s->idemph = 1.0/demph;
 
 	if (xpow < 0.0)
 		xpow = XPOW_DEFAULT;
@@ -866,9 +876,10 @@ usage(int level, char *diag, ...) {
 	fprintf(stderr," -N nemphasis     Degree of neutral axis patch concentration 0.0-1.0 (default %.2f)\n",NEMPH_DEFAULT);
 	fprintf(stderr," -V demphasis     Degree of dark region patch concentration 1.0-4.0 (default %.2f = none)\n",DEMPH_DEFAULT);
 	fprintf(stderr," -F L,a,b,rad     Filter out samples outside Lab sphere.\n");
+	fprintf(stderr," -O               Don't re-order display RGB patches for minimum delay\n");
 #ifdef VRML_DIAG
-	fprintf(stderr," -w               Dump diagnostic outfilel.wrl file (Lab locations)\n");
-	fprintf(stderr," -W               Dump diagnostic outfiled.wrl file (Device locations)\n");
+	fprintf(stderr," -w               Dump diagnostic outfilel%s file (Lab locations)\n",vrml_ext());
+	fprintf(stderr," -W               Dump diagnostic outfiled%s file (Device locations)\n",vrml_ext());
 #endif /* VRML_DIAG */
 	fprintf(stderr," outfile          Base name for output(.ti1)\n");
 	exit(1);
@@ -894,6 +905,7 @@ int dofilt(
 	return 0;
 }
 
+
 static double disprespt(cgats *pp, int p1, int p2);
 
 int main(int argc, char *argv[]) {
@@ -901,18 +913,18 @@ int main(int argc, char *argv[]) {
 	int fa, nfa, mfa;		/* current argument we're looking at */
 	int verb = 0;			/* Verbose flag */
 #ifdef VRML_DIAG
-	int dumpvrml = 0;		/* Dump diagnostic .wrl file */
+	int dumpvrml = 0;		/* Dump diagnostic VRML/X3D file */
 #endif /* VRML_DIAG */
 	inkmask xmask = 0;		/* External ink mask combination */
 	inkmask nmask = 0;		/* Working ink mask combination (ie. CMY for printer external sRGB) */
 	int di = 0;				/* Output dimensions */
 	char *ident;			/* Ink combination identifier (includes possible leading 'i') */
 	int good = 0;			/* 0 - fast, 1 = good */
-	int esteps = 4;			/* White color patches */
+	int esteps = -1;		/* White color patches */
 	int Bsteps = -1;		/* Black color patches */
 	int ssteps = -1;		/* Single channel steps */
 	double xpow = 1.0;		/* Power to apply to all device values created */
-	int gsteps = 0;			/* Composite grey wedge steps */
+	int gsteps = -1;		/* Composite grey wedge steps */
 	int msteps = 0;			/* Regular grid multidimensional steps */
 	int bsteps = 0;			/* Regular body centered cubic grid multidimensional steps */
 	int fsteps = -1;		/* Fitted Multidimensional patches */
@@ -929,12 +941,13 @@ int main(int argc, char *argv[]) {
 	double uilimit = -1.0;	/* Underlying (pre-calibration, scale 1.0) ink limit */
 	double nemph = NEMPH_DEFAULT;
 	double demph = DEMPH_DEFAULT;
+	int dontreorder = 0;	/* Don't re-order RGB display patches for min delay */
 	int filter = 0;			/* Filter values */
 	double filt[4] = { 50,0,0,0 };	
 	static char fname[MAXNAMEL+1] = { 0 };		/* Output file base name */
 	static char pname[MAXNAMEL+1] = { 0 };		/* Device profile name */
-	static char wdname[MAXNAMEL+1] = { 0 };		/* Device diagnostic .wrl name */
-	static char wlname[MAXNAMEL+1] = { 0 };		/* Lab diagnostic .wrl name */
+	static char wdname[MAXNAMEL+1] = { 0 };		/* Device diagnostic .wrl/.x3d name */
+	static char wlname[MAXNAMEL+1] = { 0 };		/* Lab diagnostic .wrl/.x3d name */
 	char buf[500];			/* Genaral use text buffer */
 	int id = 1;				/* Sample ID */
 	time_t clk = time(0);
@@ -1213,6 +1226,11 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 			}
 
+			/* Don't re-order RGB display patches for best speed */
+			else if (argv[fa][1] == 'O') {
+				dontreorder = 1;
+			}
+
 #ifdef VRML_DIAG
 			else if (argv[fa][1] == 'w')		/* Lab */
 				dumpvrml |= 1;
@@ -1232,10 +1250,10 @@ int main(int argc, char *argv[]) {
 	strcat(fname,".ti1");
 
 	strncpy(wdname,argv[fa],MAXNAMEL-5); wdname[MAXNAMEL-5] = '\000';
-	strcat(wdname,"d.wrl");
+	strcat(wdname,"d");
 
 	strncpy(wlname,argv[fa],MAXNAMEL-5); wlname[MAXNAMEL-5] = '\000';
-	strcat(wlname,"l.wrl");
+	strcat(wlname,"l");
 
 	/* Set default colorant combination as CMYK */
 	if (xmask == 0)
@@ -1256,6 +1274,11 @@ int main(int argc, char *argv[]) {
 	stime = clock();
 
 	/* Implement some defaults */
+	if (esteps < 0)
+		esteps = 4;
+	if (gsteps < 0)
+		gsteps = 0;
+
 	if (Bsteps < 0) {
 		if (xmask == ICX_W || xmask == ICX_K || xmask == ICX_RGB || xmask == ICX_IRGB)
 			Bsteps = 4;
@@ -1284,158 +1307,158 @@ int main(int argc, char *argv[]) {
 			gsteps = 0;
 		}
 	} else if (di == 3) {
-		if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
-			error ("Must have some single or multi dimensional RGB or CMY steps");
-	} else {
-		if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
-			error ("Must have some single or multi dimensional steps");
-	}
-
-	/* Deal with ICC, MPP or fallback profile */
-	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph, demph, xpow)) == NULL) {
-		error("Perceptual lookup object creation failed");
-	}
-
-	/* Set default adapation level */
-	if (dadapt < -1.5) {		/* Not set by user */
-		if (pname[0] != '\000')
-			dadapt = 1.0;
-		else
-			dadapt = 0.1;
-	}
-
-	if (verb) {
-		printf("%s test chart\n",ident);
-
-		if (esteps > 0)
-			printf("White patches = %d\n",esteps);
-		if (Bsteps > 0)
-			printf("Black patches = %d\n",Bsteps);
-		if (ssteps > 0)
-			printf("Single channel steps = %d\n",ssteps);
-		if (gsteps > 0)
-			printf("Compostie Grey steps = %d\n",gsteps);
-		if (fsteps > 0)
-			printf("Full spread patches = %d\n",fsteps);
-		if (msteps > 0)
-			printf("Multi-dimention cube steps = %d\n",msteps);
-		if (bsteps > 0)
-			printf("Multi-dimention body centered cube steps = %d\n",bsteps);
-		if (ilimit >= 0.0)
-			printf("Ink limit = %.1f%% (underlying %.1f%%)\n",ilimit * 100.0, uilimit * 100.0);
-		if (filter) {
-			printf("Filtering out samples outside sphere at %f %f %f radius %f\n",
-			        filt[0], filt[1], filt[2], filt[3]);
-		}
-	}
-	pp = new_cgats();	/* Create a CGATS structure */
-	pp->add_other(pp, "CTI1"); 	/* our special type is Calibration Target Information 1 */
-
-	pp->add_table(pp, tt_other, 0);	/* Add the first table for target points */
-	pp->add_table(pp, tt_other, 0);	/* Add the second table for density pre-defined device values */
-	pp->add_table(pp, tt_other, 0);	/* Add the second table for device pre-defined device values */
-	pp->add_kword(pp, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
-	pp->add_kword(pp, 1, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
-	pp->add_kword(pp, 2, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
-	pp->add_kword(pp, 0, "ORIGINATOR", "Argyll targen", NULL);
-	pp->add_kword(pp, 1, "ORIGINATOR", "Argyll targen", NULL);
-	pp->add_kword(pp, 2, "ORIGINATOR", "Argyll targen", NULL);
-	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
-	pp->add_kword(pp, 0, "CREATED",atm, NULL);
-
-	/* Make available the aproximate white point to allow relative */
-	/* interpretation of the aproximate XYZ values */
-	{
-		int e;
-		double val[MXTD], XYZ[3];
-
-		/* Setup device white */
-		if (nmask & ICX_ADDITIVE)
-			for (e = 0; e < di; e++)
-				val[e] = 1.0;
-		else
-			for (e = 0; e < di; e++)
-				val[e] = 0.0;
-		pdata->dev_to_XYZ(pdata, XYZ, val);		/* Lookup white XYZ */
-
-		sprintf(buf,"%f %f %f", 100.0  * XYZ[0], 100.0 * XYZ[1], 100.0 * XYZ[2]);
-		pp->add_kword(pp, 0, "APPROX_WHITE_POINT", buf, NULL);
-	}
-
-	pp->add_field(pp, 0, "SAMPLE_ID", cs_t);
-	pp->add_field(pp, 1, "INDEX", i_t);			/* Index no. 0..7 in second table */
-	pp->add_field(pp, 2, "INDEX", i_t);			/* Index no. 0..7 in third table */
-
-	/* Setup CGATS fields */
-	{
-		int j;
-		char c_ilimit[20];
-		char *bident = icx_inkmask2char(xmask, 0); 
-
-		for (j = 0; j < di; j++) {
-			int imask;
-			char fname[100];
-
-			imask = icx_index2ink(xmask, j);
-			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
-			                      icx_ink2char(imask));
-
-			pp->add_field(pp, 0, fname, r_t);
-			pp->add_field(pp, 1, fname, r_t);
-			pp->add_field(pp, 2, fname, r_t);
+			if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
+				error ("Must have some single or multi dimensional RGB or CMY steps");
+		} else {
+			if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
+				error ("Must have some single or multi dimensional steps");
 		}
 
-		pp->add_kword(pp, 0, "COLOR_REP", ident, NULL);
-
-		if (ilimit >= 0.0) {
-			sprintf(c_ilimit,"%5.1f",ilimit * 100.0);
-			pp->add_kword(pp, 0, "TOTAL_INK_LIMIT", c_ilimit, NULL);
+		/* Deal with ICC, MPP or fallback profile */
+		if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph, demph, xpow)) == NULL) {
+			error("Perceptual lookup object creation failed");
 		}
-		free(bident);
-	}
 
-	/* ilimit is assumed to be in a valid range from here on */
-	if (ilimit < 0.0) {
-		uilimit = ilimit = di;	/* default is no limit */
-	}
+		/* Set default adapation level */
+		if (dadapt < -1.5) {		/* Not set by user */
+			if (pname[0] != '\000')
+				dadapt = 1.0;
+			else
+				dadapt = 0.1;
+		}
 
-	/* Add expected XYZ values to aid previews, scan recognition & strip recognition */
-	pp->add_field(pp, 0, "XYZ_X", r_t);
-	pp->add_field(pp, 0, "XYZ_Y", r_t);
-	pp->add_field(pp, 0, "XYZ_Z", r_t);
-	pp->add_field(pp, 1, "XYZ_X", r_t);
-	pp->add_field(pp, 1, "XYZ_Y", r_t);
-	pp->add_field(pp, 1, "XYZ_Z", r_t);
-	pp->add_field(pp, 2, "XYZ_X", r_t);
-	pp->add_field(pp, 2, "XYZ_Y", r_t);
-	pp->add_field(pp, 2, "XYZ_Z", r_t);
+		if (verb) {
+			printf("%s test chart\n",ident);
 
-	/* Note if the expected values are expected to be accurate */
-	if (pdata->is_specific(pdata))
-		pp->add_kword(pp, 0, "ACCURATE_EXPECTED_VALUES", "true", NULL);
+			if (esteps > 0)
+				printf("White patches = %d\n",esteps);
+			if (Bsteps > 0)
+				printf("Black patches = %d\n",Bsteps);
+			if (ssteps > 0)
+				printf("Single channel steps = %d\n",ssteps);
+			if (gsteps > 0)
+				printf("Compostie Grey steps = %d\n",gsteps);
+			if (fsteps > 0)
+				printf("Full spread patches = %d\n",fsteps);
+			if (msteps > 0)
+				printf("Multi-dimention cube steps = %d\n",msteps);
+			if (bsteps > 0)
+				printf("Multi-dimention body centered cube steps = %d\n",bsteps);
+			if (ilimit >= 0.0)
+				printf("Ink limit = %.1f%% (underlying %.1f%%)\n",ilimit * 100.0, uilimit * 100.0);
+			if (filter) {
+				printf("Filtering out samples outside sphere at %f %f %f radius %f\n",
+						filt[0], filt[1], filt[2], filt[3]);
+			}
+		}
+		pp = new_cgats();	/* Create a CGATS structure */
+		pp->add_other(pp, "CTI1"); 	/* our special type is Calibration Target Information 1 */
 
-	if (xpow != 1.0) {
-		sprintf(buf,"%f",xpow);
-		pp->add_kword(pp, 0, "EXTRA_DEV_POW",buf, NULL);
-	}
+		pp->add_table(pp, tt_other, 0);	/* Add the first table for target points */
+		pp->add_table(pp, tt_other, 0);	/* Add the second table for density pre-defined device values */
+		pp->add_table(pp, tt_other, 0);	/* Add the second table for device pre-defined device values */
+		pp->add_kword(pp, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
+		pp->add_kword(pp, 1, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
+		pp->add_kword(pp, 2, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
+		pp->add_kword(pp, 0, "ORIGINATOR", "Argyll targen", NULL);
+		pp->add_kword(pp, 1, "ORIGINATOR", "Argyll targen", NULL);
+		pp->add_kword(pp, 2, "ORIGINATOR", "Argyll targen", NULL);
+		atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+		pp->add_kword(pp, 0, "CREATED",atm, NULL);
 
-	if (demph > 1.0) {
-		sprintf(buf,"%f",demph);
-		pp->add_kword(pp, 0, "DARK_REGION_EMPHASIS",buf, NULL);
-	}
+		/* Make available the aproximate white point to allow relative */
+		/* interpretation of the aproximate XYZ values */
+		{
+			int e;
+			double val[MXTD], XYZ[3];
 
-	/* Only use optimsed full spread if <= 4 dimensions, else use ifarp */
-	if (di > 4 
-	 && userand == 0		/* Not other high D useful method */
-	 && useqrand == 0
-	 && usedsim == 0
-	 && usepsim == 0)
-		uselat = 1;
+			/* Setup device white */
+			if (nmask & ICX_ADDITIVE)
+				for (e = 0; e < di; e++)
+					val[e] = 1.0;
+			else
+				for (e = 0; e < di; e++)
+					val[e] = 0.0;
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Lookup white XYZ */
 
-	/* Allocate space to record fixed steps */
-	{
-		fxlist_a = 4;
-		if ((fxlist = (fxpos *)malloc(sizeof(fxpos) * fxlist_a)) == NULL)
+			sprintf(buf,"%f %f %f", 100.0  * XYZ[0], 100.0 * XYZ[1], 100.0 * XYZ[2]);
+			pp->add_kword(pp, 0, "APPROX_WHITE_POINT", buf, NULL);
+		}
+
+		pp->add_field(pp, 0, "SAMPLE_ID", cs_t);
+		pp->add_field(pp, 1, "INDEX", i_t);			/* Index no. 0..7 in second table */
+		pp->add_field(pp, 2, "INDEX", i_t);			/* Index no. 0..7 in third table */
+
+		/* Setup CGATS fields */
+		{
+			int j;
+			char c_ilimit[20];
+			char *bident = icx_inkmask2char(xmask, 0); 
+
+			for (j = 0; j < di; j++) {
+				int imask;
+				char fname[100];
+
+				imask = icx_index2ink(xmask, j);
+				sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
+									  icx_ink2char(imask));
+
+				pp->add_field(pp, 0, fname, r_t);
+				pp->add_field(pp, 1, fname, r_t);
+				pp->add_field(pp, 2, fname, r_t);
+			}
+
+			pp->add_kword(pp, 0, "COLOR_REP", ident, NULL);
+
+			if (ilimit >= 0.0) {
+				sprintf(c_ilimit,"%5.1f",ilimit * 100.0);
+				pp->add_kword(pp, 0, "TOTAL_INK_LIMIT", c_ilimit, NULL);
+			}
+			free(bident);
+		}
+
+		/* ilimit is assumed to be in a valid range from here on */
+		if (ilimit < 0.0) {
+			uilimit = ilimit = di;	/* default is no limit */
+		}
+
+		/* Add expected XYZ values to aid previews, scan recognition & strip recognition */
+		pp->add_field(pp, 0, "XYZ_X", r_t);
+		pp->add_field(pp, 0, "XYZ_Y", r_t);
+		pp->add_field(pp, 0, "XYZ_Z", r_t);
+		pp->add_field(pp, 1, "XYZ_X", r_t);
+		pp->add_field(pp, 1, "XYZ_Y", r_t);
+		pp->add_field(pp, 1, "XYZ_Z", r_t);
+		pp->add_field(pp, 2, "XYZ_X", r_t);
+		pp->add_field(pp, 2, "XYZ_Y", r_t);
+		pp->add_field(pp, 2, "XYZ_Z", r_t);
+
+		/* Note if the expected values are expected to be accurate */
+		if (pdata->is_specific(pdata))
+			pp->add_kword(pp, 0, "ACCURATE_EXPECTED_VALUES", "true", NULL);
+
+		if (xpow != 1.0) {
+			sprintf(buf,"%f",xpow);
+			pp->add_kword(pp, 0, "EXTRA_DEV_POW",buf, NULL);
+		}
+
+		if (demph > 1.0) {
+			sprintf(buf,"%f",demph);
+			pp->add_kword(pp, 0, "DARK_REGION_EMPHASIS",buf, NULL);
+		}
+
+		/* Only use optimsed full spread if <= 4 dimensions, else use ifarp */
+		if (di > 4 
+		 && userand == 0		/* Not other high D useful method */
+		 && useqrand == 0
+		 && usedsim == 0
+		 && usepsim == 0)
+			uselat = 1;
+
+		/* Allocate space to record fixed steps */
+		{
+			fxlist_a = 4;
+			if ((fxlist = (fxpos *)malloc(sizeof(fxpos) * fxlist_a)) == NULL)
 			error ("Failed to malloc fxlist");
 	}
 
@@ -1937,6 +1960,7 @@ int main(int argc, char *argv[]) {
 #endif /* ADDRECCLIPPOINTS */
 	}
 
+
 	/* Regular body centered cubic gridded Multi dimension steps */
 	if (bsteps > 0) {
 		int gc[MXTD];			/* Grid coordinate */
@@ -2279,7 +2303,7 @@ int main(int argc, char *argv[]) {
 
 	/* If this seems to be for a CRT, optimise the patch order to minimise the */
 	/* response time delays */
-	if (nmask == ICX_RGB && pp->t[0].nsets > 1) {
+	if (nmask == ICX_RGB && pp->t[0].nsets > 1 && dontreorder == 0) {
 		int npat = pp->t[0].nsets;
 		char *nm;						/* Don't move array */
 		double udelay, *delays, adelay;
@@ -2386,7 +2410,7 @@ int main(int argc, char *argv[]) {
 				int p1, p2, bp2;
 				double p1d, p2d, p1d1, p2d1;
 				double p1nd, p2nd, p1nd1, p2nd1;
-				double tdelay, de;
+				double tdelay, bdelay, de;
 				int noswapped;
 
 				chend = chstart + chsize+2;
@@ -2396,7 +2420,7 @@ int main(int argc, char *argv[]) {
 //printf("~1 chstart %d, chend %d, size %d\n",chstart,chend, chend - chstart);
 
 				/* While we are still improving, and the improvement was significant */
-				for (;noswapped > 5;) {
+				for (;noswapped > 2;) {
 					noswapped = 0;
 
 					for (p1 = chstart + 1; p1 < chend; p1++) {
@@ -2407,6 +2431,7 @@ int main(int argc, char *argv[]) {
 
 						/* Locate the patch ahead of us that is best to swap with */
 						bp2 = -1;
+						bdelay = udelay;
 						for (p2 = p1 + 2; p2 < chend; p2++) {
 
 							if (nm[p2])
@@ -2429,14 +2454,18 @@ int main(int argc, char *argv[]) {
 			
 							tdelay = udelay - p1d - p2d - p1d1 - p2d1 + p1nd + p2nd + p1nd1 + p2nd1;
 
-							if (tdelay < udelay) {
+							if (tdelay < bdelay)		/* Improve it */
+//							if (tdelay > bdelay)		/* Make it worse */
+							{
 								bp2 = p2;
+								bdelay = tdelay;
 							}
 						}
 						if (bp2 < 0) {
 							continue;
 						} 
 
+						/* Swap the patches */
 						noswapped++;
 
 						p2 = bp2;
@@ -2660,7 +2689,7 @@ int main(int argc, char *argv[]) {
 
 	ttime = clock() - stime;
 	if (verb) {
-		printf("Total number of patches = %d\n",id-1);
+		printf("Total number of patches = %d\n",pp->t[0].nsets);
 		if (id < (1 + (1 << di)))
 			printf("WARNING : not enough patches for %d channels, need at least %d\n",di,(1 + (1 << di)));
 		printf("Execution time = %f seconds\n",ttime/(double)CLOCKS_PER_SEC);
@@ -2669,14 +2698,16 @@ int main(int argc, char *argv[]) {
 	if (pp->write_name(pp, fname))
 		error("Write error : %s",pp->err);
 
-#ifdef VRML_DIAG		/* Dump a VRML of the resulting points */
+#ifdef VRML_DIAG		/* Dump a VRML/X3D of the resulting points */
 	if (dumpvrml & 1) {	/* Lab space */
 		vrml *wrl;
 		int nsets = pp->t[0].nsets;
 		double rad;
 		double dev[MXTD], Lab[3], col[3];
+		int doaxes = 1;					/* Do axes */
 
-		wrl = new_vrml(wlname, 1, 0);		/* Do axes */
+		if ((wrl = new_vrml(wlname, doaxes, 0)) == NULL)
+			error("new_vrml failed for '%s%s'",wlname,vrml_ext());
 
 		/* Fudge sphere diameter */
 		rad = 15.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));
@@ -2747,8 +2778,10 @@ int main(int argc, char *argv[]) {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - -  */
 
+#ifdef NEVER
+
 /* Compte the display response time */
-static double disprespt(cgats *pp, int p1, int p2) {
+static double disprespt2(cgats *pp, int p1, int p2) {
 	double kr, kf;
 	double orgb[3], rgb[3];
 	double xdelay = 0.0;
@@ -2771,9 +2804,9 @@ static double disprespt(cgats *pp, int p1, int p2) {
 		el = pow(rgb[j], 2.2);
 		dl = el - pow(orgb[j], 2.2);	/* Change in level */
 		if (fabs(dl) > 0.01) {		/* More than 1% change in level */
-			n = DISPLAY_SETTLE_AIM * el;
-			if (n < DISPLAY_ABS_AIM)
-				n = DISPLAY_ABS_AIM;
+			n = DISPLAY_SETTLE_AIM2 * el;
+			if (n < DISPLAY_ABS_AIM2)
+				n = DISPLAY_ABS_AIM2;
 			if (dl > 0.0)
 				t = kr * log(n/dl);
 			else
@@ -2786,8 +2819,23 @@ static double disprespt(cgats *pp, int p1, int p2) {
 	return xdelay;
 }
 
+#endif
 
+/* Compte the display response time */
+static double disprespt(cgats *pp, int p1, int p2) {
+	double orgb[3], nrgb[3];
+	double xdelay = 0.0;
 
+	orgb[0] = *((double *)pp->t[0].fdata[p1][1 + 0]) / 100.0;
+	orgb[1] = *((double *)pp->t[0].fdata[p1][1 + 1]) / 100.0;
+	orgb[2] = *((double *)pp->t[0].fdata[p1][1 + 2]) / 100.0;
 
+	nrgb[0] = *((double *)pp->t[0].fdata[p2][1 + 0]) / 100.0;
+	nrgb[1] = *((double *)pp->t[0].fdata[p2][1 + 1]) / 100.0;
+	nrgb[2] = *((double *)pp->t[0].fdata[p2][1 + 2]) / 100.0;
 
+	xdelay = disp_settle_time(orgb, nrgb, DISPLAY_RISE_TIME, DISPLAY_FALL_TIME, DISPLAY_SETTLE_AIM);
+
+	return xdelay;
+}
 

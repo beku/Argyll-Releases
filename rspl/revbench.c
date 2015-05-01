@@ -22,6 +22,7 @@
 #include "aconfig.h"
 #include "rspl.h"
 #include "numlib.h"
+//#include "ui.h"
 
 #undef DOLIMIT			/* Define to have ink limit */
 #define LIMITVAL 2.5	/* Total ink limit sum */

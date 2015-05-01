@@ -4,7 +4,6 @@
 
 Echo "Argyll Jamrules has been read" ;
 
-
 # Default install base directory is same directory as Jamtop,
 # but can be overriden in the command line.
 DESTDIR ?= [ NormPaths  . ] ;
@@ -21,6 +20,10 @@ Echo "DESTDIR = '$(DESTDIR)', PREFIX = '$(PREFIX)', REFSUBDIR = '$(REFSUBDIR)'" 
 ANCHORED_PATH_VARS = DESTDIR ;
 
 
+# Should we also allow CFLAGS, CXXFLAGS, CPPFLAGS & LDFLAGS env. variables
+# to have effect ?
+
+
 # Tell standalone libraries that they are part of Argyll:
 DEFINES += ARGYLLCMS ;
 
@@ -33,25 +36,31 @@ USE_FAST_SERIAL = true ;		# (Implicit in USE_SERIAL too)
 # enable USB instruments & support
 USE_USB = true ;	
 
-# enable dummy Demo Instrument, if code is available
+# enable dummy Demo Instrument (only if code is available)
 USE_DEMOINST = true ;
 
-# Use libusb (deprecated)
+# Use ArgyllCMS version of libusb (deprecated - don't use)
 USE_LIBUSB = false ;
 
-# Use libusb1 rather than libusb0 & libusb0-win32 (deprecated)
-USE_LIBUSB1 = true ;
+if $(USE_LIBUSB) = true {
 
-# Make the USB V1 library static
-LIBUSB_IS_DLL = false ;
+	# Use libusb1 rather than libusb0 & libusb0-win32 (deprecated)
+	USE_LIBUSB1 = true ;
 
-# Always use DLL for MSWin, because driver install expects it (.inf)
-if $(NT) {
-	LIBUSB_IS_DLL = true ;
+	# Make the USB V1 library static
+	LIBUSB_IS_DLL = false ;
+
+	# Always use DLL for MSWin, because driver install expects it (.inf)
+	if $(NT) {
+		LIBUSB_IS_DLL = true ;
+	}
+
+	# Set the libubs1 library name.
+	LIBUSB1NAME = libusb-1.0A ;
 }
 
-# Set the libubs1 library name.
-LIBUSB1NAME = libusb-1.0A ;
+# For testing CCast
+DEFINES += CCTEST_PATTERN ;
 
 # Information for compiling and linking GUI programs
 
@@ -74,25 +83,25 @@ if $(UNIX) {
 		}
 
 		if $(HOST64) {
-			if [ GLOB /usr/X11R6/lib : libX11.so ] {
+			if [ GLOB /usr/X11R6/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/X11R6/lib ;
-			} else if [ GLOB /usr/lib/x86_64-linux-gnu : libX11.so ] {
+			} else if [ GLOB /usr/lib/x86_64-linux-gnu : libX11.so libX11.a ] {
 				LibWinD = /usr/lib/x86_64-linux-gnu ;
-			} else if [ GLOB /usr/lib64 : libX11.so ] {
+			} else if [ GLOB /usr/lib64 : libX11.so libX11.a ] {
 				LibWinD = /usr/lib64 ;
-			} else if [ GLOB /usr/lib : libX11.so ] {
+			} else if [ GLOB /usr/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/lib ;
-			} else if [ GLOB /usr/local/lib : libX11.so ] {
+			} else if [ GLOB /usr/local/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/local/lib ;
 			} else {
 				ECHO Unable to locate the 64 bit X11 library files ;
 			}
 		} else {
-			if [ GLOB /usr/X11R6/lib : libX11.so ] {
+			if [ GLOB /usr/X11R6/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/X11R6/lib ;
-			} else if [ GLOB /usr/lib : libX11.so ] {
+			} else if [ GLOB /usr/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/lib ;
-			} else if [ GLOB /usr/local/lib : libX11.so ] {
+			} else if [ GLOB /usr/local/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/local/lib ;
 			} else {
 				ECHO Unable to locate the 32 bit X11 library files ;
@@ -100,6 +109,8 @@ if $(UNIX) {
 		}
 		if $(OS) = FREEBSD {
 			LINKFLAGS += -L$(LibWinD) -g -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss  -lusb ;
+		} else if $(OS) = OPENBSD {
+			LINKFLAGS += -L$(LibWinD) -g -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss -L/usr/local/lib ;
 		} else {
 			LINKFLAGS += -L$(LibWinD) -ldl -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
 		}
@@ -107,53 +118,52 @@ if $(UNIX) {
 	}
 }
 
-# See if we have a system TIFF library.
-if ! $(BUILTIN_TIFF) && $(UNIX) {
-	if [ GLOB /usr/include : tiffio.h ] || [ GLOB /usr/local/include : tiffio.h ]  {
-		if  [ GLOB /usr/lib : libtiff.so ] || [ GLOB /usr/lib : libtiff.a ]
-		 || [ GLOB /usr/lib64 : libtiff.so ] || [ GLOB /usr/lib64 : libtiff.a ]
-		 || [ GLOB /usr/lib/x86_64-linux-gnu : libtiff.so ]
-		 || [ GLOB /usr/lib/x86_64-linux-gnu : libtiff.a ]
-		 || [ GLOB /usr/local/lib : libtiff.so ] || [ GLOB /usr/local/lib : libtiff.a ] { 
-			echo "Using system TIFF library" ;
-			TIFFLIB = ;
-			TIFFINC = ;
-			LINKFLAGS += $(LINKFLAG)tiff ;
-			HAVE_TIFF = true ;
+# Standard system library support:
+
+# Check rule. $(<) is library name, $(>) is optional directory name
+rule CheckForLibrary {
+	UCASE = $(<:U) ;
+	lcase = $(<:L) ;
+	libname = $(lcase) ;
+
+	if $(>) {
+		libname = $(>) ;
+	}
+
+	if ! $(BUILTIN_$(UCASE)) && $(UNIX) {
+		if  [ GLOB /usr/include : $(lcase).h $(lcase)lib.h ]
+	     || [ GLOB /usr/local/include : $(lcase).h $(lcase)lib.h ]
+		 || [ GLOB /usr/include/x86_64-linux-gnu : $(lcase).h $(lcase)lib.h ]
+	     || [ GLOB /usr/include/i386-linux-gnu : $(lcase).h $(lcase)lib.h ] {
+			if  [ GLOB /usr/lib : lib$(lcase).so ] || [ GLOB /usr/lib : lib$(lcase).a ]
+			 || [ GLOB /usr/local/lib : lib$(lcase).so ] || [ GLOB /usr/local/lib : lib$(lcase).a ]
+			 || [ GLOB /usr/lib64 : lib$(lcase).so ] || [ GLOB /usr/lib64 : lib$(lcase).a ]
+			 || [ GLOB /usr/lib/x86_64-linux-gnu : lib$(lcase).so ]
+			 || [ GLOB /usr/lib/x86_64-linux-gnu : lib$(lcase).a ]
+	         || [ GLOB /usr/lib/i386-linux-gnu : lib$(lcase).so ]
+	         || [ GLOB /usr/lib/i386-linux-gnu : lib$(lcase).a ] {
+				echo "Using system $(UCASE) library" ;
+				$(UCASE)LIB = ;
+				$(UCASE)INC = ;
+				LINKFLAGS += $(LINKFLAG)$(lcase) ;
+				HAVE_$(UCASE) = true ;
+			}
 		}
+	}
+	
+	# If nothing else, use Argyll supplied $(UCASE) library
+	if ! $(HAVE_$(UCASE)) || $(BUILTIN_$(UCASE)) {
+		echo "Using Argyll $(UCASE) library" ;
+		$(UCASE)LIB = ../$(libname)/lib$(lcase).lib ;
+		$(UCASE)INC = ../$(libname) ;
 	}
 }
 
-# If nothing else, use Argyll supplied TIFF library
-if ! $(HAVE_TIFF) || $(BUILTIN_TIFF) {
-	echo "Using Argyll TIFF library" ;
-	TIFFLIB = ../tiff/libtiff.lib ;
-	TIFFINC = ../tiff ;
-}
-
-# See if we have a system JPEG library.
-if ! $(BUILTIN_JPEG) && $(UNIX) {
-	if [ GLOB /usr/include : jpeglib.h ] || [ GLOB /usr/local/include : jpeglib.h ] {
-		if  [ GLOB /usr/lib : libjpeg.so ] || [ GLOB /usr/lib : libjpeg.a ]
-		 || [ GLOB /usr/lib64 : libjpeg.so ] || [ GLOB /usr/lib64 : libjpeg.a ]
-		 || [ GLOB /usr/lib/x86_64-linux-gnu : libjpeg.so ]
-		 || [ GLOB /usr/lib/x86_64-linux-gnu : libjpeg.a ]
-		 || [ GLOB /usr/local/lib : libjpeg.so ] || [ GLOB /usr/local/lib : libjpeg.a ] {
-			echo "Using system JPEG library" ;
-			JPEGLIB = ;
-			JPEGINC = ;
-			LINKFLAGS += $(LINKFLAG)jpeg ;
-			HAVE_JPEG = true ;
-		}
-	}
-}
-
-# If nothing else, use Argyll supplied JPEG library
-if ! $(HAVE_JPEG) || $(BUILTIN_JPEG) {
-	echo "Using Argyll JPEG library" ;
-	JPEGLIB = ../jpg/libjpeg.lib ;
-	JPEGINC = ../jpg ;
-}
+# See if we have a system TIFF, JPEG, PNG or ZLIB library.
+CheckForLibrary "TIFF" ;
+CheckForLibrary "JPEG" ;
+CheckForLibrary "PNG" ;
+CheckForLibrary "Z" : "zlib" ;
 
 # testing
 #DSTDIR = var ;

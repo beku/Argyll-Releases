@@ -37,7 +37,7 @@
  * If the -f option is used, the FWA corrected spectral reflectances
  * are written to the output .ti3 file, instead of simply copying the
  * spectral reflectances from the input .ti3 file. In this case, the
- * XYZ_[XYZ] and LAB_[LAB] values are computed from the FWA corrected
+ * XYZ_[XYZ] and D50 LAB_[LAB] values are computed from the FWA corrected
  * reflectances as well.
  */
 
@@ -49,6 +49,11 @@
 	need to be normalised to Y=100 or marked as not normalised.
 
 	Calibration tables aren't being passed through either ??
+
+	L*a*b* is always D50.
+
+    This is intended for conversion of reflective measurements to XYZ -
+	there is no illuminant for emissive values.
  */
 
 #define ALLOW_PLOT
@@ -70,6 +75,7 @@
 #ifdef ALLOW_PLOT
 #include "plot.h"
 #endif
+#include "ui.h"
 
 
 void
@@ -122,9 +128,9 @@ main(int argc, char *argv[])
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
 	icxIllumeType illum = icxIT_D50;			/* Spectral defaults */
-	xspect cust_illum;				/* Custom illumination spectrum */
+	xspect cust_illum;				/* Custom CIE illumination spectrum */
 	icxIllumeType inst_illum = icxIT_none;		/* Spectral defaults */
-	xspect inst_cust_illum;			/* Custom illumination spectrum */
+	xspect inst_cust_illum;			/* Custom actual instrument illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
 
 	int npat;						/* Number of patches */
@@ -660,7 +666,7 @@ main(int argc, char *argv[])
 			xspect insp;		/* Instrument illuminant */
 
 			if (inst_illum == icxIT_none) {
-					/* try to get from .ti3 file */
+				/* try to get from .ti3 file */
 				if ((ti = icg->find_kword (icg, 0, "TARGET_INSTRUMENT")) < 0)
 					error ("Can't find target instrument needed for FWA compensation");
 
@@ -672,11 +678,11 @@ main(int argc, char *argv[])
 					error ("Instrument doesn't have an FWA illuminent");
 			}
 			else if (inst_illum == icxIT_custom) {
-					insp = inst_cust_illum;		/* Structure copy */
+				insp = inst_cust_illum;		/* Structure copy */
 			}
 			else {
-					if (standardIlluminant(&insp, inst_illum, 0) != 0)
-							error ("Failed to find standard illuminant");
+				if (standardIlluminant(&insp, inst_illum, 0) != 0)
+					error ("Failed to find standard illuminant");
 			}
 
 			/* If we are setting a specific simulated instrument illuminant */
@@ -704,7 +710,6 @@ main(int argc, char *argv[])
 		}
 
 		for (i = 0; i < npat; i++) {
-
 			xspect corr_sp;
 
 			/* copy all input colums to output (except spectral if nospec) */
@@ -735,7 +740,7 @@ main(int argc, char *argv[])
 			}
 
 			if (fwacomp) {
-				corr_sp = sp;
+				corr_sp = sp;		/* Copy spectrum */
 
 				/* Convert it to CIE space */
 				sp2cie->sconvert (sp2cie, &corr_sp, XYZ, &sp);
@@ -802,6 +807,10 @@ main(int argc, char *argv[])
 #endif
 			}
 
+			/* Could use sp2cie->get_cie_il() to get CIE white point */
+			/* if we wanted to return L*a*b* relative to that. */
+			/* We would have to mark that in the .ti3 though. */
+			/* This won't work for emmisive though, since get_cie_il() will return 'E' */
 			icmXYZ2Lab(&icmD50, Lab, XYZ);
 
 			elems[Xi].d = XYZ[0] * 100.0;

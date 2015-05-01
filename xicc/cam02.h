@@ -17,7 +17,7 @@
  *
  * This file is based on cam97s3.h by Graeme Gill.
  *
- * Copyright 2004 - 2013 Graeme W. Gill
+ * Copyright 2004 - 2014 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -39,7 +39,8 @@
   Surround/Adapting field is the visual field minus the background field,
   and is what is assumed to be setting the viewers light adaptation level.
 
-  Ambient field is the whole surrounding environmental light field.
+  Ambient field is general illumination from the sun or general lighting,
+  and is the whole surrounding environmental light field.
 
   Illuminating field is the field that illuminates the reflective
   Scene/Image. It may be the same as the Ambient field or it could
@@ -88,7 +89,7 @@
 
 /* Flare is assumed to be stray light from light parts of the */
 /* image illuminating dark parts of the image, and is display technology dependent. */
-/* In theory reflective systems have no Flare ? */
+/* In theory reflective systems have little Flare ? */
 
 /* Glare is assumed to be stray ambient light reflecting from the display */
 /* surface, dust, or entering the observers eye directly, and as a result */
@@ -138,7 +139,7 @@ struct _cam02 {
 		double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
-		double Yg,		/* Glare as a fraction of the ambient (range 0.0 .. 1.0) */
+		double Yg,		/* Glare as a fraction of the adapting/surround (range 0.0 .. 1.0) */
 		double Gxyz[3],	/* The Glare white coordinates (ie. the Ambient color) */
 						/* If <= 0 will Wxyz will be used. */
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
@@ -156,7 +157,7 @@ struct _cam02 {
 	double Wxyz[3];	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 	double Yb;		/* Relative Luminance of Background to reference white (Y range 0.0 .. 1.0) */
 	double Yf;		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-	double Yg;		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+	double Yg;		/* Glare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 	double Gxyz[3];	/* The Glare white coordinates (typically the Ambient color) */
 
 	/* Internal parameters */

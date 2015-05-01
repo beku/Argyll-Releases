@@ -101,6 +101,7 @@ const char *icx2str(icmEnumType etype, int enumval);
 struct _icxMatrixModel {
 	void *imp;		/* Opaque implementation */
 
+	icc *picc;		/* ICC profile used to set cone space matrix, NULL for Bradford. */
 	int isLab;		/* Convert lookup to Lab */
 
 	void (*force) (struct _icxMatrixModel *p, double *targ, double *in);
@@ -112,6 +113,7 @@ struct _icxMatrixModel {
 /* Create a matrix model of a set of points, and return an object to lookup */
 /* points from the model. Return NULL on error. */
 icxMatrixModel *new_MatrixModel(
+icc *picc,			/* ICC profile used to set cone space matrix, NULL for Bradford. */
 int verb,			/* NZ if verbose */
 int nodp,			/* Number of points */
 cow *ipoints,		/* Array of input points in XYZ space */
@@ -186,7 +188,7 @@ typedef struct {
 	double Lv;			/* Luminance of white in the Image/Scene/Viewing field (cd/m^2) */
 						/* Ignored if Ev is set to other than vc_none */
 	double Yf;			/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-	double Yg;			/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+	double Yg;			/* Glare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 	double Gxyz[3];		/* The Glare white coordinates (ie the Ambient color) */
 						/* will be taken from Wxyz if Gxyz <= 0.0 */
 	char *desc;			/* Possible description of this VC */
@@ -302,6 +304,7 @@ struct _xicc {
 	                                                                    /* value and is known */
 	                                  double wpscale,			/* > 0.0 if input white pt is */
 	                                                                    /* is to be scaled */
+//									  double *bpo, 				/* != NULL black point override */
 	                                  double smooth,			/* RSPL smoothing factor, */
 	                                                                        /* -ve if raw */
 	                                  double avgdev,			/* Avge Dev. of points */
@@ -897,15 +900,23 @@ double *in			/* Input di values */
 
 /* - - - - - - - - - - */
 
-/* 3x3 matrix multiplication, with the matrix in a 1D array */
-/* with respect to the input and parameters. */
+/* 3x3 matrix in 1D array multiplication */
 void icxMulBy3x3Parm(
 	double out[3],			/* Return input multiplied by matrix */
 	double mat[9],			/* Matrix organised in [slow][fast] order */
 	double in[3]			/* Input values */
 );
 
-/* 3x3 matrix multiplication, with partial derivatives */
+/* 3x3 matrix in 1D array multiplication, with partial derivatives */
+/* with respect to just the input. */
+void icxdpdiiMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double din[3][3],		/* Return deriv for each [output] with respect to [input] */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
+);
+
+/* 3x3 matrix in 1D array multiplication, with partial derivatives */
 /* with respect to the input and parameters. */
 void icxdpdiMulBy3x3Parm(
 	double out[3],			/* Return input multiplied by matrix */
@@ -914,32 +925,6 @@ void icxdpdiMulBy3x3Parm(
 	double mat[9],			/* Matrix organised in [slow][fast] order */
 	double in[3]			/* Input values */
 );
-
-/* ------------------------------------------- */
-/* BT.1886 support */
-
-/* Convert an effective gamma given an offset into a technical gamma */
-double xicc_tech_gamma(double egamma, double off);
-
-typedef struct {
-	double ingo;				/* input Y gamma offset for bt1886 */
-	double outsc;				/* output Y scale for bt1886 */
-	double outL;				/* output black point L value */
-	double tab[2];				/* Target ab offset value at zero input for bt1886 */
-	double gamma;				/* bt.1886 technical gamma to apply */
-} bt1886_info;
-
-/* Set the bt1886_info to a default do nothing state */
-void bt1886_setnop(bt1886_info *p);
-
-/* Setup the bt1886_info for the given target */
-void bt1886_setup(bt1886_info *p, double *XYZbp, double gamma);
-
-/* Apply BT.1886 black offset and gamma curve to */
-/* the XYZ out of the input profile. */
-/* Do this in the colorspace defined by the input profile matrix lookup, */
-/* so it will be relative XYZ */
-void bt1886_apply(bt1886_info *p, icmLuMatrix *lu, double *out, double *in);
 
 /* - - - - - - - - - - */
 

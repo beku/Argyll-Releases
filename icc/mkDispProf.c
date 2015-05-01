@@ -176,7 +176,7 @@ char *argv[]
 	/* Setup the primaries */
 	{
 		/* Compute primaries as XYZ */
-		icmXYZNumber wrgb[4] = {		/* Primaries in Yxy from the standard */
+		double wrgb[4][3] = {		/* Primaries in Yxy from the standard */
 			{ 1.0, 0.3127, 0.3290 },	/* White */
 			{ 1.0, 0.6400, 0.3300 },	/* Red */
 			{ 1.0, 0.3000, 0.6000 },	/* Green */
@@ -185,28 +185,49 @@ char *argv[]
 		double mat[3][3];
 		int i;
 
-		/* Convert Yxy to XYZ */
-		for (i = 0; i < 4; i++) {
-			double v[3];
+		/* Convert yxy to normalised 3x3 matrix */
+		icmRGBYxyprim2matrix(wrgb[1], wrgb[2], wrgb[3], wrgb[0], mat, wrgb[0]);
+		icmTranspose3x3(mat, mat);
 
-			icmXYZ2Ary(v, wrgb[i]);
-			icmYxy2XYZ(v, v);
-			icmAry2XYZ(wrgb[i], v);
-		}
-
-		/* Convert XYZ to normalised 3x3 matrix */
-		icmRGBprim2matrix(wrgb[0], wrgb[1], wrgb[2], wrgb[3], mat);
-
-#ifdef NEVER		/* Dump XYZ of matrix */
+#ifdef NEVER		/* Dump XYZ */
 		printf("sRGB: XYZ\n");
-		printf("{ %f, %f, %f },	/* Red */\n"
-		       "{ %f, %f, %f },	/* Green */\n"
-		       "{ %f, %f, %f },	/* Blue */\n"
+		printf("{ %f, %f, %f }, /* Red */\n"
+		       "{ %f, %f, %f }, /* Green */\n"
+		       "{ %f, %f, %f }, /* Blue */\n"
 		       "{ %f, %f, %f }  /* White */\n",
 		mat[0][0], mat[0][1], mat[0][2],
 		mat[1][0], mat[1][1], mat[1][2],
 		mat[2][0], mat[2][1], mat[2][2],
-		wrgb[0].X, wrgb[0].Y, wrgb[0].Z);
+		wrgb[0][0], wrgb[0][1], wrgb[0][2]);
+#endif
+
+#ifdef NEVER		/* Dump xyz */
+{
+	double mat2[4][3];
+	double tt;
+
+	for (i = 0; i < 3; i++) {
+	
+		tt = mat[i][0] + mat[i][1] + mat[i][2];
+		mat2[i][0] = mat[i][0] / tt;
+		mat2[i][1] = mat[i][1] / tt;
+		mat2[i][2] = mat[i][2] / tt;
+	}
+	tt = wrgb[0][0] + wrgb[0][1] + wrgb[0][2];
+	mat2[i][0] = wrgb[0][0] / tt;
+	mat2[i][1] = wrgb[0][1] / tt;
+	mat2[i][2] = wrgb[0][2] / tt;
+
+	printf("sRGB: xyz\n");
+	printf("{ %f, %f, %f },		/* Red */\n"
+	       "{ %f, %f, %f },		/* Green */\n"
+	       "{ %f, %f, %f },		/* Blue */\n"
+	       "{ %f, %f, %f }		/* White */\n",
+	mat2[0][0], mat2[0][1], mat2[0][2],
+	mat2[1][0], mat2[1][1], mat2[1][2],
+	mat2[2][0], mat2[2][1], mat2[2][2],
+	mat2[3][0], mat2[3][1], mat2[3][2]);
+}
 #endif
 
 		/* White Point Tag: */
@@ -219,9 +240,9 @@ char *argv[]
 
 			wo->size = 1;
 			wo->allocate((icmBase *)wo);	/* Allocate space */
-			wo->data[0].X = wrgb[0].X;
-			wo->data[0].Y = wrgb[0].Y;
-			wo->data[0].Z = wrgb[0].Z; 
+			wo->data[0].X = wrgb[0][0];
+			wo->data[0].Y = wrgb[0][1];
+			wo->data[0].Z = wrgb[0][2]; 
 		}
 		/* Black Point Tag: */
 		{
@@ -239,12 +260,14 @@ char *argv[]
 		}
 		/* Red, Green and Blue Colorant Tags: */
 		{
+			icmXYZNumber white;
 			icmXYZArray *wor, *wog, *wob;
 			double fromAbs[3][3];
 			double d50m[3][3];
 
 			/* Convert to D50 adapated */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, wrgb[0], fromAbs);
+			icmAry2XYZ(white, wrgb[0]);
+			wr_icco->chromAdaptMatrix(wr_icco, ICM_CAM_NONE, icmD50, white, fromAbs);
 			icmMulBy3x3(d50m[0], fromAbs, mat[0]);
 			icmMulBy3x3(d50m[1], fromAbs, mat[1]);
 			icmMulBy3x3(d50m[2], fromAbs, mat[2]);

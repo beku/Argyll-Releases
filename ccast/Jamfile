@@ -1,0 +1,34 @@
+
+# Jamfile for ccast library
+ 
+#PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
+
+if $(NT) {
+    DEFINES += WIN32 ;
+}
+
+SubInclude axTLS ;
+
+HDRS = ../h ../numlib ../spectro axTLS chan ../yajl ; 
+
+# We create the channel protocol buffers implementation files thus:
+# /src/protobuf_c/protobuf.exe --c_out=chan cast_channel.proto
+
+CHAN_SRC =
+	chan/cast_channel.pb-c.c
+	chan/protobuf-c.c
+	;
+
+# ccast library
+Library libccast : ccmdns.c ccpacket.c ccmes.c ccast.c $(CHAN_SRC) dpat.c ;
+
+LINKLIBS = ./libccast axTLS/libaxtls ../yajl/libyajl ../numlib/libnum ../spectro/libconv ;
+
+# Test harness
+#Main cctest : cctest.c ;
+Main filt : filt.c ;
+
+MainVariant dpat : dpat.c : : STANDALONE_TEST ;
+

@@ -20,7 +20,7 @@
 #undef DIAG2
 #undef GLOB_CHECK
 #define RES2			/* Do multiple test at various resolutions */
-#define AVGDEV 0.0		/* Average deviation of function data */
+#define AVGDEV 0.005	/* Average deviation of function data */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,10 +29,10 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
-#include "plot.h"
 #include "rspl.h"
+#include "plot.h"
+#include "ui.h"
 
-double lin();
 void usage(void);
 
 #define TRIALS 20		/* Number of random trials */
@@ -87,8 +87,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: c1 [options]\n");
 	fprintf(stderr," -s smooth     Use given smoothness (default 1.0)\n");
-	fprintf(stderr," -2            Use two pass smoothing\n");
-	fprintf(stderr," -x            Use extra fitting\n");
+	fprintf(stderr," -x            Use auto smoothing\n");
 	exit(1);
 }
 
@@ -102,8 +101,7 @@ int main(int argc, char *argv[]) {
 	datai low,high;
 	int gres[MXDI];
 	double smooth = 1.0;
-	int twopass = 0;
-	int extra = 0;
+	int autosm = 0;
 	double avgdev[MXDO];
 
 	low[0] = 0.0;
@@ -134,17 +132,14 @@ int main(int argc, char *argv[]) {
 				usage();
 
 			/* smoothness */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's') {
 				fa = nfa;
 				if (na == NULL) usage();
 				smooth = atof(na);
 			}
 
-			else if (argv[fa][1] == '2') {
-				twopass = 1;
-			}
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
-				extra = 1;
+			else if (argv[fa][1] == 'x') {
+				autosm = 1;
 			}
 			else 
 				usage();
@@ -225,10 +220,9 @@ int main(int argc, char *argv[]) {
 #endif
 		/* Fit to scattered data */
 		rss->fit_rspl(rss,
-		           0 | (twopass ? RSPL_2PASSSMTH : 0)
-		             | (extra   ? RSPL_EXTRAFIT2 : 0) ,
+		           0 | (autosm ? RSPL_AUTOSMOOTH : 0) ,
 		           test_points,			/* Test points */
-		           pnts,	/* Number of test points */
+		           pnts,				/* Number of test points */
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           smooth,				/* Smoothing */
@@ -245,10 +239,10 @@ int main(int argc, char *argv[]) {
 			tp.p[0] = x;
 			rss->interp(rss, &tp);
 			yy[1][i] = tp.v[0];
-			if (yy[1][i] < -0.2)
-				yy[1][i] = -0.2;
-			else if (yy[1][i] > 1.2)
-				yy[1][i] = 1.2;
+			if (yy[1][i] < -20.0)
+				yy[1][i] = -20.0;
+			else if (yy[1][i] > 120.0)
+				yy[1][i] = 120.0;
 		}
 		
 		do_plot(xx,yy[0],yy[1],NULL,XRES);
@@ -283,8 +277,7 @@ int main(int argc, char *argv[]) {
 				gresses[j] = gres[0];
 	
 				rss->fit_rspl(rss,
-			           0 | (twopass ? RSPL_2PASSSMTH : 0)
-			             | (extra   ? RSPL_EXTRAFIT2 : 0) ,
+			           0 | (autosm ? RSPL_AUTOSMOOTH : 0) ,
 			           test_points,			/* Test points */
 			           pnts,	/* Number of test points */
 			           low, high, gres,		/* Low, high, resolution of grid */
@@ -302,10 +295,10 @@ int main(int argc, char *argv[]) {
 					tp.p[0] = x;
 					rss->interp(rss, &tp);
 					yy[1+j][i] = tp.v[0];
-					if (yy[1+j][i] < -0.2)
-						yy[1+j][i] = -0.2;
-					else if (yy[1+j][i] > 1.2)
-						yy[1+j][i] = 1.2;
+					if (yy[1+j][i] < -20.0)
+						yy[1+j][i] = -20.0;
+					else if (yy[1+j][i] > 120.0)
+						yy[1+j][i] = 120.0;
 				}
 			}
 	

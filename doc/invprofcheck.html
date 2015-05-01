@@ -39,10 +39,10 @@ Show CIE94 delta E values</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Show CIEDE2000 delta E values</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-create VRML visualisation (profile.wrl)</span><br
+create X3DOM visualisation (profile.x3d.html)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use VRML axes</span><br style="font-family: monospace;">
+Use X3DOM axes</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Color vectors acording to delta E</span><br
  style="font-family: monospace;">
@@ -60,7 +60,7 @@ table. A grid of device values is created, and the transform from
 PCS-&gt;device, and then device-&gt;PCS is computed in L*a*b* space.
 The average, maximum and RMS error delta E values are computed and
 displayed in the chosen delta E metric. A <a
- href="File_Formats.html#VRML">VRML</a> plot of the error vectors can
+ href="File_Formats.html#X3DOM">X3DOM</a> plot of the error vectors can
 be created. <span style="font-weight: bold;">invprofcheck</span> tries
 to only test in-gamut color values. Note that because it scans a device
 grid, for a CMYK device, the density of test points will be
@@ -114,16 +114,16 @@ closer
 correspondence with perceived color differences than either CIE76 or
 CIE94 delta E values.<br>
 <br>
-The <b>-w</b> creates a <a href="File_Formats.html#VRML">VRML</a> 3D
+The <b>-w</b> creates a <a href="File_Formats.html#X3DOM">X3DOM</a> 3D
 visualization
 of the differences between the test points and the profiles prediction
 of
 the resulting colors.<br>
 <br>
-The <b>-x</b> flag adds Lab axes to the VRML output.<br>
+The <b>-x</b> flag adds Lab axes to the X3DOM output.<br>
 <br>
 The <span style="font-weight: bold;">-e</span> flag causes the error
-vectors in the VRML output to be color coded according to their
+vectors in the X3DOM output to be color coded according to their
 lengths, from longest to shortest: yellow, red, magenta, blue, cyan and
 green.<br>
 <br>

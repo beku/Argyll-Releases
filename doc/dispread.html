@@ -3,7 +3,7 @@
   <head>
     <title>dispread</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -21,6 +21,14 @@
     <small style="font-family: monospace;">dispread [-options]<i>
         inoutfile</i><br>
       &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -83,6 +91,14 @@ m
 
 
 
+
+
+
+
+
+
+
+
         for VideoLUT access.</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -93,6 +109,14 @@ from
 the
 following
 list
+
+
+
+
+
+
+
+
 
 
 
@@ -141,6 +165,14 @@ list
 
 
 
+
+
+
+
+
+
+
+
       Display via a web server at port (default 8080)</span><br>
     <span style="font-family: monospace;">&nbsp;<a href="#dmadvr">-dmadvr</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -155,7 +187,19 @@ list
 
 
 
+
+
+
+
+
+
+
+
       [MSWin] Display via MadVR Video Renderer</span><br>
+    <tt>&nbsp;</tt><tt><a href="#dcc">-dcc[:n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </tt><tt>Display via n'th ChromeCast (default 1, ? for list)</tt><br>
     <small style="font-family: monospace;"> <span style="font-family:
         monospace;">&nbsp;</span><a style="font-family: monospace;"
         href="#c">-c listno</a><span style="font-family: monospace;">
@@ -163,6 +207,14 @@ list
         communication port from the following list (default 1)<br>
       </span></small><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -213,10 +265,26 @@ Display
 
 
 
+
+
+
+
+
+
+
+
         type - instrument specific list to choose from.</span></font><br>
     <small style="font-family: monospace;">&nbsp;<span
         style="text-decoration: underline;">-</span><a href="#k">k
         file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -266,13 +334,37 @@ Apply
 
 
 
+
+
+
+
+
+
+
+
       calibration file to test values while reading</small><br>
     <tt>&nbsp;<a href="#V">-V</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
+
+
+
+
+
+
+
+
       [MSWin] Enable MadVR color management (3dLut)</tt><br>
     <small style="font-family: monospace;">&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -330,6 +422,14 @@ center,
 
 
 
+
+
+
+
+
+
+
+
       1.0 = right/bottom etc.<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ss:
@@ -361,8 +461,24 @@ normal,
 
 
 
+
+
+
+
+
+
+
+
       2.0 = double etc.<br>
     </font><font size="-1"><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -404,6 +520,14 @@ normal,
 
 
 
+
+
+
+
+
+
+
+
         Fill whole screen with black background</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span></font><font
       size="-1"><span style="font-family: monospace;"><a href="#E">-E</a>
@@ -415,9 +539,51 @@ normal,
 
 
 
+
+
+
+
+
+
+
+
       </span></font><small><span style="font-family: monospace;">Video
-        encode output as (16-235)/255 "TV" levels</span></small><br
-      style="font-family: monospace;">
+        encode output as (16-235)/255 "TV" levels</span></small><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span></font><font
+      size="-1"><span style="font-family: monospace;"><a href="#Z">-Z
+          nbits</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      </span></font><small><span style="font-family: monospace;">Quantize
+test
+values
+to
+fit
+
+
+
+
+
+
+
+
+
+
+
+        in nbits</span></small><br style="font-family: monospace;">
     <small style="font-family: monospace;">&nbsp;<span
         style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
@@ -427,6 +593,14 @@ Don't
 set
 override
 redirect
+
+
+
+
+
+
+
+
 
 
 
@@ -474,9 +648,25 @@ redirect
 
 
 
+
+
+
+
+
+
+
+
       &nbsp;&nbsp;&nbsp;&nbsp; Run calibration first</small><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -539,9 +729,25 @@ Y
 
 
 
+
+
+
+
+
+
+
+
         100</span></font><small><span style="font-family: monospace;"></span></small><br>
     &nbsp; <font size="-1"><span style="font-family: monospace;"><a
           href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -592,6 +798,14 @@ Calibration
 
 
 
+
+
+
+
+
+
+
+
       Spectral Samples for calibration</span><font size="-1"><span
         style="font-family: monospace;"><br>
       </span></font><small><span style="font-family: monospace;">&nbsp;</span><a
@@ -600,6 +814,14 @@ Calibration
         &nbsp;&nbsp;&nbsp; Choose CIE Observer for spectrometer or CCSS
         colorimeter data:</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -657,15 +879,47 @@ Both:
 
 
 
+
+
+
+
+
+
+
+
         -Ibw</span></small><br>
     <small><span style="font-family: monospace;"><tt>&nbsp;<a href="#YR">-Y
+
+
+
+
+
+
+
+
             R:<i>rate</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
           Override measured refresh rate with rate Hz<br>
         </tt>&nbsp;</span></small><font size="-1"><span
         style="font-family: monospace;"></span><a style=" font-family:
         monospace;" href="#YA">-<font size="-1">Y</font> A</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -728,11 +982,27 @@ n
 
 
 
+
+
+
+
+
+
+
+
         none, h = HW, x = Xon/Xoff</span></font><br>
     <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
       diagnostics to stderr</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -844,6 +1114,14 @@ n
 
 
 
+
+
+
+
+
+
+
+
       1,2</span> . Some experimentation may be needed using <a
       href="dispwin.html">dispwin</a> on such systems, to discover what
     screen has access to the VideoLUT hardware, and which screens the
@@ -868,7 +1146,8 @@ n
       style="font-weight: bold;">/sbin/ifconfig</span> (Linux or OS X)
     and identify an internet address for your machine that way. <b>
       JavaScript</b> needs to be enabled in your web browser for this to
-    work.<br>
+    work. You may have to modify any firewall to permit port 8080 to be
+    accessed on your machine.<br>
     <br>
     Note that if you use this method of displaying test patches, that
     there is no access to the display VideoLUTs and that the colors will
@@ -889,6 +1168,18 @@ n
     the results, and therefore may have to be set appropriately using
     dispwin. By default the test patch colors will <u>not</u> be
     processed by the MadVR 3dLut (see the -<a href="#V">V</a> flag).<br>
+    <br>
+    <a name="dcc"></a><span style="font-weight: bold;">-dcc</span> or <b>-dcc:<i>no</i></b>
+    causes test patches to be displayed using and available <a
+      href="http://en.wikipedia.org/wiki/Chromecast">ChromeCast</a> to
+    your TV. Use <b>-dcc:?</b> to display a list of ChromeCasts on your
+    local network. Note that the ChromeCast as a test patch source is
+    probably the<b> least accurate</b> of your choices, since it
+    up-samples the test patch and transforms from RGB to YCC and back,
+    but should be accurate within ± 1 bit. You may have to modify any
+    firewall to permit port 8081 to be accessed on your machine if it
+    falls back to the Default receiver (see <a href="Installing.html">installation
+      instructions</a> for your platform).<br>
     <br>
     <a name="c"></a> <span style="font-weight: bold;">-c</span>: The
     instrument is assumed to communicate through a USB or serial
@@ -927,10 +1218,9 @@ n
     and how this works, see <a href="instruments.html">Operation of
       particular instruments</a>. <b>3)</b> Any installed CCSS files
     (if applicable), or CCMX files. These files are typically created
-    using <a href="ccxxmake.html">ccxxmake</a>,
-    and installed using <a
-      href="oeminst.html">oeminst</a>. The
-    default and Base Calibration types will be indicated in the usage.<br>
+    using <a href="ccxxmake.html">ccxxmake</a>, and installed using <a
+      href="oeminst.html">oeminst</a>. The default and Base Calibration
+    types will be indicated in the usage.<br>
     <br>
     <a name="s"></a><span style="font-weight: bold;">-s</span>: By
     default only the colorimetric information (XYZ value) will be saved,
@@ -990,7 +1280,8 @@ n
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>
     parameter allows you to position and size the test patch window. By
     default it is places in the center of the screen, and sized
-    appropriately for the type of instrument. The <span
+    appropriately for the type of instrument, or 10% of the width of the
+    display if the display size is unknown. The <span
       style="font-weight: bold;">ho</span> and <span
       style="font-weight: bold;">vo</span> values govern the horizontal
     and vertical offset respectively. A value of 0.0 positions the
@@ -1018,7 +1309,26 @@ n
     flag causes the test values to be scaled to the Video RGB encoding
     range of 16/255 to 235/255. If the calibration file provided using
     the <b>-k</b> or <b>-K</b> flag was created using video range
-    encoding, then this option will be triggered automatically.<br>
+    encoding, then this option will be triggered automatically. This
+    will also set quantization of 8 bits (see -Z flag below). If your
+    video connection is better than 8 bits (ie. 10 or 12 bits), then you
+    may wish to raise this default.<br>
+    <br>
+    <a name="Z"></a> <b>-Z nbits </b>Normally the target device values
+    are floating point numbers that may get rounded and quantized in the
+    process of printing them or reproducing them on the display device.
+    If some of this quantization can be accounted for, it may improve
+    the accuracy of the resulting profile, and the <span
+      style="font-weight: bold;">Q</span> parameter allows this
+    quantization to be specified. The parameter is the number of binary
+    digits (bits) that the device values should be quantized to. An idea
+    of the number of bits of precision that makes its way to your
+    display can be obtained by using <a href="dispcal.html#R">dispcal
+      -R</a> If Video encoding is selected (see -E flag above), then 8
+    bits is selected by default. On systems using an VGA connection or
+    Display Port with a graphics card with VideoLUT entries with greater
+    than 8 bits depth, or if using the MadVR rendered with dithering,
+    then a higher bit depth is typically possible.<br>
     <br>
     <a name="n"></a><span style="font-weight: bold;">-n</span>: When
     running on a UNIX based system that used the X11 Windowing System, <b>dispread</b>
@@ -1104,6 +1414,14 @@ a
 
 
 
+
+
+
+
+
+
+
+
     colorimeters accuracy for a particular type of display.<br>
     <br>
     <a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
@@ -1154,12 +1472,12 @@ a
     <span style="font-weight: bold;">&nbsp;<br>
     </span><a name="YA"></a> The -<span style="font-weight: bold;">Y A</span>
     option uses a non-adaptive integration time emission measurement
-    mode, if the instrument supports it, such as the Eye-One Pro or
-    ColorMunki. By default an adaptive integration time measurement mode
-    will be used for emission measurements, but some instruments support
-    a fixed integration time mode that can be used with display devices.
-    This may give increased consistency and faster measurement times,
-    but may also give less accurate low level readings.<br>
+    mode, if the instrument supports it, such as the Eye-One Pro,
+    ColorMunki, i1d3 and K10. By default an adaptive integration time
+    measurement mode will be used for emission measurements, but some
+    instruments support a fixed integration time mode that can be used
+    with display devices. This may give faster measurement times, but
+    may also give less accurate low level readings.<br>
     <br>
     <a name="Yp"></a> The -<span style="font-weight: bold;">Y p</span>
     option skips asking the user to place the instrument on the display.

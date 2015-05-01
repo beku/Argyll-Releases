@@ -34,8 +34,9 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
-#include "plot.h"
 #include "xicc.h"
+#include "plot.h"
+#include "ui.h"
 
 #undef SPTEST				/* Test rspl gamut surface code */
 
@@ -152,7 +153,7 @@ void spioutf(void *cbntx, double *out, double *in) {
 
 int
 main(int argc, char *argv[]) {
-	int fa,nfa;				/* argument we're looking at */
+	int fa, nfa, mfa;				/* argument we're looking at */
 	char prof_name[MAXNAMEL+1];
 	icmFile *fp = NULL;
 	icc *icco = NULL;
@@ -187,8 +188,8 @@ main(int argc, char *argv[]) {
 	int repLCh = 0;			/* Report LCh */
 	int repXYZ100 = 0;		/* Scale XYZ by 10 */
 	double scale = 0.0;		/* Device value scale factor */
-	int in_tvenc;			/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
-	int out_tvenc;			/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
+	int in_tvenc = 0;		/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
+	int out_tvenc = 0;		/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
 	int rv = 0;
 	char buf[200];
 	double uin[MAX_CHAN], in[MAX_CHAN], out[MAX_CHAN], uout[MAX_CHAN];
@@ -224,7 +225,8 @@ main(int argc, char *argv[]) {
 		usage("Too few arguments");
 
 	/* Process the arguments */
-	for(fa = 1;fa < argc;fa++) {
+	mfa = 1;        /* Minimum final arguments */
+	for (fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-')	{	/* Look for any flags */
 			char *na = NULL;		/* next argument after flag, null if none */
@@ -232,7 +234,7 @@ main(int argc, char *argv[]) {
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -244,11 +246,10 @@ main(int argc, char *argv[]) {
 				usage("Requested usage");
 
 			/* Verbosity */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
-				fa = nfa;
-				if (na == NULL)
+			else if (argv[fa][1] == 'v') {
+				if (na == NULL) {
 					verb = 2;
-				else {
+				} else {
 					if (na[0] == '0')
 						verb = 0;
 					else if (na[0] == '1')
@@ -257,6 +258,7 @@ main(int argc, char *argv[]) {
 						verb = 2;
 					else
 						usage("Illegal verbosity level");
+					fa = nfa;
 				}
 			}
 
@@ -266,7 +268,6 @@ main(int argc, char *argv[]) {
 			}
 			/* Plot start or end override */
 			else if (argv[fa][1] == 'G') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -G");
 				if (na[0] == 's' || na[0] == 'S') {
 					if (sscanf(na+1,":%lf:%lf:%lf",&pstart[0],&pstart[1],&pstart[2]) != 3)
@@ -276,6 +277,7 @@ main(int argc, char *argv[]) {
 						usage("Unrecognised parameters after -Ge");
 				} else
 					usage("Unrecognised parameters after -G");
+				fa = nfa;
 			}
 			/* Actual target values */
 			else if (argv[fa][1] == 'a') {
@@ -299,10 +301,10 @@ main(int argc, char *argv[]) {
 			}
 			/* Device scale */
 			else if (argv[fa][1] == 's') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -s");
 				scale = atof(na);
 				if (scale <= 0.0) usage("Illegal scale value");
+				fa = nfa;
 			}
 			/* Video RGB encoding */
 			else if (argv[fa][1] == 'e'
@@ -343,7 +345,6 @@ main(int argc, char *argv[]) {
 
 			/* function */
 			else if (argv[fa][1] == 'f') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -f");
     			switch (na[0]) {
 					case 'f':
@@ -375,11 +376,11 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -f");
 				}
+				fa = nfa;
 			}
 
 			/* Intent */
 			else if (argv[fa][1] == 'i') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
 					case 'p':
@@ -405,11 +406,11 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -i");
 				}
+				fa = nfa;
 			}
 
 			/* PCS override */
 			else if (argv[fa][1] == 'p') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
 					case 'x':
@@ -465,11 +466,11 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -i");
 				}
+				fa = nfa;
 			}
 
 			/* Search order */
 			else if (argv[fa][1] == 'o') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -o");
     			switch (na[0]) {
 					case 'n':
@@ -483,12 +484,12 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -o");
 				}
+				fa = nfa;
 			}
 
 			/* Inking rule */
 			else if (argv[fa][1] == 'k'
 			      || argv[fa][1] == 'K') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -k");
 				if (argv[fa][1] == 'k')
 					locus = 0;			/* K value target */
@@ -573,18 +574,19 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -k");
 				}
+				fa = nfa;
 			}
 
 			else if (argv[fa][1] == 'l') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -l");
 				tlimit = atoi(na)/100.0;
+				fa = nfa;
 			}
 
 			else if (argv[fa][1] == 'L') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -L");
 				klimit = atoi(na)/100.0;
+				fa = nfa;
 			}
 
 #ifdef SPTEST
@@ -597,7 +599,6 @@ main(int argc, char *argv[]) {
 #endif
 			/* Viewing conditions */
 			else if (argv[fa][1] == 'c') {
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -c");
 #ifdef NEVER
 				if (na[0] >= '0' && na[0] <= '9') {
@@ -658,6 +659,7 @@ main(int argc, char *argv[]) {
 						usage("Unrecognised parameters after -cg");
 				} else
 					usage("Unrecognised parameters after -c");
+				fa = nfa;
 			}
 
 			else 
@@ -672,14 +674,6 @@ main(int argc, char *argv[]) {
 	if (slocwarn) {
 		if ((chlp = chrom_locus_poligon(0, icxOT_CIE_1931_2, 0)) == NULL)
 			error("chrom_locus_poligon failed");
-	}
-
-	if (verb > 1) {
-		icmFile *op;
-		if ((op = new_icmFileStd_fp(stdout)) == NULL)
-			error ("Can't open stdout");
-		icco->header->dump(icco->header, op, 1);
-		op->del(op);
 	}
 
 	/* Open up the profile for reading */
@@ -958,6 +952,15 @@ main(int argc, char *argv[]) {
 		outs = ins = cal->colspace;
 		outn = inn = cal->devchan;
 	}
+
+	if (verb > 1 && icco != NULL) {
+		icmFile *op;
+		if ((op = new_icmFileStd_fp(stdout)) == NULL)
+			error ("Can't open stdout");
+		icco->header->dump(icco->header, op, 1);
+		op->del(op);
+	}
+
 
 	if (doplot) {
 		int i, j;

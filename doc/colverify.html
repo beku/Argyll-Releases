@@ -3,7 +3,7 @@
   <head>
     <title>colverify</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -24,14 +24,27 @@
 Normalise
 
 
+
+
+
         each files reading to white Y<br>
         &nbsp;-N&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Normalise
 
 
+
+
+
         each files reading to white XYZ<br>
+        &nbsp;-m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Normalise each files reading to its white X+Y+Z<br>
+        &nbsp;-M&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Normalise both files reading to mean white XYZ<br>
         &nbsp;-D&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use
+
+
+
 
 
         D50 100.0 as L*a*b* white reference<br>
@@ -39,29 +52,45 @@ Use
 &nbsp;
 
 
+
+
+
         &nbsp; Show CIE94 delta E values<br>
         &nbsp;-k &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         &nbsp; &nbsp; Show CIEDE2000 delta E values<br>
+        &nbsp;-h&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+        Plot a histogram of delta E's<br>
         &nbsp;-s &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         &nbsp; &nbsp; Sort patch value by error<br>
         &nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 
 
-        &nbsp; create VRML vector visualisation (measured.wrl)<br>
+
+
+
+        &nbsp; create X3DOM vector visualisation (measured.x3d.html)<br>
       </small></tt><tt><small>&nbsp;-W
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-        &nbsp; create VRML marker &amp; vector visualisation
-        (measured.wrl)</small></tt><tt><br>
+        &nbsp; create X3DOM marker &amp; vector visualisation
+        (measured.x3d.html)</small></tt><tt><br>
     </tt><tt> </tt><tt><small>&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 
 
-        &nbsp; Use VRML axes<br>
+
+
+
+        &nbsp; Use X3DOM axes<br>
         &nbsp;</small></tt><tt><small><small>-f
           [illum]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use Fluorescent
           Whitening Agent compensation [opt. simulated inst. illum.:<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
           M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or
@@ -72,10 +101,16 @@ Use
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
           A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp<br>
           &nbsp;-o observ&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; Choose
           CIE Observer for spectral data:<br>
         </small><small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
           1931_2 </small><small>(def.)</small><small>, 1964_10, S&amp;B
@@ -103,6 +138,14 @@ Use
     to the XYZ of white for each set before comparison. White is assumed
     to be the patch with the largest Y value.<br>
     <br>
+    The <b>-m</b> flag causes the two sets of values to be normalized
+    to the X+Y+Z of white for each set before comparison. White is
+    assumed to be the patch with the largest Y value.<br>
+    <br>
+    The <b>-M</b> flag causes the two sets of values to be normalized
+    to the average XYZ of the whites from each set before comparison.
+    White is assumed to be the patch with the largest Y value.<br>
+    <br>
     The <b>-D</b> flag causes the white reference point for the
     conversion to L*a*b* to be D50 with a Y value of 100%. By default
     the sample with the largest Y value is found, and the L*a*b* white
@@ -122,11 +165,14 @@ Use
     CIEDE2000 delta E has a closer correspondence with perceived color
     differences than either CIE76 or CIE94 delta E values.<br>
     <br>
+    The <b>-h</b> flag will display a histogram plot of the fit delta
+    E's. The X scale is delta E, the Y scale is %<br>
+    <br>
     If the <b>-s </b>flag is used in combination with the <b>-v</b>
     flag, then the test point by test point output will be sorted from
     worst to best.<br>
     <br>
-    The <b>-w</b> creates a <a href="File_Formats.html#VRML">VRML</a>
+    The <b>-w</b> creates a <a href="File_Formats.html#X3DOM">X3DOM</a>
     3D visualization of the differences between the test points in D50
     L*a*b* space, each difference being shown as a line vector. If the <span
       style="font-weight: bold;">-W</span> flag is used, then the target
@@ -135,7 +181,7 @@ Use
     CGATS file) by using the same file for both "target" and "measured"
     values.<br>
     <br>
-    The <b>-x</b> flag adds Lab axes to the VRML output.<br>
+    The <b>-x</b> flag adds Lab axes to the X3DOM output.<br>
     <br>
     The <b>-f</b> flag enables Fluorescent Whitening Agent (FWA)
     compensation. This only works if spectral data is available and, the
@@ -180,10 +226,10 @@ Use
     The same parameter value should be used as was used during the
     creation of the profile.<br>
     <br>
-    The <b>-L</b><b> profile.icm</b> parameter causes colverify to ignore
-    any patches from the first file that are out of gamut according to
-    the profile. This can be useful in evaluating accuracy without
-    tainting it by impossible to reach colors.<br>
+    The <b>-L</b><b> profile.icm</b> parameter causes colverify to
+    ignore any patches from the first file that are out of gamut
+    according to the profile. This can be useful in evaluating accuracy
+    without tainting it by impossible to reach colors.<br>
     <br>
     The <b>-X</b><b> file.ccmx</b> option applies the given 3x3
     calibration matrix to the values from the second file before doing

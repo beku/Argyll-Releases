@@ -49,11 +49,16 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "icc.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "conv.h"
+#include "xicc.h"
+#include "disptechs.h"
 #include "dispwin.h"
+#include "ui.h"
 #include "webwin.h"
+#include "ccast.h"
+#include "ccwin.h"
 #ifdef NT
 # include "madvrwin.h"
 #endif
@@ -391,8 +396,8 @@ disppath **get_displays() {
 
 	/*
 		We could possibly use NSScreen instead of CG here,
-		but we'd need to have a an NSApp first, so perhaps not.
-
+		If we're using libui, then we have an NSApp, so
+		this would be possible.
 	 */
 
 	int i;
@@ -2386,7 +2391,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			return 1;
 		}
 
-		if ((basename = PathFindFileName(fullpath)) == NULL) {
+		if ((basename = PathFindFileNameX(fullpath)) == NULL) {
 			debugr2((errout,"Locating base name in '%s' failed\n",fname));
 			free(fullpath);
 			return 1;
@@ -2501,8 +2506,9 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			gid = atoi(gids);
 			if (setegid(gid) || seteuid(uid)) {
 				debugr("seteuid or setegid failed\n");
+			} else {
+				debug2((errout,"Set euid %d and egid %d\n",uid,gid));
 			}
-			debug2((errout,"Set euid %d and egid %d\n",uid,gid));
 		}
 	/* If setting local system profile and not effective root, but sudo */
 	} else if (scope != p_scope_user && getuid() == 0 && geteuid() != 0) {
@@ -2510,8 +2516,8 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		 && getenv("SUDO_GID") != NULL) {
 
 			debugr("We're setting a system profile running as user - revert to root\n");
-			setegid(getgid());
-			seteuid(getuid());
+			if (setegid(getgid()) || seteuid(getuid()))
+				debugr("seteuid or setegid failed\n");
 		}
 	}
 #endif /* OS X || Linux */
@@ -2699,6 +2705,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 
 		if (cd_found)
 			ev = cd_edid_install_profile(p->edid, p->edid_len, sc, fname);
+			// Hmm. We're relying on colord error codes being in sync with ucmm.
 		else
 			ev = ucmm_install_monitor_profile(sc, p->edid, p->edid_len, p->name, fname);
 
@@ -2750,7 +2757,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 			return 1;
 		}
 
-		if ((basename = PathFindFileName(fullpath)) == NULL) {
+		if ((basename = PathFindFileNameX(fullpath)) == NULL) {
 			debugr2((errout,"Locating base name in '%s' failed\n",fname));
 			free(fullpath);
 			return 1;
@@ -3374,7 +3381,13 @@ void (*dispwin_term)(int sig) = SIG_DFL;
 static dispwin *signal_dispwin = NULL;
 
 static void dispwin_sighandler(int arg) {
+	static amutex_static(lock);
 	dispwin *pp, *np;
+
+	/* Make sure we don't re-enter */
+	if (amutex_trylock(lock)) {
+		return;
+	}
 
 	/* Restore all dispwin's Ramdacs & screen savers */
 	for (pp = signal_dispwin; pp != NULL; pp = np) {
@@ -3391,6 +3404,8 @@ static void dispwin_sighandler(int arg) {
 		dispwin_int(arg);
 	if (arg == SIGTERM && dispwin_term != SIG_DFL && dispwin_term != SIG_IGN) 
 		dispwin_term(arg);
+
+	amutex_unlock(lock);
 	exit(0);
 }
 
@@ -3454,8 +3469,6 @@ typedef struct {
 #endif
 } osx_cntx_t;
 
-static void OSX_ProcessEvents(dispwin *p);
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 
@@ -3505,7 +3518,7 @@ unsigned char emptyCursor[43] = {
 	frect = NSMakeRect(p->tx, p->ty, (1.0 + p->tw), (1.0 + p->th));
 
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1040
-	/* Use matching profile to (hopefully) trigger null color transform */
+	/* Use matching profile to (hopefully) trigger null color transform. */
 	/* This doesn't work on < 10.6 though. */
 	if (cx->nscs != NULL) {
 		CGFloat rgb[4];
@@ -3571,7 +3584,7 @@ unsigned char emptyCursor[43] = {
 /* Create our window */
 static void create_my_win(NSRect rect, osx_cntx_t *cx) {
 	dispwin *p = cx->p;
-	SInt32 MacVers;
+	SInt32 MacMajVers, MacMinVers, MacBFVers;
 	void *cspr = NULL;			/* ColorSync profile ref. */
 	int i;
 
@@ -3660,8 +3673,11 @@ static void create_my_win(NSRect rect, osx_cntx_t *cx) {
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1040
 	/* >= 10.6+ device colors don't work on secondary display, need null transform. */
 	/*  < 10.6 null transform doesn't work. */
-	if (Gestalt(gestaltSystemVersion, &MacVers) == noErr
-	 && MacVers >= 0x1060
+
+	if (Gestalt(gestaltSystemVersionMajor,  &MacMajVers) == noErr
+	 && Gestalt(gestaltSystemVersionMinor,  &MacMinVers) == noErr
+	 && Gestalt(gestaltSystemVersionBugFix, &MacBFVers) == noErr
+	 && MacMajVers >= 10 && MacMinVers >= 6
 	 && cx->nscs == NULL) {
 		warning("Unable to create null color transform - test colors may be wrong!");
 	}
@@ -3682,13 +3698,13 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	int j;
 	double orgb[3];		/* Previous RGB value */
 	double kr, kf;
-	int update_delay = p->update_delay; 
-	double xdelay = 0.0;		/* Extra delay for response time */
+	int update_delay = 0;
 
 	debugr("dispwin_set_color called\n");
 
-	if (p->nowin)
+	if (p->nowin) {
 		return 1;
+	}
 
 	orgb[0] = p->rgb[0]; p->rgb[0] = r;
 	orgb[1] = p->rgb[1]; p->rgb[1] = g;
@@ -3803,9 +3819,12 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		return 2;
 	}
 
-	/* We're creating and draining a pool here to ensure that all the */
-	/* auto release objects get drained when we're finished (?) */
-	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+	/* If we may be in a different thread to the main thread or */
+	/* the application thread, establish our own pool. */
+	NSAutoreleasePool *tpool = nil;
+	if (pthread_self() != ui_thid
+	 && pthread_self() != ui_main_thid)
+		tpool = [NSAutoreleasePool new];
 
 	/* Stop the system going to sleep */
     UpdateSystemActivity(OverallAct);
@@ -3833,10 +3852,8 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* Trigger an update that fills window with r_rgb[] */
 	[((osx_cntx_t *)(p->osx_cntx))->view setNeedsDisplay: YES ];
 
-	/* Process events */
-	OSX_ProcessEvents(p);
-
-	[tpool release];
+	if (tpool != nil)
+		[tpool release];
 
 #endif /* __APPLE__ */
 
@@ -3883,43 +3900,13 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		free(cmd);
 	}
 
-	/* Don't want extra delay if we're measuring update delay */
-	if (update_delay != 0 && p->do_resp_time_del) {
-		/* Compute am expected response time for the change in level */
-		kr = DISPLAY_RISE_TIME/log(1 - 0.9);	/* Exponent constant */
-		kf = DISPLAY_FALL_TIME/log(1 - 0.9);	/* Exponent constant */
-//printf("~1 k2 = %f\n",k2);
-		for (j = 0; j < 3; j++) {
-			double el, dl, n, t;
-	
-			el = pow(p->rgb[j], 2.2);
-			dl = el - pow(orgb[j], 2.2);	/* Change in level */
-			if (fabs(dl) > 0.01) {		/* More than 1% change in level */
-				n = DISPLAY_SETTLE_AIM * el;
-				if (n < DISPLAY_ABS_AIM)
-					n = DISPLAY_ABS_AIM;
-//printf("~1 sl %f, el %f, log (%f / %f)\n",sl,el,n,fabs(sl - el));
-				if (dl > 0.0)
-					t = kr * log(n/dl);
-				else
-					t = kf * log(n/-dl);
-	
-				if (t > xdelay)
-					xdelay = t;
-			}
-		}
-//printf("~1 xdelay = %f secs\n",xdelay);
-		xdelay *= 1000.0;		/* To msec */
-		/* This is kind of a fudge since update delay is after latency, */
-		/* but displays with long delay (ie. CRT) have short latency, and visa versa */
-		if ((int)xdelay > update_delay)
-			update_delay = (int)xdelay;
-	}
+	update_delay = dispwin_compute_delay(p, orgb);
 
-	/* Allow some time for the display to update before */
-	/* a measurement can take place. This allows for CRT */
-	/* refresh, or LCD processing/update time, + */
-	/* display settling time (quite long for smaller LCD changes). */
+	/* Allow some time for the display & instrument to update */
+	/* before  a measurement can take place. This allows for CRT refresh, */
+	/* or LCD processing/update time, + display settling time (quite long for */
+	/* smaller LCD changes), and any instrument reaction time. */
+	debugr2((errout, "dispwin_set_color delaying %d msec\n",update_delay));
 	msec_sleep(update_delay);
 
 	if (p->cberror) {	/* Callback routine failed */
@@ -3930,17 +3917,66 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 }
 
 /* ----------------------------------------------- */
-/* Set an update delay, and return the previous value */
-/* Value can be set to zero, but othewise will be forced */
-/* to be >= min_update_delay */
-static int dispwin_set_update_delay(
-dispwin *p,
-int update_delay) {
-	int cval = p->update_delay;
-	p->update_delay = update_delay;
-	if (update_delay != 0 && p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
-	return cval;
+
+/* Set a patch delay and instrument reaction time values. */
+/* The overall delay between patch change and triggering */
+/* the instrument is (patch_delay + display_settle - inst_reaction) */
+/* and will never be less than the min_update_delay value. */
+void dispwin_set_update_delay(dispwin *p, int patch_delay, int inst_reaction) {
+	p->patch_delay = patch_delay;
+	p->inst_reaction = inst_reaction;
+}
+
+/* Set/unset the blackground color flag */
+/* Return nz on error */
+static int dispwin_set_bg(dispwin *p, int blackbg) {
+	return 1;		/* Need to re-create window */
+}
+
+/* Set the display settling time constants. Use -ve value to leave current value */
+/* unchanged. (These values are used as part of the update delay calculations - see above). */
+void dispwin_set_settling_delay(dispwin *p, double rise_time, double fall_time, double de_aim) {
+	if (rise_time >= 0.0)
+		p->rise_time = rise_time;
+	if (fall_time >= 0.0)
+		p->fall_time = fall_time;
+	if (de_aim >= 0.0)
+		p->de_aim = de_aim;
+}
+
+/* Enable or disable the update delay. This is used to disable the update delay */
+/* when measuring the patch_delay and inst_reaction */
+void dispwin_enable_update_delay(dispwin *p, int enable) {
+	p->do_update_del = enable;
+}
+
+/* Return the update delay we should use (msec) */
+int dispwin_compute_delay(dispwin *p, double *orgb) {
+	int update_delay = 0, disp_settle = 0;
+
+	if (p->do_update_del == 0) {
+		return 0;
+	}
+
+	if (p->do_resp_time_del) {
+		double xdelay;
+
+		/* Compute am expected response time for the change in level, */
+		/* to achieve 0.1 delta E */
+		xdelay = disp_settle_time(orgb, p->rgb, p->rise_time * p->settle_mult,
+		                                        p->fall_time * p->settle_mult, p->de_aim);
+		disp_settle = (int)(xdelay * 1000.0 + 0.5);
+	}
+
+	update_delay = p->patch_delay + disp_settle - p->inst_reaction;
+
+	/* Enforce minimum delay */
+	if (update_delay < p->min_update_delay)
+		update_delay = p->min_update_delay;
+
+	if (p->ddebug) fprintf(stderr,"dispwin: update delay %d msec = patch_delay %d + disp_settle %d  - inst_reaction %d\n", update_delay, p->patch_delay, disp_settle, p->inst_reaction);
+
+	return update_delay;
 }
 
 /* ----------------------------------------------- */
@@ -4192,34 +4228,6 @@ static LRESULT CALLBACK MainWndProc(
 
 #endif /* NT */
 
-#ifdef __APPLE__
-
-/* Not the event handler (because events are handled by the Cocoa objects) */
-/* but a function to call to process events after an update */
-static void OSX_ProcessEvents(dispwin *p) {
-	NSEvent *event;
-	NSDate *to;
-
-	/* We're creating and draining a pool here to ensure that all the */
-	/* auto release objects get drained when we're finished (?) */
-//	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
-
-	/* Wait until the events are done */
-	to = [NSDate dateWithTimeIntervalSinceNow:0.01];	/* autorelease ? */
-	for (;;) {
-		/* Hmm. Assume event is autorelease */
-		if ((event = [NSApp nextEventMatchingMask:NSAnyEventMask
-		             untilDate:to inMode:NSDefaultRunLoopMode dequeue:YES]) != nil) {
-			[NSApp sendEvent:event];
-		} else {
-			break;
-		}
-    }
-//	[tpool release];
-}
-
-#endif /* __APPLE__ */
-
 #if defined(UNIX_X11)
 	/* None */
 #endif	/* UNXI X11 */
@@ -4329,6 +4337,42 @@ int win_message_thread(void *pp) {
 
 #endif /* NT */
 
+/* Set the defauly update delay values */
+void dispwin_set_default_delays(dispwin *p) {
+	char *cp;
+
+	p->min_update_delay = 20;
+
+	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
+		p->min_update_delay = atoi(cp);
+		if (p->min_update_delay < 20)
+			p->min_update_delay = 20;
+		if (p->min_update_delay > 60000)
+			p->min_update_delay = 60000;
+		debugr2((errout, "new_dispwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
+	}
+
+	p->settle_mult = 1.0;
+
+	if ((cp = getenv("ARGYLL_DISPLAY_SETTLE_TIME_MULT")) != NULL) {
+		p->settle_mult = atof(cp);
+		if (p->settle_mult < 1e-6)
+			p->settle_mult = 1e-6;
+		if (p->settle_mult > 1e4)
+			p->settle_mult = 1e4;
+		debugr2((errout, "new_dispwin: Settling time multiplier %f\n",p->settle_mult));
+	}
+
+	p->patch_delay = PATCH_UPDATE_DELAY;			/* Default patch delay */
+	p->inst_reaction = INSTRUMENT_REACTIONTIME;		/* Default inst delay */
+	p->rise_time = DISPLAY_RISE_TIME;
+	p->fall_time = DISPLAY_FALL_TIME;
+	p->de_aim = DISPLAY_SETTLE_AIM; 
+
+	p->do_resp_time_del = 1;		/* Default this to on */
+	p->do_update_del = 1;			/* Default this to on */
+}
+
 /* Create a RAMDAC access and display test window, default grey */
 dispwin *new_dispwin(
 disppath *disp,					/* Display to calibrate. */
@@ -4347,7 +4391,6 @@ int override,					/* NZ if override_redirect is to be used on X11 */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
 	dispwin *p = NULL;
-	char *cp;
 
 	debug("new_dispwin called\n");
 
@@ -4367,39 +4410,29 @@ int ddebug						/* >0 to print debug statements to stderr */
 	}
 
 	/* !!!! Make changes in webwin.c as well !!!! */
+	p->width = width;
+	p->height = height;
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = out_tvenc;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
-	p->get_ramdac        = dispwin_get_ramdac;
-	p->set_ramdac        = dispwin_set_ramdac;
-	p->install_profile   = dispwin_install_profile;
-	p->uninstall_profile = dispwin_uninstall_profile;
-	p->get_profile       = dispwin_get_profile;
-	p->set_color         = dispwin_set_color;
-	p->set_update_delay  = dispwin_set_update_delay;
-	p->set_callout       = dispwin_set_callout;
-	p->del               = dispwin_del;
+	p->get_ramdac          = dispwin_get_ramdac;
+	p->set_ramdac          = dispwin_set_ramdac;
+	p->install_profile     = dispwin_install_profile;
+	p->uninstall_profile   = dispwin_uninstall_profile;
+	p->get_profile         = dispwin_get_profile;
+	p->set_color           = dispwin_set_color;
+	p->set_bg              = dispwin_set_bg;
+	p->set_update_delay    = dispwin_set_update_delay;
+	p->set_settling_delay  = dispwin_set_settling_delay;
+	p->enable_update_delay = dispwin_enable_update_delay;
+	p->set_callout         = dispwin_set_callout;
+	p->del                 = dispwin_del;
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
 
-	p->min_update_delay = 20;
-
-	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
-		p->min_update_delay = atoi(cp);
-		if (p->min_update_delay < 20)
-			p->min_update_delay = 20;
-		if (p->min_update_delay > 60000)
-			p->min_update_delay = 60000;
-		debugr2((errout, "new_dispwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
-	}
-
-	p->update_delay = DISPLAY_UPDATE_DELAY;		/* Default update delay */
-	if (p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
-
-	p->do_resp_time_del = 1;		/* Default this to on */
+	dispwin_set_default_delays(p);
 
 	/* Basic object is initialised, so create a window */
 
@@ -4566,7 +4599,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 			}
 			debugr2((errout,"new_dispwin: found pixel depth %d bits\n",p->pdepth));
 		}
-		/* Get frame buffer depth for sanity check */
+		/* Get frame buffer depth for sanity check, but don't actually make used of it */
 
 		dispmode = CGDisplayCopyDisplayMode(p->ddid);
 		pixenc = CGDisplayModeCopyPixelEncoding(dispmode);
@@ -4619,25 +4652,23 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		debugr2((errout, "new_dispwin: About to open display '%s'\n",disp->name));
 
-		/* We're creating and draining a pool here to ensure that all the */
-		/* auto release objects get drained when we're finished (?) */
-		NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+		/* If we may be in a different thread to the main thread or */
+		/* the application thread, establish our own pool. */
+		NSAutoreleasePool *tpool = nil;
+		if (pthread_self() != ui_thid
+		 && pthread_self() != ui_main_thid)
+			tpool = [NSAutoreleasePool new];
 
-		/* If we don't have an application object, create one. */
-		/* (This should go in a common library) */
-		/* Note that we don't actually clean this up on exit - */
-		/* possibly we can't. */
+		/* If there is no NSApp, then we haven't run main() in libui before */
+		/* main() in the application. */
 		if (NSApp == nil) {
-//			static NSAutoreleasePool *pool;	/* Pool used for NSApp */
-//			pool = [NSAutoreleasePool new];
-			NSApp = [NSApplication sharedApplication];	/* Creates NSApp */
-			[NSApp finishLaunching];
-			/* We seem to need this, because otherwise we don't get focus automatically */
-			[NSApp activateIgnoringOtherApps: YES];
+			fprintf(stderr,"NSApp is nil - need to rename main() to main() and link with libui !\n");
+			exit(1);
 		}
 
 		if ((cx = (osx_cntx_t *)calloc(sizeof(osx_cntx_t), 1)) == NULL) {
-			[tpool release];
+			if (tpool != nil)
+				[tpool release];
 			debugr2((errout,"new_dispwin: Malloc failed (osx_cntx_t)\n"));
 			dispwin_del(p);
 			return NULL;
@@ -4684,9 +4715,8 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		create_my_win(wrect, cx);
 
-		OSX_ProcessEvents(p);
-
-		[tpool release];
+		if (tpool != nil)
+			[tpool release];
 
 		p->winclose = 0;
 	}
@@ -4780,6 +4810,9 @@ int ddebug						/* >0 to print debug statements to stderr */
 		}
 
 		//p->pdepth = DefaultDepth(p->mydisplay, p->myscreen)/3;
+
+		// Hmm. Should we explicitly get the root window visual,
+		// since our test window inherits it from root ?
 		myvisual = DefaultVisual(p->mydisplay, p->myscreen);
 		p->pdepth = myvisual->bits_per_rgb;
 		p->edepth = 16;
@@ -5072,6 +5105,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		debugr("Unable to access VideoLUT\n");
 		if (noramdac != NULL)
 			*noramdac = 1;
+		p->native = native &= ~1;
 		p->oor = p->or = p->r = NULL;
 	}
 
@@ -5086,7 +5120,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		if (nocm != NULL)
 			*nocm = 1;
 
-		p->native &= ~2;
+		p->native = native &= ~2;
 	}
 
 	debugr("new_dispwin: return sucessfully\n");
@@ -5344,7 +5378,9 @@ static int gcc_bug_fix(int i) {
 
 #include "numlib.h"
 
-static void usage(char *diag, ...) {
+/* Flag = 0x0000 = default */
+/* Flag & 0x0001 = list ChromCast's */
+static void usage(int flag, char *diag, ...) {
 	disppath **dp;
 	fprintf(stderr,"Test display patch window, Set Video LUTs, Install profiles, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -5377,7 +5413,23 @@ static void usage(char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
-	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+	fprintf(stderr," -dweb[:port]         Display via web server at port (default 8080)\n");
+	fprintf(stderr," -dcc[:n]             Display via n'th ChromeCast (default 1, ? for list)\n");
+	if (flag & 0x001) {
+		ccast_id **ids;
+		if ((ids = get_ccids()) == NULL) {
+			fprintf(stderr,"    ** Error discovering ChromCasts **\n");
+		} else {
+			if (ids[0] == NULL)
+				fprintf(stderr,"    ** No ChromCasts found **\n");
+			else {
+				int i;
+				for (i = 0; ids[i] != NULL; i++)
+					fprintf(stderr,"    %d = '%s'\n",i+1,ids[i]->name);
+				free_ccids(ids);
+			}
+		}
+	}
 #ifdef NT
 	fprintf(stderr," -dmadvr              Display via MadVR Video Renderer\n");
 #endif
@@ -5385,7 +5437,7 @@ static void usage(char *diag, ...) {
 	fprintf(stderr," -P ho,vo,ss[,vs]     Position test window and scale it\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
-	fprintf(stderr," -G filename          Display RGB colors from CGATS file\n");
+	fprintf(stderr," -G filename          Display RGB colors from CGATS (ie .ti1) file\n");
 	fprintf(stderr," -C r.rr,g.gg,b.bb    Add this RGB color to list to be displayed\n");
 	fprintf(stderr," -m                   Manually cycle through values\n");
 	fprintf(stderr," -f                   Test grey ramp fade\n");
@@ -5417,6 +5469,7 @@ main(int argc, char *argv[]) {
 	int verb = 0;				/* Verbose flag */
 	int ddebug = 0;				/* debug level */
 	int webdisp = 0;			/* NZ for web display, == port number */
+	int ccdisp = 0;			 	/* NZ for ChromeCast, == list index */
 #ifdef NT
 	int madvrdisp = 0;			/* NZ for MadVR display */
 #endif
@@ -5476,7 +5529,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?')
-				usage("Usage requested");
+				usage(0,"Usage requested");
 
 			else if (argv[fa][1] == 'v')
 				verb = 1;
@@ -5488,6 +5541,7 @@ main(int argc, char *argv[]) {
 					ddebug = atoi(na);
 					fa = nfa;
 				}
+				g_log->debug = ddebug;
 				callback_ddebug = ddebug;	/* dispwin global */
 			}
 
@@ -5499,7 +5553,19 @@ main(int argc, char *argv[]) {
 					if (na[3] == ':') {
 						webdisp = atoi(na+4);
 						if (webdisp == 0 || webdisp > 65535)
-							usage("Web port number must be in range 1..65535");
+							usage(0,"Web port number must be in range 1..65535");
+					}
+					fa = nfa;
+				} else if (strncmp(na,"cc",2) == 0
+				 || strncmp(na,"CC",2) == 0) {
+					ccdisp = 1;
+					if (na[2] == ':') {
+						if (na[3] < '0' || na[3] > '9')
+							usage(0x0001,"Available ChromeCasts");
+
+						ccdisp = atoi(na+3);
+						if (ccdisp <= 0)
+							usage(0,"ChromCast number must be in range 1..N");
 					}
 					fa = nfa;
 #ifdef NT
@@ -5514,10 +5580,10 @@ main(int argc, char *argv[]) {
 
 					/* X11 type display name. */
 					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-						if (++fa >= argc || argv[fa][0] == '-') usage("-DISPLAY parameter missing");
+						if (++fa >= argc || argv[fa][0] == '-') usage(0,"-DISPLAY parameter missing");
 						setenv("DISPLAY", argv[fa], 1);
 					} else {
-						if (na == NULL) usage("-d parameter missing");
+						if (na == NULL) usage(0,"-d parameter missing");
 						fa = nfa;
 						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
 							ix = atoi(na);
@@ -5526,19 +5592,19 @@ main(int argc, char *argv[]) {
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
-							usage("-d parameter '%s' is out of range",na);
+							usage(0,"-d parameter '%s' is out of range",na);
 						if (iv > 0)
 							disp->rscreen = iv-1;
 					}
 #else
 					int ix;
-					if (na == NULL) usage("-d parameter is missing");
+					if (na == NULL) usage(0,"-d parameter is missing");
 					fa = nfa;
 					ix = atoi(na);
 					if (disp != NULL)
 						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
-						usage("-d parameter '%s' is out of range",na);
+						usage(0,"-d parameter '%s' is out of range",na);
 #endif
 				}
 			}
@@ -5546,19 +5612,19 @@ main(int argc, char *argv[]) {
 			/* Test patch offset and size */
 			else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage("-p parameters are missing");
+				if (na == NULL) usage(0,"-p parameters are missing");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
 					;
 				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
 					vpatscale = hpatscale;
 				} else {
-					usage("-p parameters '%s' is badly formatted",na);
+					usage(0,"-p parameters '%s' is badly formatted",na);
 				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || hpatscale <= 0.0 || hpatscale > 50.0
 				 || vpatscale <= 0.0 || vpatscale > 50.0)
-					usage("-p parameters '%s' is out of range",na);
+					usage(0,"-p parameters '%s' is out of range",na);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -5579,21 +5645,21 @@ main(int argc, char *argv[]) {
 			/* CGATS patch color file */
 			else if (argv[fa][1] == 'G') {
 				fa = nfa;
-				if (na == NULL) usage("-G parameter is missing");
+				if (na == NULL) usage(0,"-G parameter is missing");
 				strncpy(pcname,na,MAXNAMEL); pcname[MAXNAMEL] = '\000';
 			}
 			/* Manual color */
 			else if (argv[fa][1] == 'C') {
 				fa = nfa;
 				if (nmrgb >= 10)
-					usage("Can only be up to 10 -C values");
-				if (na == NULL) usage("-C parameters are missing");
+					usage(0,"Can only be up to 10 -C values");
+				if (na == NULL) usage(0,"-C parameters are missing");
 				if (sscanf(na, "%lf,%lf,%lf ",&mrgb[nmrgb][0],&mrgb[nmrgb][1],&mrgb[nmrgb][2]) != 3)
-					usage("-C parameters '%s' are badly formatted",na);
+					usage(0,"-C parameters '%s' are badly formatted",na);
 				if (mrgb[nmrgb][0] < 0.0 || mrgb[nmrgb][0] > 1.0
 				 || mrgb[nmrgb][1] < 0.0 || mrgb[nmrgb][1] > 1.0
 				 || mrgb[nmrgb][2] < 0.0 || mrgb[nmrgb][2] > 1.0)
-					usage("-C parameters %f %f %f are out of range 0.0 - 1.0",mrgb[nmrgb][0],mrgb[nmrgb][1],mrgb[nmrgb][2]);
+					usage(0,"-C parameters %f %f %f are out of range 0.0 - 1.0",mrgb[nmrgb][0],mrgb[nmrgb][1],mrgb[nmrgb][2]);
 				nmrgb++;
 			}
 			else if (argv[fa][1] == 'f')
@@ -5608,7 +5674,7 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 's') {
 				fa = nfa;
-				if (na == NULL) usage("-s parameter is missing");
+				if (na == NULL) usage(0,"-s parameter is missing");
 				strncpy(sname,na,MAXNAMEL); sname[MAXNAMEL] = '\000';
 			}
 
@@ -5632,7 +5698,7 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'S') {
 				fa = nfa;
-				if (na == NULL) usage("-S parameter is missing");
+				if (na == NULL) usage(0,"-S parameter is missing");
 					if (na[0] == 'n' || na[0] == 'N')
 						scope = p_scope_network;
 					else if (na[0] == 'l' || na[0] == 'L')
@@ -5641,7 +5707,7 @@ main(int argc, char *argv[]) {
 						scope = p_scope_user;
 			}
 			else
-				usage("Unknown flag '%s'",argv[fa]);
+				usage(0,"Unknown flag '%s'",argv[fa]);
 		}
 		else
 			break;
@@ -5652,7 +5718,8 @@ main(int argc, char *argv[]) {
 #ifdef NT
 	 && madvrdisp == 0
 #endif
-	 && webdisp == 0) {
+	 && webdisp == 0
+	 && ccdisp == 0) {
 		int ix = 0;
 #if defined(UNIX_X11)
 		char *dn, *pp;
@@ -5678,7 +5745,7 @@ main(int argc, char *argv[]) {
 	}
 
 #if defined(UNIX_X11)
-	if (webdisp == 0 && daemonmode) {
+	if (webdisp == 0 && ccdisp == 0 && daemonmode) {
 		return x11_daemon_mode(disp, verb, ddebug);
 	}
 #endif
@@ -5700,13 +5767,38 @@ main(int argc, char *argv[]) {
 	if (ramd != 0 || sname[0] != '\000' || clear != 0 || verify != 0 || loadfile != 0 || installprofile != 0 || loadprofile != 0)
 		nowin = 1;
 
-
 	if (webdisp != 0) {
 		if ((dw = new_webwin(webdisp, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native,
 			                        &noramdac, &nocm, out_tvenc, blackbg, verb, ddebug)) == NULL) {
 			printf("Error - new_webwin failed!\n");
 			return -1;
 		}
+
+	} else if (ccdisp != 0) {
+		ccast_id **ids;
+		if ((ids = get_ccids()) == NULL) {
+			printf("Error - discovering ChromCasts failed\n");
+			return -1;
+		}
+		if (ids[0] == NULL) {
+			printf("Error - there are no ChromCasts to use\n");
+			return -1;
+		}
+		for (i = 0; ids[i] != NULL; i++)
+			;
+		if (ccdisp < 1 || ccdisp > i) {
+			printf("Error - chosen ChromCasts (%d) is outside list (1..%d)\n",ccdisp,i);
+			return -1;
+		}
+		
+		if ((dw = new_ccwin(ids[ccdisp-1], 100.0 * hpatscale, 100.0 * vpatscale,
+			                   ho, vo, nowin, native, &noramdac, &nocm, out_tvenc,
+			                   blackbg, verb, ddebug)) == NULL) {
+			printf("Error - new_ccwin failed!\n");
+			free_ccids(ids);
+			return -1;
+		}
+		free_ccids(ids);
 
 #ifdef NT
 	} else if (madvrdisp != 0) {
@@ -5717,7 +5809,7 @@ main(int argc, char *argv[]) {
 			
 		if ((dw = new_madvrwin(100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native,
 			                   &noramdac, &nocm, out_tvenc, blackbg, verb, ddebug)) == NULL) {
-			printf("Error - new_madvrwin failed!\n");
+			printf("Error - new_madvrwin failed! (Is it running and up to date?)\n");
 			return -1;
 		}
 #endif

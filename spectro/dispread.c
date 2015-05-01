@@ -16,6 +16,10 @@
 
 /* TTBD
 
+	Add support for black recalibration using i1pro or munki.
+	Setable timeout ? Need to allow placing instrument back
+	on screen. Need this to properly handle ss anyway ?
+
     Add bell at end of readings ?
 
 	Ideally this should be changed to always create non-normalized (absolute)
@@ -50,18 +54,22 @@
 #include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
-#include "ccmx.h"
-#include "ccss.h"
 #include "cgats.h"
 #include "insttypes.h"
 #include "conv.h"
 #include "icoms.h"
 #include "inst.h"
+#include "ccmx.h"
+#include "ccss.h"
+#include "ccast.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "sort.h"
 #include "instappsup.h"
-#include "spyd2setup.h"			/* Enable Spyder 2 access */
+#ifdef ENABLE_USB
+# include "spyd2.h"
+#endif
+#include "ui.h"
 
 /* ------------------------------------------------------------------- */
 #if defined(__APPLE__) && defined(__POWERPC__)
@@ -84,12 +92,14 @@ static int gcc_bug_fix(int i) {
   Flags used:
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
-  upper    .... .... .. ..    ...  
+  upper    .... .... .. ..    .....
   lower    ..      .  . .  .  .. . 
 
 */
 
-void usage(char *diag, ...) {
+/* Flag = 0x0000 = default */
+/* Flag & 0x0001 = list ChromCast's */
+void usage(int flag, char *diag, ...) {
 	int i;
 	disppath **dp;
 	icompaths *icmps;
@@ -97,8 +107,6 @@ void usage(char *diag, ...) {
 
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	if (setup_spyd2() == 2)
-		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -129,6 +137,22 @@ void usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+	fprintf(stderr," -dcc[:n]             Display via n'th ChromeCast (default 1, ? for list)\n");
+	if (flag & 0x001) {
+		ccast_id **ids;
+		if ((ids = get_ccids()) == NULL) {
+			fprintf(stderr,"    ** Error discovering ChromCasts **\n");
+		} else {
+			if (ids[0] == NULL)
+				fprintf(stderr,"    ** No ChromCasts found **\n");
+			else {
+				int i;
+				for (i = 0; ids[i] != NULL; i++)
+					fprintf(stderr,"    %d = '%s'\n",i+1,ids[i]->name);
+				free_ccids(ids);
+			}
+		}
+	}
 #ifdef NT
 	fprintf(stderr," -dmadvr              Display via MadVR Video Renderer\n");
 #endif
@@ -141,7 +165,8 @@ void usage(char *diag, ...) {
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+				if ((paths[i]->itype == instSpyder1 && setup_spyd2(0) == 0)
+				 || (paths[i]->itype == instSpyder2 && setup_spyd2(1) == 0))
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
@@ -165,6 +190,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
 	fprintf(stderr," -E                   Encode the test values for video range 16..235/255\n");
+	fprintf(stderr," -Z nbits             Quantize test values to fit in nbits\n");
 	fprintf(stderr," -J                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
@@ -192,12 +218,13 @@ void usage(char *diag, ...) {
 }
 
 int main(int argc, char *argv[]) {
-	int i,j;
+	int i, j;
 	int fa, nfa, mfa;					/* current argument we're looking at */
 	disppath *disp = NULL;				/* Display being used */
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int out_tvenc = 0;					/* 1 to use RGB Video Level encoding */
+	int qbits = 0;						/* Quantization bits, 0 = not set */
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
@@ -217,13 +244,16 @@ int main(int argc, char *argv[]) {
 	int tele = 0;						/* NZ if telephoto mode */
 	int noautocal = 0;					/* Disable auto calibration */
 	int noplace = 0;					/* Disable user instrument placement */
-	int nonorm = 0;						/* Disable normalisation */
+	int donorm = 1;						/* Enable Y = 100 normalisation */
 	char ccxxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
 	ccss *ccs = NULL;					/* Colorimeter Calibration Spectral Samples */
 	int spec = 0;						/* Don't save spectral information */
 	icxObserverType obType = icxOT_default;
 	int webdisp = 0;					/* NZ for web display, == port number */
+	int ccdisp = 0;			 			/* NZ for ChromeCast, == list index */
+	ccast_id **ccids = NULL;
+	ccast_id *ccid = NULL;
 #ifdef NT
 	int madvrdisp = 0;					/* NZ for MadVR display */
 #endif
@@ -261,7 +291,6 @@ int main(int argc, char *argv[]) {
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
 	check_if_not_interactive();
-	setup_spyd2();					/* Load firware if available */
 
 #ifdef DEBUG_OFFSET
 	ho = 0.8;
@@ -273,7 +302,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	if (argc <= 1)
-		usage("Too few arguments");
+		usage(0,"Too few arguments");
 
 	if (ncal > MAX_CAL_ENT)
 		error("Internal, ncal = %d > MAX_CAL_ENT %d\n",ncal,MAX_CAL_ENT);
@@ -297,7 +326,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
-				usage("Usage requested");
+				usage(0,"Usage requested");
 
 			} else if (argv[fa][1] == 'v') {
 				verb = 1;
@@ -311,7 +340,19 @@ int main(int argc, char *argv[]) {
 					if (na[3] == ':') {
 						webdisp = atoi(na+4);
 						if (webdisp == 0 || webdisp > 65535)
-							usage("Web port number must be in range 1..65535");
+							usage(0,"Web port number must be in range 1..65535");
+					}
+					fa = nfa;
+				} else if (strncmp(na,"cc",2) == 0
+				 || strncmp(na,"CC",2) == 0) {
+					ccdisp = 1;
+					if (na[2] == ':') {
+						if (na[3] < '0' || na[3] > '9')
+							usage(0x0001,"Available ChromeCasts");
+
+						ccdisp = atoi(na+3);
+						if (ccdisp <= 0)
+							usage(0,"ChromCast number must be in range 1..N");
 					}
 					fa = nfa;
 #ifdef NT
@@ -325,10 +366,10 @@ int main(int argc, char *argv[]) {
 					int ix, iv;
 
 					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-						if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
+						if (++fa >= argc || argv[fa][0] == '-') usage(0,"Parameter expected following -display");
 						setenv("DISPLAY", argv[fa], 1);
 					} else {
-						if (na == NULL) usage("Parameter expected following -d");
+						if (na == NULL) usage(0,"Parameter expected following -d");
 						fa = nfa;
 						if (strcmp(na,"fake") == 0) {
 							fake = 1;
@@ -340,14 +381,14 @@ int main(int argc, char *argv[]) {
 							if (disp != NULL)
 								free_a_disppath(disp);
 							if ((disp = get_a_display(ix-1)) == NULL)
-								usage("-d parameter %d out of range",ix);
+								usage(0,"-d parameter %d out of range",ix);
 							if (iv > 0)
 								disp->rscreen = iv-1;
 						}
 					}
 #else
 					int ix;
-					if (na == NULL) usage("Parameter expected following -d");
+					if (na == NULL) usage(0,"Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0) {
 						fake = 1;
@@ -356,7 +397,7 @@ int main(int argc, char *argv[]) {
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
-							usage("-d parameter %d out of range",ix);
+							usage(0,"-d parameter %d out of range",ix);
 					}
 #endif
 				}
@@ -368,9 +409,9 @@ int main(int argc, char *argv[]) {
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -c");
+				if (na == NULL) usage(0,"Paramater expected following -c");
 				comport = atoi(na);
-				if (comport < 1 || comport > 50) usage("-c parameter %d out of range",comport);
+				if (comport < 1 || comport > 50) usage(0,"-c parameter %d out of range",comport);
 
 			/* Telephoto */
 			} else if (argv[fa][1] == 'p') {
@@ -379,13 +420,13 @@ int main(int argc, char *argv[]) {
 			/* Display type */
 			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -y");
+				if (na == NULL) usage(0,"Parameter expected after -y");
 				dtype = na[0];
 
 			/* Calibration file */
 			} else if (argv[fa][1] == 'k'
 			        || argv[fa][1] == 'K') {
-				if (na == NULL) usage("Parameter expected after -%c",argv[fa][1]);
+				if (na == NULL) usage(0,"Parameter expected after -%c",argv[fa][1]);
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 				if (argv[fa][1] == 'K')
 					native |= 1;			/* Use native linear & soft cal */
@@ -406,19 +447,19 @@ int main(int argc, char *argv[]) {
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -P");
+				if (na == NULL) usage(0,"Parameter expected after -P");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
 					;
 				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
 					vpatscale = hpatscale;
 				} else {
-					usage("-P parameter '%s' not recognised",na);
+					usage(0,"-P parameter '%s' not recognised",na);
 				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || hpatscale <= 0.0 || hpatscale > 50.0
 				 || vpatscale <= 0.0 || vpatscale > 50.0)
-					usage("-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
+					usage(0,"-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -429,6 +470,16 @@ int main(int argc, char *argv[]) {
 			/* Video encoded output */
 			} else if (argv[fa][1] == 'E') {
 				out_tvenc = 1;
+				if (qbits == 0)
+					qbits = 8;
+
+			/* Specify quantization bits */
+			} else if (argv[fa][1] == 'Z') {
+				fa = nfa;
+				if (na == NULL) usage(0,"Expected argument to -Z");
+				qbits = atoi(na);
+				if (qbits < 1 || qbits > 32)
+					usage(0,"Argument to -Q must be between 1 and 32");
 
 			/* Force calibration */
 			} else if (argv[fa][1] == 'J') {
@@ -442,21 +493,21 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
-			/* No normalisation */
+			/* Disable normalisation of values to white Y = 100 */ 
 			} else if (argv[fa][1] == 'w') {
-				nonorm = 1;
+				donorm = 0;
 
 			/* Colorimeter Correction Matrix */
 			/* or Colorimeter Calibration Spectral Samples */
 			} else if (argv[fa][1] == 'X') {
 				int ix;
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected following -X");
+				if (na == NULL) usage(0,"Parameter expected following -X");
 				strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 
 			} else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL || na[0] == '\000') usage("Parameter expected after -I");
+				if (na == NULL || na[0] == '\000') usage(0,"Parameter expected after -I");
 				for (i=0; ; i++) {
 					if (na[i] == '\000')
 						break;
@@ -465,13 +516,13 @@ int main(int argc, char *argv[]) {
 					else if (na[i] == 'w' || na[i] == 'W')
 						wdrift = 1;
 					else
-						usage("-I parameter '%c' not recognised",na[i]);
+						usage(0,"-I parameter '%c' not recognised",na[i]);
 				}
 
 			/* Spectral Observer type */
 			} else if (argv[fa][1] == 'Q') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expecte after -Q");
+				if (na == NULL) usage(0,"Parameter expecte after -Q");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					obType = icxOT_CIE_1931_2;
 				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
@@ -485,25 +536,25 @@ int main(int argc, char *argv[]) {
 				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
 					obType = icxOT_Shaw_Fairchild_2;
 				} else
-					usage("-Q parameter '%s' not recognised",na);
+					usage(0,"-Q parameter '%s' not recognised",na);
 
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -C");
+				if (na == NULL) usage(0,"Parameter expected after -C");
 				ccallout = na;
 
 			/* Measure color callout */
 			} else if (argv[fa][1] == 'M') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -M");
+				if (na == NULL) usage(0,"Parameter expected after -M");
 				mcallout = na;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -W");
+				if (na == NULL) usage(0,"Parameter expected after -W");
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -511,7 +562,7 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage("-W parameter '%s' not recognised",na);
+					usage(0,"-W parameter '%s' not recognised",na);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -525,32 +576,38 @@ int main(int argc, char *argv[]) {
 			/* Extra flags */
 			} else if (argv[fa][1] == 'Y') {
 				if (na == NULL)
-					usage("Flag '-Y' expects extra flag");
+					usage(0,"Flag '-Y' expects extra flag");
 			
 				if (na[0] == 'R') {
 					if (na[1] != ':')
-						usage("-Y R:rate syntax incorrect");
+						usage(0,"-Y R:rate syntax incorrect");
 					refrate = atof(na+2);
 					if (refrate < 5.0 || refrate > 150.0)
-						usage("-Y R:rate %f Hz not in valid range",refrate);
+						usage(0,"-Y R:rate %f Hz not in valid range",refrate);
 				} else if (na[0] == 'p') {
 					noplace = 1;
 				} else if (na[0] == 'A') {
 					nadaptive = 1;
 				} else {
-					usage("Flag '-Y %c' not recognised",na[0]);
+					usage(0,"Flag '-Y %c' not recognised",na[0]);
 				}
 				fa = nfa;
 
 			} else 
-				usage("Flag '-%c' not recognised",argv[fa][1]);
+				usage(0,"Flag '-%c' not recognised",argv[fa][1]);
 			}
 		else
 			break;
 	}
 
 	/* No explicit display has been set */
-	if (!fake && disp == NULL) {
+	if (!fake 
+#ifdef NT
+	 && madvrdisp == 0
+#endif
+	 && webdisp == 0
+	 && ccdisp == 0
+	 && disp == NULL) {
 		int ix = 0;
 #if defined(UNIX_X11)
 		char *dn, *pp;
@@ -607,9 +664,22 @@ int main(int argc, char *argv[]) {
 	if ((ipath = icmps->get_path(icmps, comport)) == NULL)
 		error("No instrument at port %d",comport);
 
+	/* If we've requested ChromeCast, look it up */
+	if (ccdisp) {
+		if ((ccids = get_ccids()) == NULL)
+			error("discovering ChromCasts failed");
+		if (ccids[0] == NULL)
+			error("There are no ChromCasts to use\n");
+		for (i = 0; ccids[i] != NULL; i++)
+			;
+		if (ccdisp < 1 || ccdisp > i)
+			error("Chosen ChromCasts (%d) is outside list (1..%d)\n",ccdisp,i);
+		ccid = ccids[ccdisp-1];
+	}
+
 	if (docalib) {
-		if ((rv = disprd_calibration(ipath, fc, dtype, 0, tele, nadaptive, noautocal, 
-			                         disp, webdisp,
+		if ((rv = disprd_calibration(ipath, fc, dtype, -1, 0, tele, nadaptive, noautocal, 
+			                         disp, webdisp, ccid,
 #ifdef NT
 			                         madvrdisp,
 #endif
@@ -621,7 +691,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage("Filname parameter not found");
+	if (fa >= argc || argv[fa][0] == '-') usage(0,"Filname parameter not found");
 	strncpy(inname,argv[fa++],MAXNAMEL-4); inname[MAXNAMEL-4] = '\000';
 	strcpy(outname,inname);
 	strcat(inname,".ti1");
@@ -683,10 +753,13 @@ int main(int argc, char *argv[]) {
 		error("Malloc failed!");
 
 	/* Figure out the color space */
+	/* Read all the test patches in, and quantize them */
 	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
 		error ("Input file '%s' doesn't contain keyword COLOR_REP",inname);
 	if (strcmp(icg->t[0].kdata[fi],"RGB") == 0) {
 		int ri, gi, bi;
+		double rgb[3];
+		double qscale = (1 << qbits) - 1.0;
 		dim = 3;
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
 			error ("Input file '%s' doesn't contain field RGB_R",inname);
@@ -709,9 +782,22 @@ int main(int argc, char *argv[]) {
 		ocg->add_field(ocg, 0, "XYZ_Z", r_t);
 		for (i = 0; i < npat; i++) {
 			cols[i].id = ((char *)icg->t[0].fdata[i][si]);
-			cols[i].r = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
-			cols[i].g = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
-			cols[i].b = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
+			rgb[0] = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
+			rgb[1] = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
+			rgb[2] = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
+			if (qbits > 0) {
+				double vr;
+				for (j = 0; j < 3; j++) {
+					rgb[j] *= qscale;
+					vr = floor(rgb[j] + 0.5);
+					if ((vr - rgb[j]) == 0.5 && (((int)vr) & 1) != 0) /* Round to even */
+						vr -= 1.0;
+					rgb[j] = vr/qscale;
+				}
+			}
+			cols[i].r = rgb[0];
+			cols[i].g = rgb[1];
+			cols[i].b = rgb[2];
 			cols[i].XYZ[0] = cols[i].XYZ[1] = cols[i].XYZ[2] = -1.0;
 		}
 	} else
@@ -809,14 +895,16 @@ int main(int argc, char *argv[]) {
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, noautocal, noplace,
+	if ((dr = new_disprd(&errc, ipath, fc, dtype, -1, 0, tele, nadaptive, noautocal, noplace,
 	                     highres, refrate, native, &noramdac, &nocm, cal, ncal, disp,
-		                 out_tvenc, blackbg, override, webdisp,
+		                 out_tvenc, blackbg, override, webdisp, ccid,
 #ifdef NT
 						 madvrdisp,
 #endif
 		                 ccallout, mcallout,
 		                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
+	                     ccs != NULL ? ccs->dtech : cmx != NULL ? cmx->dtech : disptech_unknown,
+	                     cmx != NULL ? cmx->cc_cbid : 0,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
 		                 spec, obType, NULL, bdrift, wdrift,
@@ -831,7 +919,7 @@ int main(int argc, char *argv[]) {
 	/* Test the CRT with all of the test points */
 	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0, instNoClamp)) != 0) {
 		dr->del(dr);
-		error("test_crt returned error code %d\n",rv);
+		error("dispd->read returned error code %d\n",rv);
 	}
 	/* Note what instrument the chart was read with */
 	if (dr->it != NULL) {
@@ -881,14 +969,13 @@ int main(int argc, char *argv[]) {
 			wpat = npat;
 		}
 
-		if (nonorm)
-			nn = 1.0;
-		else {
+		if (donorm) {
 			if (cols[wpat].XYZ_v == 0)
 				error("XYZ of white patch is not valid!\nCan't normalise value to white",i);
 
 			nn = 100.0 / cols[wpat].XYZ[1];		/* Normalise Y of white to 100 */
-		}
+		} else
+			nn = 1.0;
 
 		for (i = 0; i < npat; i++) {
 
@@ -973,7 +1060,7 @@ int main(int argc, char *argv[]) {
 		ocg->add_kword(ocg, 0, "LUMINANCE_XYZ_CDM2",buf, NULL);
 	}
 
-	if (nonorm == 0) 
+	if (donorm) 
 		ocg->add_kword(ocg, 0, "NORMALIZED_TO_Y_100","YES", NULL);
 	else
 		ocg->add_kword(ocg, 0, "NORMALIZED_TO_Y_100","NO", NULL);
@@ -1028,6 +1115,7 @@ int main(int argc, char *argv[]) {
 	ocg->del(ocg);		/* Clean up */
 	icg->del(icg);		/* Clean up */
 	free_a_disppath(disp);
+	free_ccids(ccids);
 
 	return 0;
 }

@@ -25,6 +25,7 @@
 #include "aconfig.h"
 #include "numlib.h"
 #include "icc.h"
+#include "vrml.h"
 
 #define TRES 43
 
@@ -124,7 +125,7 @@ main(
 	strcpy(out_name, in_name);
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
-	strcpy(xl,".wrl");
+	xl[0] = '\000';			/* Remove extension */
 
 	/* Open up the file for reading */
 	if ((rd_fp = new_icmFileStd_name(in_name,"r")) == NULL)
@@ -145,18 +146,8 @@ main(
 		double aerr = 0.0;
 		double nsamps = 0.0;
 		icmLuBase *luo1, *luo2;
-		FILE *wrl;
-		struct {
-			double x, y, z;
-			double wx, wy, wz;
-			double r, g, b;
-		} axes[5] = {
-			{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-			{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-			{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-			{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-			{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-		};
+		int doaxes = 1;
+		vrml *wrl;
 		int i, j;
 	
 
@@ -180,53 +171,11 @@ main(
 				error ("%d, %s",rd_icco->errc, rd_icco->err);
 		}
 
-		if ((wrl = fopen(out_name,"w")) == NULL) {
-			fprintf(stderr,"Error opening output file '%s'\n",out_name);
-			return 2;
+		if ((wrl = new_vrml(out_name, doaxes, vrml_lab)) == NULL) {
+			error("new_vrml for '%s%s' failed\n",out_name,vrml_ext());
 		}
 
-		/* Spit out a VRML 2 Object surface of gamut */
-
-		fprintf(wrl,"#VRML V2.0 utf8\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"# Created by the Argyll CMS\n");
-		fprintf(wrl,"Transform {\n");
-		fprintf(wrl,"children [\n");
-		fprintf(wrl,"	NavigationInfo {\n");
-		fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-		fprintf(wrl,"	} # We'll add our own light\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    DirectionalLight {\n");
-		fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-		fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    Viewpoint {\n");
-		fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"\n");
-		if (doaxes != 0) {
-			fprintf(wrl,"# Lab axes as boxes:\n");
-			for (i = 0; i < 5; i++) {
-				fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-				fprintf(wrl,"\tchildren [\n");
-				fprintf(wrl,"\t\tShape{\n");
-				fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-				                  axes[i].wx, axes[i].wy, axes[i].wz);
-				fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-				fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-				fprintf(wrl,"\t\t}\n");
-				fprintf(wrl,"\t]\n");
-				fprintf(wrl,"}\n");
-			}
-			fprintf(wrl,"\n");
-		}
-
-		fprintf(wrl,"\n");
-		fprintf(wrl,"Shape {\n");
-		fprintf(wrl,"  geometry IndexedLineSet { \n");
-		fprintf(wrl,"    coord Coordinate { \n");
-		fprintf(wrl,"	   point [\n");
+		wrl->start_line_set(wrl, 0);
 
 		i = 0;
 //		for (co[0] = 0; co[0] < TRES; co[0]++) {
@@ -269,33 +218,21 @@ main(
 					aerr += absd;
 
 					if (absd > 3.0) {
-						fprintf(wrl,"%f %f %f,\n",in[1], in[2], in[0]-GAMUT_LCENT);
-						fprintf(wrl,"%f %f %f,\n",check[1], check[2], check[0]-GAMUT_LCENT);
+						wrl->add_vertex(wrl, 0, in);
+						wrl->add_vertex(wrl, 0, check);
 						i++;
 					}
 				}
 			}
 //		}
 
-		fprintf(wrl,"      ]\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"  coordIndex [\n");
+		wrl->make_lines(wrl, 0, 2);
 
-		for (j = 0; j < i; j++) {
-			fprintf(wrl,"%d, %d, -1,\n", j * 2, j * 2 + 1);
-		}
-		fprintf(wrl,"    ]\n");
-		fprintf(wrl,"  }\n");
-		fprintf(wrl,"} # end shape\n");
-
-		fprintf(wrl,"\n");
-		fprintf(wrl,"  ] # end of children for world\n");
-		fprintf(wrl,"}\n");
-	
-		if (fclose(wrl) != 0) {
-			fprintf(stderr,"Error closing output file '%s'\n",out_name);
+		if (wrl->flush(wrl) != 0) {
+			fprintf(stderr,"Error writint output file '%s%s'\n",out_name,vrml_ext());
 			return 2;
 		}
+		wrl->del(wrl);
 
 		printf("bwd to fwd check complete, peak err = %f, avg err = %f\n",merr,aerr/nsamps);
 

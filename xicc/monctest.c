@@ -26,8 +26,9 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
-#include "plot.h"
 #include "moncurve.h"
+#include "plot.h"
+#include "ui.h"
 
 double lin(double x, double xa[], double ya[], int n);
 void usage(void);
@@ -141,17 +142,24 @@ int main() {
 
 			/* Create X values */
 			for (i = 0; i < pnts; i++)
-				xa[i] = i/(pnts-1.0);
+				xa[i] = pow(i/(pnts-1.0), 1.0);
 
 			for (i = 0; i < pnts; i++)
 				ya[i] = pow(xa[i], ex);
 
-		} else if (n < (TSETS+1))	/* Standard versions */ {
-			pnts = t1p[n-1];
-			for (i = 0; i < pnts; i++) {
-				xa[i] = t1xa[n-1][i];
-				ya[i] = t1ya[n-1][i];
-			}
+		} else if (n == 1) {				/* inverse exponential function aproximation */
+			double ex = 1.0/2.4;
+			pnts = MAX_PNTS;
+
+			printf("Trial %d, no points = %d, exponential %f\n",n,pnts,ex);
+
+			/* Create X values */
+			for (i = 0; i < pnts; i++)
+				xa[i] = pow(i/(pnts-1.0), 3.0);
+
+			for (i = 0; i < pnts; i++)
+				ya[i] = pow(xa[i], ex);
+
 #endif
 
 		} else {	/* Random versions */

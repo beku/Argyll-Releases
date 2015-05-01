@@ -46,7 +46,7 @@
 	uniformity. A color with one component near zero might shift
 	all the components to -ve values on inverse conversion - ie.
 	a 1 DE shift in Jab becomes a masive DE in XYZ/Lab/perceptual,
-	with (say) a darl red becomong black because the blue
+	with (say) a dark red becomong black because the blue
 	value is small. One way around this is to re-introduce
 	a flag to turn off perfect symetry by disabling
 	expansion on the reverse conversion.
@@ -279,7 +279,7 @@ double Yb,		/* Relative Luminance of Background to reference white (range 0.0 ..
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-double Yg,		/* Flare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+double Yg,		/* Flare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 				/* If <= 0 will Wxyz will be used. */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
@@ -403,7 +403,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fsxyz[1] = s->Yf * s->Wxyz[1];
 	s->Fsxyz[2] = s->Yf * s->Wxyz[2];
 
-	/* Add in the Glare contribution from the ambient */
+	/* Add in the Glare contribution from the adapting/surround */
 	tt = s->Yg * s->La/s->Lv;
 	s->Fsxyz[0] += tt * s->Gxyz[0];
 	s->Fsxyz[1] += tt * s->Gxyz[1];
@@ -558,8 +558,8 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	printf("Scene parameters:\n");
 	printf("Viewing condition Ev = %d\n",s->Ev);
 	printf("Ref white Wxyz = %f %f %f\n", s->Wxyz[0], s->Wxyz[1], s->Wxyz[2]);
-	printf("Relative liminance of background Yb = %f\n", s->Yb);
-	printf("Adapting liminance La = %f\n", s->La);
+	printf("Relative luminance of background Yb = %f\n", s->Yb);
+	printf("Adapting luminance La = %f\n", s->La);
 	printf("Flare Yf = %f\n", s->Yf);
 	printf("Glare Yg = %f\n", s->Yg);
 	printf("Glare color Gxyz = %f %f %f\n", s->Gxyz[0], s->Gxyz[1], s->Gxyz[2]);

@@ -55,6 +55,7 @@
 #include "cgats.h"
 #include "xicc.h"
 #include "prof.h"
+#include "ui.h"
 
 #define DEFAVGDEV 0.5		/* Default average deviation percentage */
 							/* This equates to a uniform added error of +/- 1% */
@@ -66,7 +67,7 @@
   Flags used:
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
-  upper  . ..    . ... .. ....    .
+  upper  ....    . ... .. ....    .
   lower  .... .. . .. .........    
 
 */
@@ -100,7 +101,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -np             Don't create input (Device) grid position curves\n");
 	fprintf(stderr," -no             Don't create output (PCS) shaper curves\n");
 	fprintf(stderr," -nc             Don't put the input .ti3 data in the profile\n");
-	fprintf(stderr," -k zhxr         Black value target: z = zero K,\n");
+	fprintf(stderr," -k zhxr         Black Ink generation target: z = zero K,\n");
 	fprintf(stderr,"                 h = 0.5 K, x = max K, r = ramp K (def.)\n");
 	fprintf(stderr," -k p stle stpo enpo enle shape\n");
 	fprintf(stderr,"                 stle: K level at White 0.0 - 1.0\n");
@@ -122,6 +123,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -uc             If input profile, clip cLUT values above WP\n");
 	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
 	fprintf(stderr," -R              Restrict white <= 1.0, black and primaries to be +ve\n");
+//	fprintf(stderr," -B X,Y,Z        Display Black Point override hack\n");
 	fprintf(stderr," -V demphasis    Degree of dark region cLUT grid emphasis 1.0-4.0 (default %.2f = none)\n",DEMPH_DEFAULT);
 	fprintf(stderr," -f [illum]      Use Fluorescent Whitening Agent compensation [opt. simulated inst. illum.:\n");
 	fprintf(stderr,"                  M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
@@ -185,6 +187,7 @@ int main(int argc, char *argv[]) {
 	int autowpsc = 0;			/* Auto scale the WP to prevent clipping above WP patch */
 	int clipovwp = 0;			/* Clip cLUT values above WP */
 	int clipprims = 0;			/* Clip white, black and primaries */
+//	double bpo[3] = { -1,-1,-1 };	/* Black point override hack XYZ value */
 	double demph = 0.0;			/* Emphasise dark region grid resolution in cLUT */
 	double iwpscale = -1.0;		/* Input white point scale factor */
 	int doinextrap = 1;			/* Sythesize extra sample points for input device cLUT */
@@ -200,6 +203,7 @@ int main(int argc, char *argv[]) {
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum;			/* Custom target/simulated illumination spectrum */
+								/* xspect will use illum/cust_illum if tillum == none */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;	/* The classic observer */
@@ -428,11 +432,6 @@ int main(int argc, char *argv[]) {
 					oquality = 0;
 			}
 
-			else if (argv[fa][1] == 'B') {
-				oquality = -2;
-				doinb2a = 0;
-			}
-
 			/* Disable input or output luts */
 			else if (argv[fa][1] == 'n') {
 				fa = nfa;
@@ -477,6 +476,18 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'R') {
 				clipprims = 1;
 			}
+
+#ifdef NEVER	/* Prototype - not used */
+			/* Black Point override hack */
+			else if (argv[fa][1] == 'B') {
+				if (na == NULL) usage("Expect X,Y,Z value after -B");
+				fa = nfa;
+				if (sscanf(na, " %lf , %lf , %lf ",&bpo[0],&bpo[1],&bpo[2]) != 3)
+					usage("Couldn't parse hack black point (-B) value '%s'",na);
+				if (bpo[0] < 0.0 || bpo[1] < 0.0 || bpo[1] < 0.0)
+					usage("Bad hack black point (-B) value '%s'",na);
+			}
+#endif
 
 			/* Degree of dark region emphasis */
 			else if (argv[fa][1] == 'V') {
@@ -824,7 +835,7 @@ int main(int argc, char *argv[]) {
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
 						vc->Wxyz[0] = x; vc->Wxyz[1] = y; vc->Wxyz[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Wxyz[0] = x; vc->Wxyz[1] = y;
+						vc->Wxyz[0] = x; vc->Wxyz[1] = y; vc->Wxyz[2] = -1;
 					} else
 						usage("Viewing condition (-%cw) unrecognised white point '%s'",argv[fa][1],na+1);
 				} else if (na[0] == 'a' || na[0] == 'A') {
@@ -842,13 +853,13 @@ int main(int argc, char *argv[]) {
 				} else if (na[0] == 'f' || na[0] == 'F') {
 					if (na[1] != ':')
 						usage("Viewing conditions (-%cf) missing ':'",argv[fa][1]);
-					vc->Yf = atof(na+2);
+					vc->Yf = atof(na+2)/100.0;
 				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
 						vc->Gxyz[0] = x; vc->Gxyz[1] = y; vc->Gxyz[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Gxyz[0] = x; vc->Gxyz[1] = y;
+						vc->Gxyz[0] = x; vc->Gxyz[1] = y; vc->Gxyz[2] = -1;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
 						vc->Yg = x/100.0;
 					} else
@@ -966,6 +977,9 @@ int main(int argc, char *argv[]) {
 	if (strcmp(icg->t[0].kdata[ti],"OUTPUT") == 0) {
 		icxInk ink;							/* Ink parameters */
 
+//		if (bpo[1] >= 0.0)
+//			error("-B option not valid for output profile");
+
 		if ((ti = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0) {
 			int imax;
 			imax = atoi(icg->t[0].kdata[ti]);
@@ -1075,7 +1089,9 @@ int main(int argc, char *argv[]) {
 
 		make_output_icc(ptype, 0, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, iwpscale, &ink, inname, outname, icg, 
+		                gamdiag, verify, clipprims, iwpscale,
+//		                NULL,		/* bpo */
+		                &ink, inname, outname, icg, 
 		                spec, tillum, &cust_tillum, illum, &cust_illum, observ, fwacomp,
 		                smooth, avgdev, 1.0,
 		                ipname[0] != '\000' ? ipname : NULL,
@@ -1085,6 +1101,9 @@ int main(int argc, char *argv[]) {
 						&pgmi, &sgmi, &xpi);
 
 	} else if (strcmp(icg->t[0].kdata[ti],"INPUT") == 0) {
+
+//		if (bpo[1] >= 0.0)
+//			error("-B option not valid for input profile");
 
 		if (ptype == prof_default)
 			ptype = prof_clutLab;		/* For best possible quality */
@@ -1113,7 +1132,9 @@ int main(int argc, char *argv[]) {
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
 		make_output_icc(ptype, mtxtoo, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, iwpscale, NULL, inname, outname, icg,
+		                gamdiag, verify, clipprims, iwpscale,
+//		                bpo[1] >= 0.0 ? bpo : NULL,
+		                NULL, inname, outname, icg,
 		                spec, icxIT_none, NULL, illum, &cust_illum, observ, 0,
 		                smooth, avgdev, demph,
 		                ipname[0] != '\000' ? ipname : NULL,

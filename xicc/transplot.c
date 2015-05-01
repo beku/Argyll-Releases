@@ -1,6 +1,5 @@
 
 /* 
- * International Color Consortium Format Library (icclib)
  * Check various aspects of RGB or CMYK device link, 
  * and RGB/CMYK profile transfer characteristics.
  *
@@ -29,6 +28,7 @@
 #include "icc.h"
 #include "numlib.h"
 #include "plot.h"
+#include "ui.h"
 
 void usage(void) {
 	fprintf(stderr,"Check CMYK/RGB/PCS->PCS/CMYK/RGB transfer response\n");
@@ -321,8 +321,12 @@ main(
 		}
 		if (labout)
 			do_plot6(xx,y0,y1,NULL,NULL,y2,NULL,XRES);
-		else
-			do_plot6(xx,y3,y1,NULL,y0,y2,NULL,XRES);
+		else {
+			if (outs == icSigCmykData)
+				do_plot6(xx,y3,y1,NULL,y0,y2,NULL,XRES);
+			else 	/* Assume RGB */
+				do_plot6(xx,NULL,y0,y1,y2,NULL,NULL,XRES);
+		}
 	}
 
 	/* Done with lookup object */

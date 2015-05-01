@@ -10,7 +10,7 @@
  * Author:  Graeme W. Gill
  * Date:    28/12/2005
  *
- * Copyright 2005, 2008, 2012 Graeme W. Gill
+ * Copyright 2005, 2008, 2012, 2014 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -28,7 +28,9 @@
 
 #define MXCH2D  8			/* Maximum color channels */
 #define TOTC2D  (MXCH2D+1)	/* Maximum total components */
-#define PRIX2D  (MXCH2D)	/* Index of primitive */
+#define PRIX2D  (MXCH2D)	/* Index of primitive kept with color value */
+
+#define MXPATSIZE 4			/* Maximum color pattern size */
 
 /* Color type */
 /* Shouldn't this be an xcolorants mask ? */
@@ -55,7 +57,7 @@ typedef enum {
 	rowman_s = 0,	/* Rownman, single stroke */
 	rowman_d = 1,	/* Rownman, double stroke */
 	rowman_t = 2,	/* Rownman, triple stroke */
-	timesr = 3,		/* Times Roman */
+	timesr   = 3,	/* Times Roman */
 	timesr_b = 4,	/* Times Roman, Bold */
 	futura_l = 5,	/* Futura, Light */
 	futura_m = 6	/* Futura, Medium */
@@ -87,10 +89,14 @@ struct _prim2d {
 struct _rect2d {
 	PRIM_STRUCT
 	double rx0, ry0, rx1, ry1;	/* Rectangle verticies */
-	color2d c;			/* Color of rectangle */
+	color2d c;					/* Color of rectangle (if dpat == NULL) */
+	double (*dpat)[MXPATSIZE][MXPATSIZE][TOTC2D];
+	int dp_w, dp_h;
 }; typedef struct _rect2d rect2d;
 
 prim2d *new_rect2d(struct _render2d *s, double x, double y, double w, double h, color2d c);
+
+void set_rect2d_dpat(struct _rect2d *s, double (*pat)[MXPATSIZE][MXPATSIZE][TOTC2D], int w, int h);
 
 /* ------------------------------------ */
 /* Vertex shaded rectange */
@@ -145,7 +151,7 @@ color2d c);
 /* Add a text character at the given location using lines */
 void add_char2d(
 struct _render2d *s,
-double *xinc,		/* Add increment to next character */
+double *xinc,		/* Return increment in position for next character */
 double *yinc,
 font2d fo,			/* Font to use */
 char ch,			/* Character code to be printed */
@@ -158,7 +164,7 @@ color2d c			/* Color of text */
 /* Add a string from the given location using lines. */
 void add_string2d(
 struct _render2d *s,
-double *xinc,		/* Add increment to next character */
+double *xinc,		/* Return increment in position for next character */
 double *yinc,
 font2d fo,			/* Font to use */
 char *string,		/* Character code to be printed */
@@ -171,13 +177,22 @@ color2d c			/* Color of text */
 /* Return the total width of the string without adding it */
 void meas_string2d(
 struct _render2d *s,
-double *xinc,		/* Add increment to next character */
+double *xinc,		/* Return increment in position for next character */
 double *yinc,
 font2d fo,			/* Font to use */
 char *string,		/* Character code to be printed */
 double h,			/* Height of text in normal orientation */
 int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = up */
 );
+
+/* ------------------------------------ */
+
+/* Type of output to save to. */
+typedef enum {
+	tiff_file,		/* Write a TIFF format file */
+	png_file,		/* Write a PNG format file */
+	png_mem			/* Write a PNG image to a memory buffer */
+} rend_format;
 
 /* ------------------------------------ */
 /* Render object */
@@ -194,7 +209,11 @@ struct _render2d {
 	colort2d csp;			/* Color space */
 	int      ncc;			/* Number of color components */
 	depth2d  dpth;			/* Depth of the components */
-	int    dither;     		/* Dither flag */
+	int    dither;     		/* Dither flag, 1 = ordered, 2 = error diffusion */
+	int    noavg;     		/* Don't anti-alias or average 4 pixels together */
+	int    dithfgo;			/* Dither F.G. only flag */
+	void (*quant)(void *qcntx, double *out, double *in); /* optional quantization func. for edith */
+	void *qcntx;
 
 	color2d defc;			/* Default color value */
 
@@ -218,8 +237,10 @@ struct _render2d {
 
 	void (*add)(struct _render2d *s, prim2d *p);		/* Add a primitive */
 
-	int (*write)(struct _render2d *s, char *filename, int comprn);
-														/* Render and write to a TIFF file */
+	int (*write)(struct _render2d *s, char *filename, int comprn,
+		unsigned char **obuf, size_t *olen,
+	    rend_format fmt);
+												/* Render and write to a TIFF or PNG file */
 }; typedef struct _render2d render2d;
 
 /* Constructor */
@@ -232,7 +253,10 @@ render2d *new_render2d(
 	colort2d csp,	/* Color type */
 	int nd,			/* Number of channels if c = ncol */
 	depth2d dpth,	/* Pixel depth */
-	int dither		/* Dither flag */
+	int dither,		/* Dither flag, 1 = ordered, 2 = error diffusion, | 0x8000 to dither FG only */
+					/* | 0x4000 don't anti-alias by averaging pixels together. */
+	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edith */
+	void *qcntx
 );
 
 #endif /* RENDER2D_H */

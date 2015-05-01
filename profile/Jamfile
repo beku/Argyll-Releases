@@ -6,7 +6,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 #Products
 Libraries = libprof ;
-Executables = cb2ti3 kodak2ti3 txt2ti3 splitti3 mppcheck mppprof
+Executables = cb2ti3 kodak2ti3 txt2ti3 ls2ti3 splitti3 mppcheck mppprof
               profcheck invprofcheck colverify colprof printcal applycal ;
 Headers = prof.h ;
 Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
@@ -28,7 +28,7 @@ Library libprof : profin.c profout.c ;
 
 
 LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ../plot/libplot
-           ../plot/libvrml ;
+           ../plot/libvrml ../numlib/libui ;
 
 # Simple profile generator
 Main simpprof : simpprof.c ;
@@ -40,10 +40,13 @@ Main kodak2ti3 : kodak2ti3.c ;
 Main cb2ti3 : cb2ti3.c ;
 
 # the gcc linker is retarded, and can't link to things it's gone past, hence 2 x libxicc...
-LINKLIBS = ../xicc/libxicc ../spectro/libinsttypes ../xicc/libxicc ../gamut/libgamut $(LINKLIBS) ;
+LINKLIBS = ../xicc/libxicc ../spectro/libinsttypes ../spectro/libdisptechs ../xicc/libxicc ../gamut/libgamut $(LINKLIBS) ;
 
 #Gretag/Logo raw CMYK profile data to Argyll CGATS format converter
 Main txt2ti3 : txt2ti3.c ;
+
+#LightSpace to Argyll CGATS format
+Main ls2ti3 : ls2ti3.c : : : ../xml : : ../xml/libmxml ;
 
 #Split a .ti3 into two pieces randomly
 Main splitti3 : splitti3.c ;
@@ -85,7 +88,7 @@ if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/profile" {
 }
 
 # Development code
-if [ GLOB . : retargti3.c ]  {
+if [ GLOB [ NormPaths . ] : retargti3.c ]  {
 	Main retargti3 : retargti3.c ;
 }
 

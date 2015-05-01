@@ -92,7 +92,7 @@ struct _rpnts {
 	double p[MXRI];		/* Data position [di] */
 	double v[MXRO];		/* Data value    [fdi] */
 	double k[MXRO];		/* Weight factor (nominally 1.0, less for lower confidence data point) */
-	double cv[MXRO];	/* Extra fit corrected v[fdi] */
+//	double fe;			/* Fit error in output pass (ausm) */
 }; typedef struct _rpnts rpnts;
 
 /* Hermite interpolation magic data */
@@ -105,6 +105,14 @@ typedef struct {
 
 #include "rev.h"			/* Reverse interpolation defintions */
 #include "gam.h"			/* Gamut defintions */
+
+/* Sub-fit itteration information */
+typedef struct {
+	int niters;		/* Number of multigrid itterations needed */
+	int **ires; 	/* Resolution for each itteration and dimension */
+	void **mgtmps[MXRO]; /* Store pointers to re-usable mgtmp when incremental */
+					/* (These don't seem to be used anymore. was incremental removed ?) */
+} it_info;
 
 /* Structure for final resolution multi-dimensional regularized spline data */
 struct _rspl {
@@ -128,19 +136,19 @@ struct _rspl {
 					/* Function to set from */
 
 	/* Scattered Data point related information */
-	int zf;			/* Extra fitting flag - Compensate for data fit errors each round */
-	int tpsm;		/* Two pass smoothing flag (if set to 1). */
-	int tpsm2;		/* Two pass smoothing 2nd pass flag */
+	int ausm;		/* Automatic smoothing enabled flag. */
 	struct {
 		int no;			/* Number of data points in array */
 		rpnts *a;		/* Array of data points */
-		datao vl,vw;	/* Data value low/width - used to normalize smoothness values */
+		datao vl, vw;	/* Data value low/width - not used */
 		datao va;		/* Data value averages */
+//		double fea;		/* Fit error average */
 	} d;
-	int niters;		/* Number of multigrid itterations needed */
-	int **ires; 	/* Resolution for each itteration and dimension */
-	void **mgtmps[MXRO]; /* Store pointers to re-usable mgtmp when incremental */
+	
+	it_info ii;		/* Main itteration information for final rspl */
 
+	it_info as_ii;		/* Automatic smoothing pre-fit itteration info */
+	it_info asm_ii;		/* Automatic smoothing map itteration info */
 
 	/* Grid points data */
 	struct {
@@ -158,7 +166,6 @@ struct _rspl {
 						/* gres[] entries per dimension. Allows for the possibility of */
 						/* a non-uniform grid spacing, by adjusting the curvature evaluation */
 						/* appropriately. */
-		double **ccv;		/* Curvature compensation array for current outpu (May be NULL) */
 		int fminmax_valid;	/* Min/max/scale cached values valid flag. */
 		int limitv_cached;	/* Flag: Ink limit values have been set in the grid array */
 
@@ -235,12 +242,8 @@ struct _rspl {
 	void (*del)(struct _rspl *ss);
 
 	/* Combination lags used by various functions */
-	/* NOTE that RSPL_2PASSSMTH and RSPL_EXTRAFIT2 are available, but the smoothing */
-	/* factors are not setup for them, and they are not sufficiently different from the */
-	/* default smoothing to be useful. */
 #define RSPL_NOFLAGS      0x0000
-#define RSPL_2PASSSMTH    0x0001	/* Use gaussian filter in 2nd pass to smooth */
-#define RSPL_EXTRAFIT2    0x0002	/* Compensate for data errors each round */
+#define RSPL_AUTOSMOOTH   0x0001	/* Automatically determin local optimal avgdev smoothing */
 #define RSPL_SYMDOMAIN    0x0004	/* Maintain symetric smoothness with nonsym. resolution */
 #define RSPL_SET_APXLS    0x0020	/* For set_rspl, adjust samples for aproximate least squares */
 #define RSPL_FASTREVSETUP 0x0010	/* Do a fast reverse setup at the cost of subsequent speed */
@@ -407,6 +410,13 @@ struct _rspl {
 		int flags,		/* Combination of flags (not used) */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in) /* Function that gets given values */
+	);
+
+	/* Tune a single value. */
+	/* Return 0 on success, 1 if input clipping occured, 2 if output clipping occured */
+	int (*tune_value) (
+		struct _rspl *s,				/* Pointer to Lut object */
+		co *p							/* Target value */
 	);
 
 	/* Set values by multi-grid optimisation using the provided function. */

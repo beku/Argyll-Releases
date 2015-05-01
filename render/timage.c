@@ -32,39 +32,43 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <fcntl.h>
 #include "copyright.h"
 #include "aconfig.h"
 #include "numsup.h"
 #include "render.h"
 
 #define DEF_DPI 200
-#define DITHER 0			/* Test 8 bit didthering */
+#define DITHER 0			/* 1 for test 8 bit dithering, 2 for test error diffusion */
+							/* 0x8001 for dithering FG only, 0x8002 for err. diff. FG only */
+#undef PNG_MEM				/* Test PNG save to memory */
 
 void
 usage(void) {
 	fprintf(stderr,"Create test images, default hex RGB surface and wedge, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	fprintf(stderr,"usage: timage [-options] outfile.tif\n");
-//	fprintf(stderr," -v             Verbose\n");
-	fprintf(stderr," -t             Generate rectangular gamut boundary test chart\n");
-	fprintf(stderr," -p steps       Generate a colorspace step chart with L* steps^2\n");
-	fprintf(stderr," -r res         Resolution in DPI (default %d)\n",DEF_DPI);
-	fprintf(stderr," -s             Smooth blend\n");
-	fprintf(stderr," -x             16 bit output\n");
-	fprintf(stderr," -4             CMYK output\n");
-	fprintf(stderr," -g prop        Percentage towards grey (default 0%%)\n");
-//	fprintf(stderr," -D	            Debug primitives plot */
-	fprintf(stderr," outfile.tif    Profile to check against\n");
+	fprintf(stderr,"usage: timage [-options] outfile.[tif|png]\n");
+//	fprintf(stderr," -v                Verbose\n");
+	fprintf(stderr," -t                Generate rectangular gamut boundary test chart\n");
+	fprintf(stderr," -p steps          Generate a colorspace step chart with L* steps^2\n");
+	fprintf(stderr," -r res            Resolution in DPI (default %d)\n",DEF_DPI);
+	fprintf(stderr," -s                Smooth blend\n");
+	fprintf(stderr," -x                16 bit output\n");
+	fprintf(stderr," -4                CMYK output\n");
+	fprintf(stderr," -g prop           Percentage towards grey (default 0%%)\n");
+	fprintf(stderr," -P                Save as PNG file (deffault TIFF)\n");
+//	fprintf(stderr," -D	               Debug primitives plot */
+	fprintf(stderr," outfile.[tif|png] Output TIFF or PNG file\n");
 	exit(1);
 	}
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	int rchart = 0;			/* Rectangular chart */
 	int schart = 0;			/* Step chart with steps^2 */
 	int smooth = 0;			/* Use smooth blending */
+	rend_format fmt = tiff_file;	/* Output filr format */
 	int debugchart = 0;		/* Debug chart */
 	double res = DEF_DPI;
 	depth2d depth = bpc8_2d;
@@ -104,20 +108,20 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v')
 				verb = 1;
 
 			/* Rectangular chart */
-			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
+			else if (argv[fa][1] == 't') {
 				rchart = 1;
 				schart = 0;
 
 			/* Smooth blending */
-			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+			} else if (argv[fa][1] == 's')
 				smooth = 1;
 
 			/* 16 bit depth */
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
+			else if (argv[fa][1] == 'x')
 				depth = bpc16_2d;
 
 			/* cmyk */
@@ -125,12 +129,17 @@ int main(int argc, char *argv[])
 				cmyk = 1;
 
 			/* step chart */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			else if (argv[fa][1] == 'p') {
 				fa = nfa;
 				if (na == NULL) usage();
 				schart = atoi(na);
 				if (schart <= 0) usage();
 				rchart = 0;
+			}
+
+			/* PNG file */
+			else if (argv[fa][1] == 'P') {
+				fmt = png_file;
 			}
 
 			/* debug chart */
@@ -139,7 +148,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* resolution */
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+			else if (argv[fa][1] == 'r') {
 				fa = nfa;
 				if (na == NULL) usage();
 				res = atof(na);
@@ -147,7 +156,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* grey blend */
-			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			else if (argv[fa][1] == 'g') {
 				fa = nfa;
 				if (na == NULL) usage();
 				gbf = 1.0 - 0.01 * atof(na);
@@ -175,7 +184,7 @@ int main(int argc, char *argv[])
 		if (cmyk)
 			error("CMYK not supported for test chart");
 
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -300,7 +309,7 @@ int main(int argc, char *argv[])
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (4.0 * bb + 0.25 + 2.0 * r3o2) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth, DITHER)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -568,7 +577,7 @@ int main(int argc, char *argv[])
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (2.0 * bb + 0.20 * 7.0) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -638,7 +647,7 @@ int main(int argc, char *argv[])
 		bs = (bb * hh)/(schart + 1.0);
 		ss = hh * (1.0 - bb)/schart;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth, DITHER)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -673,7 +682,36 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	r->write(r, outname,1);
+#ifdef PNG_MEM
+	{
+		char *nmode = "w";
+		FILE *fp;
+		unsigned char *buf;
+		size_t len, wlen;
+
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
+#if defined(O_BINARY) || defined(_O_BINARY)
+		nmode = "wb";
+#endif
+
+		if (r->write(r, "MemoryBuf", 1, &buf, &len, png_mem))
+			error("render->write failed");
+
+		if ((fp = fopen(outname, nmode)) == NULL)
+			error("render2d: open '%s' for writing",outname);
+
+		if (len != (wlen = fwrite(buf, 1, len, fp)))
+			error("render2d: writing %u bytes to '%s' failed (wrote %u)",len,outname,wlen);
+
+		if (fclose(fp))
+			error("render2d: failed to close after writing",outname);
+	}
+#else
+	if (r->write(r, outname, 1, NULL, NULL, fmt))
+		error("render->write failed");
+#endif
 	r->del(r);
 
 	return 0;

@@ -24,6 +24,7 @@
 #include "xspect.h"
 #include "numlib.h"
 #include "plot.h"
+#include "ui.h"
 
 #define PLANKIAN
 #define XRES 500

@@ -27,6 +27,7 @@
 #include <pthread.h>
 #endif
 
+#define NUMSUP_C
 #include "numsup.h"
 
 /* 
@@ -239,6 +240,7 @@ void check_if_not_interactive() {
 #endif
 
 
+
 /* Default verbose logging function - print to stdtout */
 static void a1_default_v_log(void *cntx, a1log *p, char *fmt, va_list args) {
 	vfprintf(stdout, fmt, args);
@@ -328,7 +330,7 @@ a1log *new_a1log_d(a1log *log) {
 /* Returns NULL */
 a1log *del_a1log(a1log *log) {
 	if (log != NULL) {
-		if (--log->refc == 0) {
+		if (--log->refc <= 0) {
 #ifdef NT
 			DeleteCriticalSection(&log->lock);
 #endif
@@ -476,7 +478,7 @@ static void g_loge(char *fmt, ...) {
 
 void
 verbose(int level, char *fmt, ...) {
-	if (level >= g_log->verb) {
+	if (g_log->verb >= level) {
 		va_list args;
 
 		A1LOG_LOCK(g_log);
@@ -1423,7 +1425,7 @@ void matrix_print(char *c, double **a, int nr,  int nc) {
 /* Platform independent IEE754 conversions */
 /*******************************************/
 
-/* Cast a native double to an IEEE754 encoded single precision value, */
+/* Convert a native double to an IEEE754 encoded single precision value, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
@@ -1462,7 +1464,7 @@ ORD32 doubletoIEEE754(double d) {
 	return id;
 }
 
-/* Cast a an IEEE754 encoded single precision value to a native double, */
+/* Convert a an IEEE754 encoded single precision value to a native double, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
@@ -1486,7 +1488,7 @@ double IEEE754todouble(ORD32 ip) {
 	return op;
 }
 
-/* Cast a native double to an IEEE754 encoded double precision value, */
+/* Convert a native double to an IEEE754 encoded double precision value, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
@@ -1525,7 +1527,7 @@ ORD64 doubletoIEEE754_64(double d) {
 	return id;
 }
 
-/* Cast a an IEEE754 encode double precision value to a native double, */
+/* Convert a an IEEE754 encode double precision value to a native double, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */

@@ -32,6 +32,7 @@
 #ifdef DOPLOT
 #include "plot.h"
 #endif
+#include "ui.h"
 
 
 /* Normal 'A' spectra, then UV filtered version */

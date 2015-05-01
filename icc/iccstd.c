@@ -310,7 +310,6 @@ icmAlloc *al		/* heap allocator, NULL for default */
 ) {
 	icmFileStd *p;
 	int del_al = 0;
-	struct stat sbuf;
 
 	if (al == NULL) {	/* None provided, create default */
 		if ((al = new_icmAllocStd()) == NULL)
@@ -334,8 +333,10 @@ icmAlloc *al		/* heap allocator, NULL for default */
 	p->get_buf  = icmFileStd_get_buf;
 	p->del      = icmFileStd_delete;
 
-	if (fstat(fileno(fp), &sbuf) == 0) {
-		p->size = sbuf.st_size;
+	// fstat() is not so robust on MSWin.
+	if (fseek(fp, 0L, SEEK_END) == 0) {
+		p->size = ftell(fp);
+		fseek(fp, 0L, SEEK_SET);
 	} else {
 		p->size = 0;
 	}

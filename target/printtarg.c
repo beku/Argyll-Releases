@@ -17,6 +17,12 @@
 
 	TTBD:
 
+	Add option to return the number of patches that will
+	exactly fit the given number of pages.
+
+	Add optional device link processing support (same slot
+	as -K file.cal) to permit a smoother proofing verification workflow. 
+
 	Add independent w & h patch scaling option.
 
 	Allow scaling minimum leading/trailing white space.
@@ -135,6 +141,7 @@
 #include "alphix.h"
 #include "rspl.h"
 #include "sort.h"
+#include "ui.h"
 
 #include <stdarg.h>
 
@@ -907,7 +914,7 @@ static void tiff_del(trend *ss) {
 	tiff_trend *s = (tiff_trend *)ss; 
 
 	if (s->r != NULL) {
-		s->r->write(s->r, s->fname, s->comp);
+		s->r->write(s->r, s->fname, s->comp, NULL, NULL, tiff_file);
 		s->r->del(s->r);
 	}
 	if (s->fname != NULL)
@@ -925,7 +932,7 @@ static trend *new_tiff_trend(
 	int altrep,					/* printer grey/CMY representation type 0..8 */
 	int ncha,					/* flag, use nchannel alpha */
 	int comp,					/* flag, use compression */
-	int dith					/* flag, use 8 bit dithering */
+	int dith					/* flag, 1 = use 8 bit stocastic dithering */
 ) {
 	tiff_trend *s;
 	color2d c;					/* Background color */
@@ -1014,11 +1021,11 @@ static trend *new_tiff_trend(
 	else
 		ma[0] = ma[1] = ma[2] = ma[3] = 0;
 
-	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth, dith)) == NULL) {
+	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth, dith, NULL, NULL)) == NULL) {
 		error("Failed to create a render2d object for tiff output");
 	} 
 
-	/* We're goin to assume this is all printed output, so */
+	/* We're going to assume this is all printed output, so */
 	/* the background should be white. */
 	if ((nmask & ICX_ADDITIVE)
 	  || (nmask == ICX_CMY && altrep == 7)) {	/* CMY as inverted RGB */
@@ -2907,7 +2914,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -f              Create PostScript DeviceN Color fallback\n");
 	fprintf(stderr," -w g|r|s|n      White colorspace encoding DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
 	fprintf(stderr," -k g|c|s|n      Black colorspace encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
-	fprintf(stderr," -o k|r|n        CMY colorspace encoding DefiveCMYK (def), inverted DeviceRGB or DeviceN\n");            
+	fprintf(stderr," -o k|r|n        CMY colorspace encoding DeviceCMYK (def), inverted DeviceRGB or DeviceN\n");            
 	fprintf(stderr," -e              Output EPS compatible file\n");
 	fprintf(stderr," -t [res]        Output 8 bit TIFF raster file, optional res DPI (default 100)\n");
 	fprintf(stderr," -T [res]        Output 16 bit TIFF raster file, optional res DPI (default 100)\n");

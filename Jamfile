@@ -19,6 +19,8 @@ SubInclude plot ;
 SubInclude icc ;
 #SubInclude icc4 ;
 SubInclude cgats ;
+SubInclude xml ;
+SubInclude yajl ;
 SubInclude rspl ;
 SubInclude gamut ;
 SubInclude xicc ;
@@ -30,13 +32,23 @@ SubInclude profile ;
 SubInclude link ;
 SubInclude tweak ;
 SubInclude render ;
+SubInclude namedc ;
+SubInclude ccast ;
 
 if ! $(HAVE_TIFF) {
 	SubInclude tiff ;
 }
 
 if ! $(HAVE_JPEG) {
-	SubInclude jpg ;
+	SubInclude jpeg ;
+}
+
+if ! $(HAVE_ZLIB) {
+	SubInclude zlib ;
+}
+
+if ! $(HAVE_PNG) {
+	SubInclude png ;
 }
 
 if $(USE_LIBUSB) = true {

@@ -22,6 +22,7 @@
 #include "rspl.h"
 #include "tiffio.h"
 #include "plot.h"
+#include "ui.h"
 
 #ifdef NEVER
 #define INTERP spline_interp
@@ -103,7 +104,7 @@ void usage(void) {
 	fprintf(stderr," -r resx,resy,resz  Set grid resolutions (def %d %d %d)\n",GRES0,GRES1,GRES2);
 	fprintf(stderr," -h            Test half scale resolution too\n");
 	fprintf(stderr," -q            Test quarter scale resolution too\n");
-	fprintf(stderr," -x            Use extra fitting\n");
+	fprintf(stderr," -x            Use auto smoothing\n");
 	fprintf(stderr," -s            Test symetric smoothness (set asymetric -r !)\n");
 	fprintf(stderr," -s            Test symetric smoothness\n");
 	fprintf(stderr," -p            plot 4 slices, xy = 0.5, yz = 0.5, xz = 0.5,  x=y=z\n");
@@ -121,8 +122,7 @@ int main(int argc, char *argv[]) {
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
 	double wweight = 1.0;
-	int twopass = 0;
-	int extra = 0;
+	int autosm = 0;
 	int dosym = 0;
 	int doplot = 0;
 	int doh = 0;
@@ -202,8 +202,8 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
 				dosym = 1;
 
-			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
-				extra = 1;
+			} else if (argv[fa][1] == 'x') {
+				autosm = 1;
 
 			} else if (argv[fa][1] == 's') {
 				dosym = 1;
@@ -215,11 +215,8 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	if (twopass)
-		flags |= RSPL_2PASSSMTH;
-
-	if (extra)
-		flags |= RSPL_EXTRAFIT2;
+	if (autosm)
+		flags |= RSPL_AUTOSMOOTH;
 
 	if (dosym)
 		flags |= RSPL_SYMDOMAIN;

@@ -75,6 +75,11 @@
         handled when calibration is being used<br>
       </a></h4>
     <h4> <a href="#LP1">Linking Profiles</a></h4>
+    <p>&nbsp;&nbsp;&nbsp; <b><a href="#LP2">Image dependent gamut
+          mapping using device links</a></b><br>
+    </p>
+    <p>&nbsp;&nbsp;&nbsp; <b><a href="#LP2">Soft Proofing Link</a></b><br>
+    </p>
     <h4> <a href="#TR1">Transforming colorspaces of raster files</a></h4>
     <h4></h4>
     <h4> <a href="#TV1">Creating Video Calibration 3DLuts</a></h4>
@@ -165,6 +170,17 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -187,6 +203,17 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -603,6 +630,17 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -618,6 +656,17 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -819,6 +868,17 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
@@ -876,113 +936,45 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
       HCT</a> :<br>
     <br>
     <img alt="HutchColor HCT" src="HCT.jpg" style="width: 182px; height:
       140px;"><br>
     <br>
     <br>
-    and <a
-href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    and <a href="http://www.cmp-color.fr/DT3.html">Christophe
       Métairie's Digital TargeT 003</a> and <a
-href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      Métairie's Digital Target - 3</a> :<br>
+      href="http://www.cmp-color.fr/digital%20target.html">Christophe
+      Métairie's Digital Target - 4</a> :<br>
     <br>
     <img alt="CMP_DT_003" src="CMP_DT_003.jpg" style="width: 186px;
       height: 141px;">&nbsp; <img style="width: 203px; height: 140px;"
-      alt="CMP_Digital_Target-3" src="CMP_Digital_Target-3.jpg"><br>
+      alt="CMP_Digital_Target-4" src="CMP_Digital_Target-4.jpg"
+      height="140" width="203"><br>
     <br>
     and the <a href="http://www.silverfast.com/show/dc-targets/en.html">LaserSoft
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1081,8 +1073,30 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
+
+
+
+
+
+
+
+
       201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
 href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1247,6 +1261,17 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
+
+
+
+
+
+
+
+
         header</a>, and appending <a href="SG_footer.txt">this footer</a>,
       making sure there are no blank lines inserted in the process.
       There are reports that X-Rite have experimented with different ink
@@ -1289,8 +1314,8 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
       file should be used, and the cie reference <span
         style="font-weight: bold;"></span>files come with the chart.<br>
       <br>
-      For the Christophe Métairie's Digital Target-3 chart with 570
-      patches, the <span style="font-weight: bold;">ref/CMP_Digital_Target-3.cht</span>
+      For the Christophe Métairie's Digital Target-4 chart with 570
+      patches, the <span style="font-weight: bold;">ref/CMP_Digital_Target-4.cht</span>
       file should be used, and the cie reference <span
         style="font-weight: bold;"></span>files come with the chart.<br>
       <br>
@@ -1324,6 +1349,17 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
     For any other type of chart, a chart recognition template file will
     need to be created (this is beyond the scope of the current
     documentation, although see&nbsp; the <a href="cht_format.html">.cht_format
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1810,6 +1846,17 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
+
+
+
+
+
+
+
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -1948,6 +1995,17 @@ then
 
 
 
+
+
+
+
+
+
+
+
+
+
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -1971,6 +2029,12 @@ then
     <br>
     If you know what colorspace your originals are in, use that as the
     argument to <span style="font-weight: bold;">-S</span>.<br>
+    <br>
+    If your viewing environment for the display and print doesn't match
+    the ones implied by the <a href="colprof.html#c">-cmt</a> and <a
+      href="colprof.html#d">-dpp</a> options, leave them out, and
+    evaluate what, if any appearance transformation is appropriate for
+    your environment at a later stage.<br>
     <br>
     Make sure you check the delta E report at the end of the profile
     creation, to see if the sample data and profile is behaving
@@ -2019,6 +2083,17 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2517,6 +2592,17 @@ chart,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -2572,8 +2658,30 @@ an
 
 
 
+
+
+
+
+
+
+
+
+
+
+
     image file.<br>
     &nbsp;&nbsp;&nbsp; <a href="applycal.html#p1">applycal</a>&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2674,6 +2782,17 @@ a
 
 
 
+
+
+
+
+
+
+
+
+
+
+
     profile chart.<br>
     <br>
     <br>
@@ -2721,16 +2840,22 @@ a
     <br>
     To apply color management and calibration to a raster image:<br>
     <br>
-    &nbsp;&nbsp;&nbsp; <a href="cctiff.html">cctiff</a> <a
-      href="cctiff.html#p1">Source2Destination.icm</a> <a
-      href="cctiff.html#p2">PrinterA_c.cal</a> <a href="cctiff.html#p3">infile.tif</a>
-    <a href="cctiff.html#p4">outfile.tif</a><br>
-    or<br>
-    &nbsp;&nbsp;&nbsp; <a href="cctiff.html">cctiff</a> <a
-      href="cctiff.html#p1">Source2Destination.icm</a> <a
-      href="cctiff.html#p2">PrinterA_c.cal</a> <a href="cctiff.html#p3">infile.jpg</a>
-    <a href="cctiff.html#p4">outfile.jpg</a><br>
+    &nbsp;&nbsp;&nbsp; <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a>
+    <a href="file:///D:/src/argyll/doc/cctiff.html#p1">Source.icm</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p1">PrinterA.icm</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p2">PrinterA_c.cal</a>
+    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">infile.tif</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p4">outfile.tif</a><br>
     <br>
+    or<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a>
+    <a href="file:///D:/src/argyll/doc/cctiff.html#p1">Source.icm</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p1">PrinterA_c.icm</a>
+    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">infile.tif</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p4">outfile.tif</a><br>
+    <br>
+    [ Note that cctiff will also process JPEG raster images. ]<br>
     <br>
     Another useful tool is <a href="synthcal.html">synthcal</a>, that
     allows creating linear or synthetic calibration files for disabling
@@ -2738,6 +2863,11 @@ a
     Similarly, <a href="fakeread.html">fakeread</a> also supports
     applying calibration curves and embedding them in the resulting .ti3
     file<br>
+    <br>
+    If you want to create a pre-conditioning profile for use with <a
+      href="targen.html#c">targen -c</a>, then use the PrinterA.icm
+    profile, <b>NOT</b> PrinterA_c.icm that has calibration curves
+    applied.<br>
     <h4><a name="PC6"></a>How profile ink limits are handled when
       calibration is being used.</h4>
     Even though the profiling process is carried out on top of the
@@ -2808,6 +2938,11 @@ a
     <a href="collink.html#p2">DestinationProfile.icm</a> <a
       href="collink.html#p3">Source2Destination.icm</a><br>
     <br>
+    [ If your viewing environment for the display and print doesn't
+    match the ones implied by the <a href="colprof.html#c">-cmt</a> and
+    <a href="colprof.html#d">-dpp</a> options, leave them out, and
+    evaluate what, if any appearance transformation is appropriate for
+    your environment at a later stage. ]<br>
     <br>
     In <a href="collink.html#G">inverse output table gamut mapping mode</a>,
     the pre-computed intent mappings inside the profiles are not used,
@@ -2848,6 +2983,53 @@ a
     for the type of device the profile represents, and the conditions
     under which it will be viewed.<br>
     <br>
+    <h3><a name="LP3"></a>Image dependent gamut mapping using device
+      links<br>
+    </h3>
+    When images are stored in large gamut colorspaces (such as. L*a*b*
+    or ProPhoto, etc.), then using the colorspace gamut as the source
+    gamut for gamut mapping is generally a bad idea, as it leads to
+    overly compressed and dull images. The correct approach is to use a
+    source gamut that represents the gamut of the images themselves.
+    This can be created using tiffgamut, and an example workflow is as
+    follows:<br>
+    <br>
+    <a href="tiffgamut.html">tiffgamut</a> -f80 -pj -cmt ProPhoto.icm
+    image.tif<br>
+    <br>
+    <a href="collink.html">collink</a> <a href="collink.html#v">-v</a>
+    <a href="collink.html#q">-qh</a> <a href="collink.html#G">-G</a> <a
+      href="collink.html#Gp">image.gam</a> <a href="collink.html#si">-ip</a>
+    <a href="collink.html#c">-cmt</a> <a href="collink.html#d">-dpp</a>
+    <a href="collink.html#p1">ProPhoto.icm</a> <a
+      href="file:///D:/src/argyll/doc/collink.html#p2">RGBDestinationProfile.icm</a>
+    <a href="file:///D:/src/argyll/doc/collink.html#p3">Source2Destination.icm</a><br>
+    <br>
+    <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p1">Source2Destination.icm</a>
+    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">image.tif</a> <a
+      href="file:///D:/src/argyll/doc/cctiff.html#p4">printfile.tif</a><br>
+    <br>
+    The printfile.tif is then send to the printer without color
+    management, (i.e. in the same way the printer characterization test
+    chart was printed), since it is in the printers native colorspace.<br>
+    <br>
+    You can adjust how conservatively the image gamut is preserved using
+    the tiffgamut -f parameter. Omitting it or using a larger value (up
+    to 100) preserves the color gradations of even the lesser used
+    colors, at the cost of compressing the gamut more.<br>
+    Using a smaller value will preserve the saturation of the most
+    popular colors, at the cost of not preserving the color gradations
+    of less popular colors.<br>
+    <br>
+    You can create a gamut that covers a set of source images by
+    providing more than one image file name to tiffgamut. This may be
+    more efficient for a group of related images, and ensures that
+    colors are transformed in exactly the same way for all of the
+    images.<br>
+    <br>
+    The arguments to collink should be appropriate for the output device
+    type - see the collink examples in the above section.<br>
     <h3><a name="LP2"></a>Soft Proofing Link</h3>
     Often it is desirable to get an idea what a particular devices
     output will look like using a different device. Typically this might
@@ -2872,6 +3054,11 @@ a
     the viewing conditions and assumes adaptation to the differences in
     the luminence range, but otherwise not attempting to compress or
     change the gamut.<br>
+    <br>
+    If your viewing environment for the display and print doesn't match
+    the ones implied by the <a href="collink.html#c">-cpp</a> and <a
+      href="collink.html#d">-dmt</a> options, then either leave them out
+    or substitute values that do match your environment.<br>
     &nbsp;
     <hr size="2" width="100%"><br>
     <h3><a name="TR1"></a>Transforming colorspaces of raster files</h3>
@@ -2938,16 +3125,31 @@ a
     </h5>
     Argyll's normal test patch display will be used by default, as long
     as any video encoding range considerations are dealt with (see
-    Signal encoding below). An alternative when working with MadVR V
-    0.86.9 or latter, is to use the madTPG to display the patches in
-    which case the MadVR video encoding range setting will operate. This
-    can give some quality benefits due to MadVR's use of dithering. To
-    display patches using MadVR rather than Argyll, start madTPG and
-    then use the option "-d madvr" in dispcal, dispread and dispwin.
-    Leave the MadTPG "VideoLUT" and "3dluts" buttons in their
-    default&nbsp; (enabled) state, as the various tools will
-    automatically take care of disabling the 3dLut and/or calibration
-    curves as needed.<br>
+    Signal encoding below).<br>
+    <br>
+    An alternative when working with MadVR V 0.86.9 or latter, is to use
+    the madTPG to display the patches in which case the MadVR video
+    encoding range setting will operate. This can give some quality
+    benefits due to MadVR's use of dithering. To display patches using
+    MadVR rather than Argyll, start madTPG and then use the option "<b>-d
+
+
+
+      madvr</b>" in dispcal, dispread and dispwin. Leave the MadTPG
+    "VideoLUT" and "3dluts" buttons in their default&nbsp; (enabled)
+    state, as the various tools will automatically take care of
+    disabling the 3dLut and/or calibration curves as needed.<br>
+    <br>
+    Another option is to use a <a
+      href="http://en.wikipedia.org/wiki/Chromecast">ChromeCast</a>
+    using the option "<b>-dcc</b>" in dispcal, dispread and dispwin.
+    Note that the ChromeCast as a test patch source is probably the<b>
+      least accurate</b> of your choices, since it up-samples the test
+    patch and transforms from RGB to YCC and back, but should be
+    accurate within ± 1 bit. You may have to modify any firewall to
+    permit port 8081 to be accessed on your machine if it falls back to
+    the Default receiver (see <a href="Installing.html">installation
+      instructions</a> for your platform).
     <h5>2) White point calibration &amp; neutral axis calibration.</h5>
     A Device Link is capable of embodying all aspects of the
     calibration, including correcting the white point and neutral axis
@@ -2983,6 +3185,17 @@ a
 
 
 
+
+
+
+
+
+
+
+
+
+
+
         interactive adjustment mode can be used to set the white point.
         Note that while adjusting the neutral axis for neutrality may
         help, the Device Link will override the transfer curve
@@ -3005,6 +3218,17 @@ a
         taken, then the resulting calibration file should be provided to
         dispread as the <a href="dispcal.html#k">-k parameter</a> or <a
           href="dispcal.html#K">-K parameter</a>.&nbsp; See also below <b>Choice
+
+
+
+
+
+
+
+
+
+
+
           of where to apply display per channel calibration curves.</b></li>
       <li>Choose one of the Absolute Colorimetric intents in collink
         (ie. -i aw). This greatly reduces flexibility, and may not be
@@ -3087,8 +3311,12 @@ a
     scale full range RGB values to Video levels for the TV. If the
     latter is not possible, then use the -E options on dispcal and
     dispread. (See <b>Signal encoding</b> bellow for more details on
-    this). Don't use the -E options on dispcal and dispread if you are
-    using MadVR to display test patches using the "-d madvr" option.<br>
+    this). It may also improve the accuracy of the display profile if
+    you use the <a href="dispread.html#Z">dispread -Z</a> option to
+    quantize the test values to the precision of the display
+    system.&nbsp; Don't use the -E options on dispcal and dispread, nor
+    the -Z option on dispread if you are using MadVR to display test
+    patches using the "-d madvr" option.<br>
     <br>
     Once the profile has been created, it is possible to then use the
     resulting Device Link/3DLut with signal encoding other than full
@@ -3206,9 +3434,9 @@ a
       near black will get clipped to the display black point, loosing
       shadow detail. To avoid this, some sort of black point mapping is
       usually desirable. There are two mechanisms available in collink:
-      a) BT.1886 black point mapping, or b) using one of the smart gamut
-      mapping intents that does black point mapping (e.g. la, p, pa, ms
-      or s).<br>
+      a) Custom EOTF with input and/or output black point mapping, or b)
+      using one of the smart gamut mapping intents that does black point
+      mapping (e.g. la, p, pa, ms or s).<br>
     </p>
     <h5>8) Viewing conditions adjustment and gamut mapping</h5>
     <p> </p>
@@ -3223,30 +3451,56 @@ a
       practice that much video material is adjusted to look as intended
       when displayed on a reference monitor having a display gamma of
       somewhere between 2.2 and 2.4, viewed in a dim viewing
-      environment. The modern standard covering the display transfer
-      curve is <a
+      environment. The modern standard covering the display EOTF
+      (Electro-Optical Transfer Curve) is <a
         href="http://www.itu.int/rec/R-REC-BT.1886-0-201103-I">BT.1886</a>,
-      which defines a pure power 2.4 curve with a black point offset. So
-      another means of making the viewing adjustment is to apply the
-      BT.1886-like response to Rec709 encoded material. Collink supports
-      this using the <a href="collink.html#I">-I b</a>, and allows some
-      control over the degree of viewing conditions adjustment by
-      overriding the BT.1886 gamma&nbsp; using the <a
-        href="collink.html#Ib">-I b:g.g</a> parameter. This is the <b>recommended</b>
-      approach to start with, since it gives good results with a single
-      parameter.<br>
+      which defines a pure power 2.4 curve with an input offset and
+      scale applied to account for the black point offset while
+      retaining dark shadow tonality. So another means of making the
+      viewing adjustment is to use the BT.1886-like EOTF for Rec709
+      encoded material. Collink supports this using the <a
+        href="collink.html#I">-I b</a>, and allows some control over the
+      degree of viewing conditions adjustment by overriding the BT.1886
+      gamma&nbsp; using the <a href="collink.html#Ib">-I b:g.g</a>
+      parameter. This is the <b>recommended</b> approach to start with,
+      since it gives good results with a single parameter.<br>
     </p>
+    <p>The addition of a second optional parameter <a
+        href="file:///D:/src/argyll/doc/collink.html#Ib">-I b:p.p:g.g</a>
+      allows control over the degree of black point offset accounted for
+      as an output offset, as opposed to input offset Once the effective
+      gamma value has been chosen to suite the viewing conditions and
+      set the overall contrast for mid greys, increasing the proportion
+      of black offset accounted for in the output of the curve is a way
+      of reducing the deep shadow detail, if it is being overly
+      emphasized. </p>
     <p> An alternate approach to making this adjustment is to take
       advantage of the viewing conditions adjustment using the CIECAM02
       model available in collink. Some control over the degree of
       viewing conditions adjustment is possible by varying the viewing
       condition parameters. </p>
     <p>A third alternative is to combine the two approaches. The source
-      is defined as Rec709 rendered to a model BT.1886 display in dim
-      viewing conditions, and then CIECAM02 is used to adjust for the
-      actual display viewing conditions. Once again, control over the
-      degree of viewing conditions adjustment is possible by varying the
-      viewing condition parameters. </p>
+      is defined as Rec709 primaries with a BT.1886-like EOTF display in
+      dim viewing conditions, and then CIECAM02 is used to adjust for
+      the actual display viewing conditions. Once again, control over
+      the degree of viewing conditions adjustment is possible by varying
+      the viewing condition parameters<br>
+    </p>
+    <p><br>
+    </p>
+    <p><b>9) Correcting for any black point inaccuracy in the display
+        profile</b><br>
+    </p>
+    <p>Some video display devices have particularly good black points,
+      and any slight raising of the black due to innacuracies in the
+      display profile near black can be objectionable. As well as using
+      the <a href="targen.html#V">targen -V flag</a> to improve
+      accuracy near black during profiling, if the display is known to
+      be well behaved (ie. that it's darkest black is actually at RGB
+      value 0,0,0), then the <a href="collink.html#b">collink -b</a>
+      flag can be used, to force the source RGB 0,0,0 to map to the
+      display 0,0,0.<br>
+    </p>
     <h5>Putting it all together:</h5>
     In this example we choose to create a display calibration first
     using dispcal, and create a simple matrix profile as well:<br>
@@ -3282,7 +3536,7 @@ a
     <br>
     The display can then be measured:<br>
     <br>
-    &nbsp; <tt>dispread -v -k TV.cal TV</tt><br>
+    &nbsp; <tt>dispread -v -k -Z8 TV.cal TV</tt><br>
     <br>
     or using madTPG:<br>
     <br>
@@ -3312,14 +3566,14 @@ a
     BT.1886 black point and viewing conditions adjustment, say one of
     the following:<br>
     <br>
-    <tt>&nbsp; collink -v -Ib:2.4 -G -ir Rec709.icm TV.icm
+    <tt>&nbsp; collink -v -Ib:2.4 -b -G -ir Rec709.icm TV.icm
       HD.icm&nbsp;&nbsp; # dark conditions</tt><tt><br>
-    </tt><tt> &nbsp; collink -v -Ib&nbsp;&nbsp;&nbsp;&nbsp; -G -ir
+    </tt><tt> &nbsp; collink -v -Ib&nbsp;&nbsp;&nbsp;&nbsp; -b -G -ir
       Rec709.icm TV.icm HD.icm&nbsp;&nbsp; # dim conditions - good
       default</tt><tt><br>
-    </tt><tt> &nbsp; collink -v -Ib:2.1 -G -ir Rec709.icm TV.icm
+    </tt><tt> &nbsp; collink -v -Ib:2.1 -b -G -ir Rec709.icm TV.icm
       HD.icm&nbsp;&nbsp; # mid to dim conditions</tt><tt><br>
-    </tt><tt> &nbsp; collink -v -Ib:2.0 -G -ir Rec709.icm TV.icm
+    </tt><tt> &nbsp; collink -v -Ib:2.0 -b -G -ir Rec709.icm TV.icm
       HD.icm&nbsp;&nbsp; # mid to light conditions</tt><br>
     <br>
     or you could do it using pure CIECAM02 adjustment and a black point
@@ -3400,7 +3654,7 @@ a
     <br>
     For PC use, where the encoding is full range RGB:<br>
     <br>
-    &nbsp; <tt>collink -v -3e -Ib -G -ir -a TV.cal Rec709.icm TV.icm
+    &nbsp; <tt>collink -v -3e -Ib -b -G -ir -a TV.cal Rec709.icm TV.icm
       HD.icm </tt><br>
     <br>
     For correct operation both the 3DLut HD.txt and the per channel
@@ -3416,8 +3670,8 @@ a
     will probably be processing TV RGB levels, or YCbCr encoded signals
     that it converts to/from RGB internally, so<br>
     <br>
-    &nbsp; <tt>collink -v -3e -et -Et -Ib -G -ir -a TV.cal Rec709.icm
-      TV.icm HD.icm </tt><br>
+    &nbsp; <tt>collink -v -3e -et -Et -Ib -b -G -ir -a TV.cal
+      Rec709.icm TV.icm HD.icm </tt><br>
     <br>
     in this case just the HD.txt file needs installing on the eeColor,
     but make sure that the original linear "first1*.txt files are
@@ -3441,10 +3695,21 @@ a
     normal desktop and MadVR, then it is recommended that you install
     the display ICC profile and use the -H option:<br>
     <br>
-    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir -H TV.cal
-      Rec709.icm TV.icm HD.icm</tt><tt><br>
+    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir -H
+      TV.cal Rec709.icm TV.icm HD.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
-    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-H
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-H
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3458,7 +3723,18 @@ a
 
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
-    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-H
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-H
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3476,10 +3752,21 @@ a
     curves using dithering, and allow it to set the graphics card to
     linear by using the -a option:<br>
     <br>
-    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir -a TV.cal
-      Rec709.icm TV.icm HD.icm</tt><tt><br>
+    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir -a
+      TV.cal Rec709.icm TV.icm HD.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
-    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-a
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-a
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3493,7 +3780,18 @@ a
 
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
-    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-a
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-a
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3544,11 +3842,12 @@ a
     <p>&nbsp; targen -v -d3 -e1 -m6 -f0 -W verify<br>
     </p>
     <p>We make sure there is at least one white patch usin g -e1, a 20%
-      increment grid using -m6, no full spread patches, and create a
-      VRML 3d visualization of the point set using the -W flag. It is
-      good to take a look at the verifyd.wrl file using a VRML viewer.
-      You may want to create several test sets that look at particular
-      aspects, ie. neutral axis response, pure colorant responses, etc.<br>
+      increment grid using -m6, no full spread patches, and create an
+      X3DOM 3d visualization of the point set using the -W flag. It is
+      good to take a look at the verifyd.x3d.html file using a Web
+      browser. You may want to create several test sets that look at
+      particular aspects, ie. neutral axis response, pure colorant
+      responses, etc.<br>
     </p>
     <p>Next we create a reference file by simulating the expected
       response of the perfect video display system. Assuming the collink
@@ -3556,12 +3855,12 @@ a
       would:<tt><tt><br>
         </tt></tt></p>
     <p><tt><tt>&nbsp; copy verify.ti1 ref.ti1<br>
-          &nbsp; fakeread -v -b TV.icm Rec709.icm ref<br>
+          &nbsp; fakeread -v -b -Z8 TV.icm Rec709.icm ref<br>
         </tt></tt></p>
     <p>You should adjust the parameters as necessary, so that the
       reference matches the link options. For instance, if your link
-      options included "-I b:2.15" then the equivalent fakeread option
-      "-b 2.15:TV.icm" should be used, etc.<br>
+      options included "-I b:0.2:2.15" then the equivalent fakeread
+      option "-b 0.2:2.15:TV.icm" should be used, etc.<br>
     </p>
     <hr size="2" width="20%">
     <p>A sanity check we can make at this point is to see what the
@@ -3569,12 +3868,13 @@ a
       simulating the reproduction of this test set:<br>
     </p>
     <p><tt>&nbsp; copy verify.ti1 checkA.ti1</tt><tt><br>
-        &nbsp; fakeread -v -et -p HD.icm -Et TV.icm checkA<br>
+        &nbsp; fakeread -v -et -Z8 -p HD.icm -Et TV.icm checkA<br>
       </tt></p>
     <p>If you used collink -a, then the calibration incorporated in the
       device link needs to be undone to match what the display profile
       expects:</p>
-    <p><tt>&nbsp; fakeread -v -et -p HD.icm -Et -K TV.cal TV.icm checkA</tt></p>
+    <p><tt>&nbsp; fakeread -v -et -Z8 -p HD.icm -Et -K TV.cal TV.icm
+        checkA</tt></p>
     <p><tt>and then you can verify:<br>
       </tt></p>
     <p><tt>&nbsp; colverify -v -n -w -x ref.ti3 checkA.ti3<br>
@@ -3590,10 +3890,10 @@ a
     <p><tt>&nbsp; v</tt><tt>erify -v -N -w -x ref.ti3 checkA.ti3</tt><br>
     </p>
     <p>This will give a numerical report of the delta E's, and also
-      generate a VRML plot of the errors in L*a*b* space. The important
-      thing is to take a look at the checkA.wrl file, to see if gamut
-      clipping is occurring - this is the case if the large error
-      vectors are on the sides or top of the gamut. Note that the
+      generate an X3DOM plot of the errors in L*a*b* space. The
+      important thing is to take a look at the checkA.x3d.html file, to
+      see if gamut clipping is occurring - this is the case if the large
+      error vectors are on the sides or top of the gamut. Note that the
       perfect cube device space values become a rather distorted cube
       like shape in the perceptual L*a*b* space. If the vectors are
       small in the bulk of the space, then this indicates that the link
@@ -3612,22 +3912,23 @@ a
     </p>
     <p><tt>&nbsp; iccgamut -ff -ia Rec709</tt><tt><br>
       </tt><tt> &nbsp; iccgamut -ff -ia TV.icm</tt><tt><br>
-      </tt><tt> &nbsp; viewgam -i Rec709.gam TV.gam gamuts.wrl</tt><br>
+      </tt><tt> &nbsp; viewgam -i Rec709.gam TV.gam gamuts</tt><br>
     </p>
-    <p>and look at the gamuts.wrl file, as well as taking notice of % of
-      the video volume that the display intersects. The VRML solid
+    <p>and look at the gamuts.x3d.html file, as well as taking notice of
+      % of the video volume that the display intersects. The X3DOM solid
       volume will be the video gamut, while the wire frame is the
       display gamut. If you are not targetting D65 with your display,
       you should use iccgamut <b>-ir</b> instead of <b>-ia</b>, so as
       to align the white points.<br>
     </p>
     <hr size="2" width="20%">
-    <p>The main check is to actually measure the display response and
-      compare it against the reference. Make sure the display is setup
-      as you would for video playback and then use dispread:<br>
+    <p>The main verification check is to actually measure the display
+      response and compare it against the reference. Make sure the
+      display is setup as you would for video playback and then use
+      dispread:<br>
     </p>
     <p><tt>&nbsp; copy verify.ti1 checkB.ti1</tt><tt><br>
-      </tt><tt> &nbsp; dispread -v checkB</tt><br>
+      </tt><tt> &nbsp; dispread -v -Z8 checkB</tt><br>
     </p>
     <p>You would add any other options needed (such as <b>-y</b> etc.)
       to set your instrument up properly. If you are using madTPG, then

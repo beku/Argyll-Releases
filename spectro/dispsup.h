@@ -15,9 +15,12 @@
  * see the License.txt file for licencing details.
  */
 
-/* A helper function to handle presenting a display test patch */
+/* Helper functions to handle presenting a display test patch */
+
+/* Struct used for calibration */
 struct _disp_win_info {
 	int webdisp;			/* nz if web display is to be used */
+	ccast_id *ccid;	 		/* non-NULL for ChromeCast */
 #ifdef NT
 	int madvrdisp;			/* NZ for MadVR display */
 #endif
@@ -47,12 +50,14 @@ int disprd_calibration(
 icompath *ipath,	/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int sdtype,			/* Spectro dtype, use dtype if -1 */
 int docbid,			/* NZ to only allow cbid dtypes */
 int tele,			/* NZ for tele mode */
 int nadaptive,		/* NZ for non-adaptive mode */
 int noinitcal,		/* NZ to disable initial instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
 int webdisp,		/* If nz, port number for web display */
+ccast_id *ccid,		/* non-NULL for ChromeCast */
 #ifdef NT
 int madvrdisp,		/* NZ for MadVR display */
 #endif
@@ -107,19 +112,23 @@ struct _disprd {
 	int ncal;			/* Number of entries used in cal[] */
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
+//	char *scallout;		/* measurement XYZ value callout */
 	icompath *ipath;	/* Instrument path to open, &icomFakeDevice == fake */
 	baud_rate br;
 	flow_control fc;
 	inst *it;			/* Instrument */
 	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+	int sdtype;			/* Spectro dtype */
 	int docbid;			/* NZ to only allow cbid dtypes */
 	int refrmode;		/* Refresh display mode, -1 if unknow, 0 = if no, 1 if yes */
-	int cbid;			/* The Calibration Base display mode ID, 0 if unknown */
+	int cbid;			/* The current Calibration Base display mode ID, 0 if unknown */
 	int tele;			/* NZ for tele mode */
 	int nadaptive;		/* NZ for non-adaptive mode */
 	int highres;		/* Use high res mode if available */
 	double refrate;		/* If != 0.0, set display refresh rate calibration */
 	int update_delay_set;	/* NZ if we've calibrated the disp. update delay, or tried and failed */
+	disptech cc_dtech;	/* Display tech used with ccmtx or sets */
+	int cc_cbid;		/* cbid to be used with ccmtx * or sets */
 	double (*ccmtx)[3];	/* Colorimeter Correction Matrix, NULL if none */
 	icxObserverType obType;	/* CCSS Observer */
 	xspect *custObserver;	/* CCSS Optional custom observer */
@@ -222,6 +231,7 @@ int *errc,			/* Error code. May be NULL */
 icompath *ipath,	/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int sdtype,			/* Spectro dtype, use dtype if -1 */
 int docbid,			/* NZ to only allow cbid dtypes */
 int tele,			/* NZ for tele mode */
 int nadaptive,		/* NZ for non-adaptive mode */
@@ -242,15 +252,19 @@ int out_tvenc,		/* 1 = use RGB Video Level encoding */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 int webdisp,		/* If nz, port number for web display */
+ccast_id *ccid,		/* non-NULL for ChromeCast */
 #ifdef NT
 int madvrdisp,		/* NZ for MadVR display */
 #endif
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
+//char *scallout,		/* Shell callout on results of measure color */
 double hpatsize,	/* Size of dispwin */
 double vpatsize,
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
+disptech cc_dtech,	/* Display tech to go with ccmtx or sets, disptech_unknown if not used */
+int cc_cbid,		/* cbid to go with ccmtx or sets, 0 if not used */
 double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
 xspect *sets,		/* CCSS Set of sample spectra, NULL if none  */
 int no_sets,	 	/* CCSS Number on set, 0 if none */

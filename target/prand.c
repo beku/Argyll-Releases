@@ -26,12 +26,8 @@
 #if defined(__IBMC__)
 #include <float.h>
 #endif
-#ifdef DEBUG
-#include "plot.h"
-#endif
 #include "numlib.h"
 #include "sort.h"
-#include "plot.h"
 #include "icc.h"
 #include "xicc.h"
 #include "xcolorants.h"

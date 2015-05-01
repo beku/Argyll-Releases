@@ -17,6 +17,7 @@
 #include <math.h>
 #include <numlib.h>
 #include "plot.h"
+#include "ui.h"
 
 void usage(void);
 

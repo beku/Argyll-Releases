@@ -25,6 +25,8 @@
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
+#include "vrml.h"
+#include "ui.h"
 
 #define RW 0.5		/* Device Delta */ 
 
@@ -65,7 +67,7 @@ void usage(void) {
 	fprintf(stderr," -d          Show PCS target -> average of device ref clippped PCS\n");
 	fprintf(stderr," -b          Show PCS target -> B2A lookup clipped PCS\n");
 	fprintf(stderr," -e          Show reference cliped PCS -> B2A lookup clipped PCS\n");
-	fprintf(stderr," -r res      Resolution of test grid\n");
+	fprintf(stderr," -r res      Resolution of test grid [Def 33]\n");
 	fprintf(stderr," -g          Do full grid, not just L = 0\n");
 	fprintf(stderr," -c          Do all values, not just clipped ones\n");
 	fprintf(stderr," -l tlimit   set total ink limit, 0 - 400%% (estimate by default)\n");
@@ -181,7 +183,7 @@ main(
 	strcpy(out_name, in_name);
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
-	strcpy(xl,".wrl");
+	xl[0] = '\000';				/* Remove extension */
 
 	/* Open up the file for reading */
 	if ((rd_fp = new_icmFileStd_name(in_name,"r")) == NULL)
@@ -201,7 +203,7 @@ main(
 		xicc *xicco;
 		icxLuBase *luo;
 		icxInk ink;					/* Ink parameters */
-		FILE *wrl;
+		vrml *wrl;
 		struct {
 			double x, y, z;
 			double wx, wy, wz;
@@ -250,60 +252,21 @@ main(
 			error("Expecting CMYK device");
 		}
 		
-		if ((wrl = fopen(out_name,"w")) == NULL) {
-			fprintf(stderr,"Error opening output file '%s'\n",out_name);
+		if ((wrl = new_vrml(out_name, doaxes, vrml_lab)) == NULL) {
+			fprintf(stderr,"new_vrml failed for '%s%s'\n",out_name,vrml_ext());
 			return 2;
-		}
-
-		/* Spit out a VRML 2 Object surface of gamut */
-
-		fprintf(wrl,"#VRML V2.0 utf8\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"# Created by the Argyll CMS\n");
-		fprintf(wrl,"Transform {\n");
-		fprintf(wrl,"children [\n");
-		fprintf(wrl,"	NavigationInfo {\n");
-		fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-		fprintf(wrl,"	} # We'll add our own light\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    DirectionalLight {\n");
-		fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-		fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    Viewpoint {\n");
-		fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"\n");
-		if (doaxes != 0) {
-			fprintf(wrl,"# Lab axes as boxes:\n");
-			for (i = 0; i < 5; i++) {
-				fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-				fprintf(wrl,"\tchildren [\n");
-				fprintf(wrl,"\t\tShape{\n");
-				fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-				                  axes[i].wx, axes[i].wy, axes[i].wz);
-				fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-				fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-				fprintf(wrl,"\t\t}\n");
-				fprintf(wrl,"\t]\n");
-				fprintf(wrl,"}\n");
-			}
-			fprintf(wrl,"\n");
 		}
 
 		/* ---------------------------------------------- */
 		/* The PCS target -> Reference clipped vectors */
 
 		if (doref) {
+			double rgb[3];
+
 			if (verb)
 				printf("Doing PCS target to reference clipped PCS Vectors\n");
 
-			fprintf(wrl,"\n");
-			fprintf(wrl,"Shape {\n");
-			fprintf(wrl,"  geometry IndexedLineSet { \n");
-			fprintf(wrl,"    coord Coordinate { \n");
-			fprintf(wrl,"	   point [\n");
+			wrl->start_line_set(wrl, 0);
 
 			i = 0;
 			for (coa[0] = 0; coa[0] < tres; coa[0]++) {
@@ -339,8 +302,8 @@ main(
 							printf("."), fflush(stdout);
 
 						/* Input PCS to ideal (Inverse AtoB) clipped PCS values */
-						fprintf(wrl,"%f %f %f,\n",in[1], in[2], in[0]-GAMUT_LCENT);
-						fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+						wrl->add_vertex(wrl, 0, in);
+						wrl->add_vertex(wrl, 0, out);
 						i++;
 					}
 				}
@@ -350,17 +313,18 @@ main(
 
 			if (verb)
 				printf("\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-			fprintf(wrl,"  coordIndex [\n");
 
 			for (j = 0; j < i; j++) {
-				fprintf(wrl,"%d, %d, -1,\n", j * 2, j * 2 + 1);
+				int ix[2];
+				ix[0] = j * 2;
+				ix[1] = j * 2 +1;
+				wrl->add_line(wrl, 0, ix);
 			}
-			fprintf(wrl,"    ]\n");
-			fprintf(wrl,"  }\n");
-			fprintf(wrl,"appearance Appearance { material Material { emissiveColor 1.0 0.1 0.1} }\n");
-			fprintf(wrl,"} # end shape\n");
+
+			rgb[0] = 1.0;
+			rgb[1] = 0.1;
+			rgb[2] = 0.1;
+			wrl->make_lines_cc(wrl, 0, 0.0, rgb);
 		}
 
 		/* ---------------------------------------------- */
@@ -368,14 +332,12 @@ main(
 		/* The PCS target -> clipped from average of surrounding device values, vectors */
 
 		if (dodelta) {
+			double rgb[3];
+
 			if (verb)
 				printf("Doing target PCS to average of 4 surrounding device to PCS Vectors\n");
 
-			fprintf(wrl,"\n");
-			fprintf(wrl,"Shape {\n");
-			fprintf(wrl,"  geometry IndexedLineSet { \n");
-			fprintf(wrl,"    coord Coordinate { \n");
-			fprintf(wrl,"	   point [\n");
+			wrl->start_line_set(wrl, 0);
 
 			i = 0;
 			for (coa[0] = 0; coa[0] < tres; coa[0]++) {
@@ -485,8 +447,8 @@ main(
 						if (verb)
 							printf("."), fflush(stdout);
 
-						fprintf(wrl,"%f %f %f,\n",in[1], in[2], in[0]-GAMUT_LCENT);
-						fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+						wrl->add_vertex(wrl, 0, in);
+						wrl->add_vertex(wrl, 0, out);
 						i++;
 					}
 				}
@@ -496,25 +458,29 @@ main(
 
 			if (verb)
 				printf("\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-			fprintf(wrl,"  coordIndex [\n");
 
 			for (j = 0; j < i; j++) {
-				fprintf(wrl,"%d, %d, -1,\n", j * 2, j * 2 + 1);
+				int ix[2];
+				ix[0] = j * 2;
+				ix[1] = j * 2 +1;
+				wrl->add_line(wrl, 0, ix);
 			}
-			fprintf(wrl,"    ]\n");
-			fprintf(wrl,"  }\n");
-			fprintf(wrl,"appearance Appearance { material Material { emissiveColor 0.9 0.9 0.9} }\n");
-			fprintf(wrl,"} # end shape\n");
 
+			rgb[0] = 0.9;
+			rgb[1] = 0.9;
+			rgb[2] = 0.9;
+			wrl->make_lines_cc(wrl, 0, 0.0, rgb);
 		}
 
 		/* ---------------------------------------------- */
 		/* The target PCS -> clipped PCS using B2A table vectore */
 
 		if (dob2a) {
+			double rgb[3];
+
 			icxLuBase *luoB;
+
+			wrl->start_line_set(wrl, 0);
 
 			/* Get a PCS to Device conversion object */
 			if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icAbsoluteColorimetric,
@@ -526,12 +492,6 @@ main(
 
 			if (verb)
 				printf("Doing target PCS to B2A clipped PCS Vectors\n");
-
-			fprintf(wrl,"\n");
-			fprintf(wrl,"Shape {\n");
-			fprintf(wrl,"  geometry IndexedLineSet { \n");
-			fprintf(wrl,"    coord Coordinate { \n");
-			fprintf(wrl,"	   point [\n");
 
 			i = 0;
 			for (coa[0] = 0; coa[0] < tres; coa[0]++) {
@@ -563,8 +523,8 @@ main(
 						if (verb)
 							printf("."), fflush(stdout);
 
-						fprintf(wrl,"%f %f %f,\n",in[1], in[2], in[0]-GAMUT_LCENT);
-						fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+						wrl->add_vertex(wrl, 0, in);
+						wrl->add_vertex(wrl, 0, out);
 						i++;
 					}
 				}
@@ -574,17 +534,18 @@ main(
 
 			if (verb)
 				printf("\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-			fprintf(wrl,"  coordIndex [\n");
 
 			for (j = 0; j < i; j++) {
-				fprintf(wrl,"%d, %d, -1,\n", j * 2, j * 2 + 1);
+				int ix[2];
+				ix[0] = j * 2;
+				ix[1] = j * 2 +1;
+				wrl->add_line(wrl, 0, ix);
 			}
-			fprintf(wrl,"    ]\n");
-			fprintf(wrl,"  }\n");
-			fprintf(wrl,"appearance Appearance { material Material { emissiveColor 0.9 0.9 0.9} }\n");
-			fprintf(wrl,"} # end shape\n");
+
+			rgb[0] = 0.9;
+			rgb[1] = 0.9;
+			rgb[2] = 0.9;
+			wrl->make_lines_cc(wrl, 0, 0.0, rgb);
 
 			luoB->del(luoB);
 		}
@@ -593,7 +554,11 @@ main(
 		/* The reference clipped PCS -> B2A clipped PCS vectore */
 
 		if (doeee) {
+			double rgb[3];
+
 			icxLuBase *luoB;
+
+			wrl->start_line_set(wrl, 0);
 
 			/* Get a PCS to Device conversion object */
 			if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icAbsoluteColorimetric,
@@ -605,12 +570,6 @@ main(
 
 			if (verb)
 				printf("Doing reference clipped PCS to B2A table clipped PCS Vectors\n");
-
-			fprintf(wrl,"\n");
-			fprintf(wrl,"Shape {\n");
-			fprintf(wrl,"  geometry IndexedLineSet { \n");
-			fprintf(wrl,"    coord Coordinate { \n");
-			fprintf(wrl,"	   point [\n");
 
 			i = 0;
 			for (coa[0] = 0; coa[0] < tres; coa[0]++) {
@@ -653,8 +612,8 @@ main(
 						if (verb)
 							printf("."), fflush(stdout);
 
-						fprintf(wrl,"%f %f %f,\n",check[1], check[2], check[0]-GAMUT_LCENT);
-						fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+						wrl->add_vertex(wrl, 0, check);
+						wrl->add_vertex(wrl, 0, out);
 						i++;
 					}
 				}
@@ -664,31 +623,29 @@ main(
 
 			if (verb)
 				printf("\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-			fprintf(wrl,"  coordIndex [\n");
 
 			for (j = 0; j < i; j++) {
-				fprintf(wrl,"%d, %d, -1,\n", j * 2, j * 2 + 1);
+				int ix[2];
+				ix[0] = j * 2;
+				ix[1] = j * 2 +1;
+				wrl->add_line(wrl, 0, ix);
 			}
-			fprintf(wrl,"    ]\n");
-			fprintf(wrl,"  }\n");
-			fprintf(wrl,"appearance Appearance { material Material { emissiveColor 0.9 0.9 0.9} }\n");
-			fprintf(wrl,"} # end shape\n");
+
+			rgb[0] = 0.9;
+			rgb[1] = 0.9;
+			rgb[2] = 0.9;
+			wrl->make_lines_cc(wrl, 0, 0.0, rgb);
 
 			luoB->del(luoB);
 		}
 
 		/* ---------------------------------------------- */
 
-		fprintf(wrl,"\n");
-		fprintf(wrl,"  ] # end of children for world\n");
-		fprintf(wrl,"}\n");
-	
-		if (fclose(wrl) != 0) {
-			fprintf(stderr,"Error closing output file '%s'\n",out_name);
+		if (wrl->flush(wrl) != 0) {
+			fprintf(stderr,"Error closing output file '%s%s'\n",out_name,vrml_ext());
 			return 2;
 		}
+		wrl->del(wrl);
 
 		/* Done with lookup object */
 		luo->del(luo);

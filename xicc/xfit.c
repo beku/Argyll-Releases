@@ -83,7 +83,8 @@
 							/* This seems to work badly, even with high smoothness. Why ? */
 							/* It does speed up 1D lut creation though. */
 
-#undef DEBUG 			/* Verbose debug information */
+#undef DEBUG 			/* Debug information */
+#undef DEBUG_PROGRESS 	/* Show powell progress */
 #undef DEBUG_PLOT 		/* Plot in & out curves */
 #undef SPECIAL_FORCE	/* Check rspl nodes against linear XYZ model */
 #undef SPECIAL_FORCE_GAMMA		/* Force correct gamma shaper curves */
@@ -99,8 +100,10 @@
 #define CURVEPOW 1.0    	/* Power to raise deltaE squared to in setting in/out curves */
 							/* This provides a means of punishing high maximum errors. */
 
-#define POWTOL 1e-4			/* Shaper Powell optimiser tollerance in delta E squared ^ CURVEPOW */
-#define MAXITS 2000			/* Shaper number of itterations before giving up */
+#define POWTOL1 1e-3		/* Shaper Powell optimiser tollerance for first passes */
+#define MAXITS1 1000		/* Shaper number of itterations for first passes */
+#define POWTOL 1e-5			/* Shaper Powell optimiser tollerance in delta E squared ^ CURVEPOW */
+#define MAXITS 4000			/* Shaper number of itterations before giving up */
 #define PDDEL  1e-6			/* Fake partial derivative del */
 
 /* Weights for shaper in/out curve parameters, to minimise unconstrained "wiggles" */
@@ -654,6 +657,27 @@ static void xfit_abs_to_rel(xfit *p, double *out, double *in) {
 	}
 }
 
+/* Convert an XYZ output value from absolute */
+/* to cLut relative using the current white point. */
+static void xfit_XYZ_abs_to_rel(xfit *p, double *out, double *in) {
+	if (p->flags & XFIT_OUT_WP_REL) {
+		if (p->flags & XFIT_OUT_LAB) {
+			icmMulBy3x3(out, p->fromAbs, in);
+			icmXYZ2Lab(&icmD50, out, out);
+		} else {
+			icmMulBy3x3(out, p->fromAbs, in);
+		}
+	} else {
+		if (p->flags & XFIT_OUT_LAB) {
+			icmXYZ2Lab(&icmD50, out, in);
+		} else {
+			out[0] = in[0];
+			out[1] = in[1];
+			out[2] = in[2];
+		}
+	}
+}
+
 /* - - - - - - - - - */
 
 /* return a weighting for the magnitude of the in and out */
@@ -921,7 +945,7 @@ static double xfitfunc(void *edata, double *v) {
 		smv = pow(smv, CURVEPOW);
 	rv = ev + smv;
 
-#ifdef DEBUG
+#ifdef DEBUG_PROGRESS
 if (xfitfunc_trace)
 fprintf(stdout,"~1(sm %f, ev %f)xfitfunc returning %f\n",smv,ev,rv);
 #endif
@@ -968,7 +992,6 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 
 	} else {
 		for (i = 0; i < p->opt_cnt; i++) { 
-//printf("~1 param %d = %f\n",i,v[i]);
 			p->v[p->opt_off + i] = v[i];
 		}
 	}
@@ -1112,13 +1135,12 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 	rv = ev + smv;
 
 	/* Sum the del for parameters being optimised and copy to return array */
-
 	if (p->opt_ssch) {
 		for (i = 0; i < p->sm_iluord; i++)
 			dv[i] = 0.0;
 		for (e = 0; e < di; e++) {	/* Combine per channel curve de's */
 			for (i = 0; i < p->sm_iluord; i++)
-				dv[i] += dav[p->shp_offs[e] + i] = sdav[p->shp_offs[e] + i];
+				dv[i] += dav[p->shp_offs[e] + i] + sdav[p->shp_offs[e] + i];
 		}
 		for (i = p->sm_iluord; i < p->opt_cnt; i++)	/* matrix and rest de's */ 
 			dv[i] = dav[p->mat_off + i - p->sm_iluord] + sdav[p->mat_off + i - p->sm_iluord];
@@ -1128,7 +1150,7 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 			dv[i] = dav[p->opt_off + i] + sdav[p->opt_off + i];
 	}
 
-#ifdef DEBUG
+#ifdef DEBUG_PROGRESS
 fprintf(stdout,"~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
 #endif
 
@@ -1251,7 +1273,7 @@ static double symoptfunc(void *edata, double *v) {
 
 	rv = out[0] * out[0];
 
-#ifdef DEBUG
+#ifdef DEBUG_PROGRESS
 printf("~1symoptfunc returning %f\n",rv);
 #endif
 	return rv;
@@ -1639,7 +1661,7 @@ printf("~1 changing %f %f %f -> %f %f %f\n", out[0], out[1], out[2], tout[0], to
 /* Do the fitting. */
 /* return nz on error */
 /* 1 = malloc or other error */
-int xfit_fit(
+static int xfit_fit(
 	struct _xfit *p, 
 	int flags,				/* Flag values */
 	int di,					/* Input dimensions */
@@ -1659,6 +1681,7 @@ int xfit_fit(
 	int gres[MXDI],			/* clut resolutions being optimised for/returned */
 	double out_min[MXDO],	/* Output value scaling/range minimum */
 	double out_max[MXDO],	/* Output value scaling/range maximum */
+//	co *bpo,				/* If != NULL, black point override in same spaces as ipoints */
 	double smooth,			/* clut rspl smoothing factor */
 	double oavgdev[MXDO],	/* Average output value deviation */
 	double demph,			/* dark emphasis factor for cLUT grid res. */
@@ -1677,6 +1700,9 @@ int xfit_fit(
 	int i, e, f;
 	double *b;				/* Base of parameters for this section */
 	int poff;
+
+	double powtol = POWTOL1;		/* powell/conjgrad initial tollerance */
+	int maxits = MAXITS1;			/* powell/conjgrad initial maximum itterations */
 
 	if (tcomb & oc_io)		/* If we're doing anything, we need the matrix */
 		tcomb |= oc_m;
@@ -1791,10 +1817,16 @@ int xfit_fit(
 		icmAry2XYZ(_wp, p->wp);
 
 		/* Absolute->Aprox. Relative Adaptation matrix */
-		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
+		if (p->picc != NULL)
+			p->picc->chromAdaptMatrix(p->picc, ICM_CAM_NONE, icmD50, _wp, p->fromAbs);
+		else
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
 	
 		/* Aproximate relative to absolute conversion matrix */
-		icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
+		if (p->picc != NULL)
+			p->picc->chromAdaptMatrix(p->picc, ICM_CAM_NONE, _wp, icmD50, p->toAbs);
+		else
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
 
 		if (p->verb) {
 			double lab[3];
@@ -1921,11 +1953,11 @@ dump_xfit(p);
 		setup_xfit(p, p->wv, p->sa, 0.0, 0.5); 
 
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                                 xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                       xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f", rerr);
 #endif
@@ -1935,34 +1967,37 @@ dump_xfit(p);
 #ifdef DEBUG
 printf("\nAfter matrix opt:\n");
 dump_xfit(p);
+
 #endif
 	}
 
 	/* Optimise input and matrix together */
 	if ((p->tcomb & oc_im) == oc_im) {
 		double rerr;
+		int sm_iluord = p->sm_iluord;
 
 		if (p->verb)
-			printf("About to optimise a common input curve and matrix\n");
+			printf("About to optimise a common ord 0 input curve and matrix\n");
 
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
 			setup_piv(p);
 
 		p->opt_ssch = 1;
+		p->sm_iluord = 1;		/* Do a single order for first up */
 		p->opt_ch = -1;
 		p->opt_msk = oc_im;
 		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
 
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                                xfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #endif
 		}
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                     xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
@@ -1978,13 +2013,60 @@ dump_xfit(p);
 		for (i = p->sm_iluord; i < p->opt_cnt; i++) 
 			p->v[p->mat_off + i - p->sm_iluord] = p->wv[i];
 #ifdef DEBUG
-printf("\nAfter input and matrix opt:\n");
+printf("\nAfter single input and matrix opt:\n");
+dump_xfit(p);
+#endif
+
+		/* - - - - - - - - - - - */
+		if (p->verb)
+			printf("About to optimise a common input curve and matrix\n");
+
+		/* Setup pseudo-inverse if we need it */
+		if (p->flags & XFIT_FM_INPUT)
+			setup_piv(p);
+
+		p->opt_ssch = 1;
+		p->sm_iluord = sm_iluord;		/* restore this */
+		p->opt_ch = -1;
+		p->opt_msk = oc_im;
+		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
+
+#ifdef NODDV
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
+		                                xfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
+#endif
+		}
+#else
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
+		                     xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
+#endif
+		}
+#endif	/* !NODDV */
+		for (e = 0; e < di; e++) {				/* Copy optimised values back */
+			for (i = 0; i < p->sm_iluord; i++)
+				p->v[p->shp_offs[e] + i] = p->wv[i];
+			for (; i < p->iluord[e]; i++)
+				p->v[p->shp_offs[e] + i] = 0.0;
+		}
+		for (i = p->sm_iluord; i < p->opt_cnt; i++) 
+			p->v[p->mat_off + i - p->sm_iluord] = p->wv[i];
+#ifdef DEBUG
+printf("\nAfter single input and matrix opt:\n");
 dump_xfit(p);
 #endif
 
 		/* - - - - - - - - - - - */
 		if (p->verb)
 			printf("About to optimise input curves and matrix\n");
+
+		if ((p->tcomb & oc_mo) != oc_mo) {	/* If this will be last fit */
+			powtol = POWTOL;
+			maxits = MAXITS;
+		}
 
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
@@ -1998,14 +2080,14 @@ dump_xfit(p);
 		/* itterations and move on to the output curve, and worry about it not */
 		/* converging the second time through. */
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                                xfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #endif
 		}
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                     xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
@@ -2027,6 +2109,11 @@ dump_xfit(p);
 		if (p->verb)
 			printf("About to optimise output curves and matrix\n");
 
+		if ((p->tcomb & oc_im) != oc_im) {	/* If this will be last fit */
+			powtol = POWTOL;
+			maxits = MAXITS;
+		}
+
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
 			setup_piv(p);
@@ -2036,11 +2123,11 @@ dump_xfit(p);
 		p->opt_msk = oc_mo;
 		setup_xfit(p, p->wv, p->sa, 0.3, 0.3); 
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 		                                    xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc,
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits, xfitfunc,
 		                                   dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
@@ -2057,6 +2144,15 @@ dump_xfit(p);
 			if (p->verb)
 				printf("About to optimise input curves and matrix again\n");
 
+
+#ifndef NODDV
+			if ((p->tcomb & oc_imo) != oc_imo)	/* If this will be last fit */
+#endif
+			{
+				powtol = POWTOL;
+				maxits = MAXITS;
+			}
+
 			/* Setup pseudo-inverse if we need it */
 			if (p->flags & XFIT_FM_INPUT)
 				setup_piv(p);
@@ -2066,11 +2162,11 @@ dump_xfit(p);
 			p->opt_msk = oc_im;
 			setup_xfit(p, p->wv, p->sa, 0.2, 0.2); 
 #ifdef NODDV
-			if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+			if (powell(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 			                               xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 				warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, powtol, maxits,
 			                           xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 				warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
@@ -2084,6 +2180,7 @@ dump_xfit(p);
 
 #ifndef NODDV
 		/* Optimise all together */
+		/* (This is very slow using powell) */
 		if ((p->tcomb & oc_imo) == oc_imo) {
 
 			if (p->verb)
@@ -2566,7 +2663,10 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 
 			/* Matrix needed to correct approx rel wp to target D50 */
 			icmAry2XYZ(_wp, wcc.v);		/* Aprox relative target white point */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);	/* Correction */
+			if (p->picc != NULL)	/* Correction */
+				p->picc->chromAdaptMatrix(p->picc, ICM_CAM_NONE, icmD50, _wp, p->cmat);
+			else
+				icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);
 
 			/* Compute the actual white point, and return it to caller */
 			icmMulBy3x3(wp, p->toAbs, wcc.v);
@@ -2586,8 +2686,13 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 
 			/* Fix absolute conversions to leave absolute response unchanged. */
 			icmAry2XYZ(_wp, wp);		/* Actual white point */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
+			if (p->picc != NULL) {
+				p->picc->chromAdaptMatrix(p->picc, ICM_CAM_NONE, icmD50, _wp, p->fromAbs);
+				p->picc->chromAdaptMatrix(p->picc, ICM_CAM_NONE, _wp, icmD50, p->toAbs);
+			} else {
+				icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
+				icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
+			}
 
 			if (p->verb) {
 				double labwp[3];
@@ -2731,6 +2836,22 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 				clip_rspl_out	/* Function to set from */
 			);
 		}
+
+		/* Force black point to given value */
+//		if (bpo != NULL) {
+//			co tv;
+//			int rv;
+//
+//			xfit_inpscurves(p, tv.p, bpo->p);
+//
+//			xfit_XYZ_abs_to_rel(p, tv.v, bpo->v);
+//			xfit_invoutcurves(p, tv.v, tv.v);
+//printf("~1 xfit: fine after curves  black at %f %f %f to %f %f %f\n",
+//tv.p[0], tv.p[1], tv.p[2], tv.v[0], tv.v[1], tv.v[2]);
+//			rv = p->clut->tune_value(p->clut, &tv);
+//			if (rv != 0)
+//				warning("Black Point Override failed - clipping");
+//		}
 
 #ifdef SPECIAL_FORCE
 		/* Replace the rspl nodes with ones directly computed */
@@ -2966,12 +3087,15 @@ static void xfit_del(xfit *p) {
 /* Create a transform fitting object */
 /* return NULL on error */
 xfit *new_xfit(
+icc *picc			/* ICC profile used to set cone space matrix, NULL for Bradford. */
 ) {
 	xfit *p;
 
 	if ((p = (xfit *)calloc(1, sizeof(xfit))) == NULL) {
 		return NULL;
 	}
+
+	p->picc = picc;
 
 	/* Set method pointers */
 	p->fit         = xfit_fit;

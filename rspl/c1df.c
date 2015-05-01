@@ -30,8 +30,9 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
-#include "plot.h"
 #include "rspl.h"
+#include "plot.h"
+#include "ui.h"
 
 double lin();
 void usage(void);

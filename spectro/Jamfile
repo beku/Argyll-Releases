@@ -10,13 +10,15 @@ if $(OS) = MACOSX {
 	ObjectCcFlags dispwin_dispwin : -ObjC ;
 }
 
+DEFINES += ENABLE_FTDI ;
+
 MADVRSOURCE = ;
 
 # Setup the right hardware access libraries
 if $(NT) {
 	MADVRSOURCE = madvrwin.c ;
 
-	if $(USE_LIBUSB)  = true {
+	if $(USE_LIBUSB) = true {
 		DEFINES += USE_LIBUSB ;
 		if $(USE_LIBUSB1) = true {
 			DEFINES += USE_LIBUSB1 ;
@@ -64,7 +66,7 @@ if $(UNIX) {
 }
 
 #Products
-Libraries = libinsttypes libinst libdisp libconv libinstapp ;
+Libraries = libinsttypes libdisptechs libinst libdisp libconv libinstapp ;
 Executables = dispwin synthcal dispread dispcal fakeread synthread
               chartread spotread illumread ccxxmake spec2cie average oeminst ;
 Headers = inst.h ;
@@ -79,20 +81,20 @@ InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
 if $(UNIX) && $(OS) != MACOSX {
 	# Micro Unix CMM for handling monitor profile association
 	CMMHDRS = ../ucmm ;
-	CMMLIBS = ../ucmm/libucmm ../jcnf/libjcnf ../jcnf/yajl/libyajl ;
+	CMMLIBS = ../ucmm/libucmm ../jcnf/libjcnf ../yajl/libyajl ;
 }
 
 HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
-       ../plot $(LIBUSBHDRS) $(CMMHDRS) ;
+       ../plot ../render ../ccast $(LIBUSBHDRS) $(CMMHDRS) ;
 
 # Instrument access library library
 SER_INSTS = dtp22.c dtp41.c dtp51.c ss.c ss_imp.c ;
 
 USB_INSTS = dtp20.c i1disp.c i1d3.c i1pro.c i1pro_imp.c
                       munki.c munki_imp.c hcfr.c spyd2.c huey.c
-                      colorhug.c usbio.c hidio.c ;
+                      colorhug.c ex1.c usbio.c hidio.c ;
 
-FAST_SER_INSTS = specbos.c ;
+FAST_SER_INSTS = specbos.c kleink10.c ;
 
 SER_USB_INSTS = dtp92.c ;
 
@@ -115,26 +117,30 @@ if $(USE_SERIAL) = true || $(USE_USB) = true {
 	INST_SRCS += $(SER_USB_INSTS) ;
 }
 
-if $(USE_DEMOINST) = true && [ GLOB . : demoinst.c ] {
+if $(USE_DEMOINST) = true && [ GLOB [ NormPaths . ] : demoinst.c ] {
 	echo "Compiling demo instrument support" ;
 	DEFINES += ENABLE_DEMOINST ;
 	INST_SRCS += demoinst.c ;
 }
 
-Library libinst : inst.c insttypes.c icoms.c $(INST_SRCS) ;
+Library libinst : inst.c insttypes.c icoms.c disptechs.c $(INST_SRCS) ;
 
 # Display access library 
 ObjectKeep mongoose.c ;
-Library libdisp : dispsup.c dispwin.c webwin.c $(MADVRSOURCE) : : : $(LibWinH) : mongoose ;
+Library libdisp : dispsup.c dispwin.c webwin.c ccwin.c
+                  $(MADVRSOURCE) : : : $(LibWinH) : mongoose ;
 
-# Instrument types utility functions library. Use this instead of libinst when */
-# applications need to know about different instrument types, but not access them. */
+# Instrument and Display types utility functions library. Use these instead of libinst when */
+# applications need to know about different instrument or display types, but not access them. */
 # (Note we're working around a bug in Jam caused by objects shared between libraries)
 Object insttypes2 : insttypes.c ;
 LibraryFromObjects libinsttypes : insttypes2 ;
 
+Object disptechs2 : disptechs.c ;
+LibraryFromObjects libdisptechs : disptechs2 ;
+
 # System utility functions (keyboard, msec_*, thread)
-Library libconv : xdg_bds.c aglob.c conv.c $(CONVFILE) : : : $(LibWinH) ;
+Library libconv : xdg_bds.c aglob.c conv.c base64.c $(CONVFILE) : : : $(LibWinH) ;
 
 # Command line application instrument related convenience functions
 Library libinstapp : instappsup.c ;
@@ -146,7 +152,10 @@ LINKLIBS = libinst libinstapp
            ../xicc/libxcolorants ../xicc/libxicc
            ../gamut/libgamut
            ../rspl/librspl ../cgats/libcgats
-           ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum
+           ../icc/libicc ../plot/libplot ../plot/libvrml
+		   ../ccast/libccast ../ccast/axTLS/libaxtls ../yajl/libyajl ../render/librender
+           $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIB)
+           ../numlib/libui ../numlib/libnum
            $(CMMLIBS) libconv ;
 
 if $(LIBUSB_IS_DLL) = true {
@@ -169,7 +178,7 @@ Main spotread : spotread.c : : : : : ;
 
 # Test code
 if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/spectro" {
-	Main setoem : setoem.c : : : : : ;
+	Main setoem : setoem.c : : : : : ../numlib/libui ;
 }
 
 # CCMX and CCSStool
@@ -188,12 +197,12 @@ Main dispcal : dispcal.c : : : ../target : : libdisp ;
 Main dispread : dispread.c : : : : : libdisp ;
 
 #display test window test/Lut loader utility
-# [ Could avoid need for libisnt libusb etc.
+# [ Could avoid need for libinst libusb etc.
 #   by separating system dependent utils to a separate library .] 
-MainVariant dispwin : dispwin.c webwin.c $(MADVRSOURCE) : : STANDALONE_TEST : : mongoose : $(LibWin) ;
+MainVariant dispwin : dispwin.c webwin.c ccwin.c $(MADVRSOURCE) : : STANDALONE_TEST : : mongoose : $(LibWin) ;
 
-LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
-           ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot
+LINKLIBS = libinsttypes libdisptechs ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
+           ../cgats/libcgats ../icc/libicc ../plot/libplot ../numlib/libnum ../numlib/libui
            ../plot/libvrml ;
 
 # Fake device print/read utility using ICC profile
@@ -242,6 +251,9 @@ MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 # test code
 #Main t : t.c ;
 #Main tt : tt.c ;
+#Main ttt : ttt.c ;
+#Main t1 : t1.c ;
+#Main tt : tt.c ;
 #Main t8 : t8.c ;
 #Main t9 : t9.c ;
 #Main i1d3eval : i1d3eval.c ;
@@ -252,8 +264,8 @@ if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/spectro" {
 	# /SUBSYSTEM:WINDOWS on NT link ?
 #	GuiBin oemdnld ;
 	Main oemdnld : oemdnld.c : : : : oemarch vinflate inflate LzmaDec mongoose : libconv ;
-	Main fakeindev : fakeindev.c ;
-	Main cmtest : cmtest.c : : : : : libconv ;
+#	Main fakeindev : fakeindev.c ;
+#	Main cmtest : cmtest.c : : : : : libconv ;
 #	Main webdisp : webdisp.c : : : : : libconv ;
 }
 

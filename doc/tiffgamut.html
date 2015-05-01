@@ -3,19 +3,19 @@
   <head>
     <title>tiffgamut</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
     <h2><b>xicc/tiffgamut</b></h2>
     <h3>Summary</h3>
-    Create a gamut file or VRML file of the color gamut of the contents
+    Create a gamut file or X3DOM file of the color gamut of the contents
     of a set of TIFF or JPEG image.<br>
     <br>
     <span style="font-weight: bold;">tiffgamut</span> allows creation of
     gamut files from the pixel values in a set of TIFF and/or JPEG
     raster images, as defined by an ICC profile, in L*a*b* or CIECAM02
-    Jab colorspace, and can also represent the gamut as a VRML file.
+    Jab colorspace, and can also represent the gamut as a X3DOM file.
     This can be used for visualizing and comparing the gamut of an image
     to the colorspace it is in, or a colorspace it might get transformed
     into, and can also be used to create an image source gamut for use
@@ -29,12 +29,19 @@
     intent for appearance space gamut mappings, and the same input
     viewing conditions to be used in <span style="font-weight: bold;">collink</span>
     or <span style="font-weight: bold;">colprof</span> using the -c
-    flag, i.e. "tiffgamut -pj -cmt sRGB.icm image.tif"<br>
+    flag, i.e. "tiffgamut -pj -cmt sRGB.icm image.tif" See <a
+      href="Scenarios.html#LP3">Image dependent gamut mapping using
+      device links</a> for an example workflow.<br>
+    <br>
+    See <a href="file:///D:/src/argyll/doc/3Df.htmlormat">3D Viewing
+      Format</a> for switching to VRML or X3D output format.<br>
     <h3>Usage Summary</h3>
     <small><span style="font-family: monospace;">tiffgamut [-v level]
         [profile.icm | embedded.tif/jpg] infile1.tif/jpg
         [infile2.tif/jpg ...]</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
         Verbose</span><br style="font-family: monospace;">
@@ -45,16 +52,22 @@
 emit
 
 
-        VRML .wrl file as well as CGATS .gam file</span><br
+
+
+        X3DOM .x3d.html file as well as CGATS .gam file</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't
 
 
-        add VRML axes or white/black point</span><br style="font-family:
-        monospace;">
+
+
+        add X3DOM axes or white/black point</span><br
+        style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Add
+
+
 
 
         markers for prim. &amp; sec. "cusp" points<br>
@@ -68,6 +81,8 @@ Add
 s
 
 
+
+
         = saturation, a = absolute (default), d = profile default</span></small><small><span
         style="font-family: monospace;"></span></small><br
       style="font-family: monospace;">
@@ -78,6 +93,8 @@ s
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 r
+
+
 
 
         = reverse (priority: monochrome &gt; matrix &gt; lut)<br>
@@ -96,6 +113,8 @@ r
 either
 
 
+
+
         an enumerated choice, or a parameter:value change</span><span
         style="font-family: monospace;"></span><br style="font-family:
         monospace;">
@@ -107,9 +126,13 @@ either
 &nbsp;&nbsp;
 
 
+
+
         pe - Print evaluation environment (CIE 116-1995)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
+
+
 
 
         pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
@@ -120,6 +143,8 @@ either
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
+
 
 
         &nbsp; mb - Monitor in bright work environment</span><br
@@ -146,10 +171,14 @@ either
 s:surround&nbsp;&nbsp;
 
 
+
+
         n = auto, a = average, m = dim, d = dark,</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
+
 
 
         &nbsp; &nbsp;&nbsp; c = transparency (default average)</span><br
@@ -158,10 +187,14 @@ s:surround&nbsp;&nbsp;
 w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
         Adapted white point as XYZ (default media white)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
         Adapted white point as x, y</span><br style="font-family:
@@ -170,10 +203,14 @@ w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 a:adaptation
 
 
+
+
         Adaptation luminance in cd.m^2 (default 50.0)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 b:background
+
+
 
 
         Background % of image luminance (default 20)<br>
@@ -183,6 +220,8 @@ b:background
     <small><span style="font-family: monospace;"><small><span
             style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
             Flare light % of image luminance (default 1)<br>
@@ -195,6 +234,8 @@ f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         as XYZ (default media white)</span><br style="font-family:
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
         g:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Glare color as
         x, y<br>
@@ -211,11 +252,11 @@ f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
     and is a good place to start. Small values may take a lot of time to
     generate, and will produce big files.<br>
     <br>
-    The <b>-w</b> flag causes a VRML file to be produced, as well as a
+    The <b>-w</b> flag causes a X3DOM file to be produced, as well as a
     gamut file.<br>
     <br>
     The <b>-n</b> flag suppresses the L*a*b* axes being created in the
-    VRML.<br>
+    X3DOM.<br>
     <br>
     The <span style="font-weight: bold;">-k</span> flag adds markers
     for each of the primary and secondary "cusp" points (Red, Yellow,

@@ -15,15 +15,18 @@
  * see the License.txt file for licencing details.
  */
 
-#define DISPLAY_UPDATE_DELAY 200	/* default minimum display update delay allowance */
+/*
+ * Hmm. Should make display settling time a user overridable parameter,
+ * to allow for very fast response displays such as oled ?
+ */
+
+#define PATCH_UPDATE_DELAY 200		/* default & minimum patch update delay allowance */
+#define INSTRUMENT_REACTIONTIME 0	/* default nominal instrument reaction time */
 
 /* Display rise and fall time model. This is CRT like */
-#define DISPLAY_RISE_TIME 0.03		/* Assumed rise time to 90% of target level */ 
-#define DISPLAY_FALL_TIME 0.12		/* Assumed fall time to 90% of target level */
-#define DISPLAY_SETTLE_AIM 0.01		/* Aim for 1% of true level */
-#define DISPLAY_ABS_AIM 0.0001		/* Aim for .01% of true absolute level */
-
-int do_plot(double *x, double *y1, double *y2, double *y3, int n);
+#define DISPLAY_RISE_TIME 0.04		/* Assumed rise time to 90% of target level */ 
+#define DISPLAY_FALL_TIME 0.25		/* Assumed fall time to 90% of target level */
+#define DISPLAY_SETTLE_AIM 0.1		/* Aim for 0.2 Delta E */
 
 #ifdef NT
 #define OEMRESOURCE
@@ -63,9 +66,9 @@ WINSHLWAPI LPSTR WINAPI PathFindFileNameA(LPCSTR);
 WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
 
 #ifdef UNICODE
-#define PathFindFileName PathFindFileNameW
+#define PathFindFileNameX PathFindFileNameW
 #else
-#define PathFindFileName PathFindFileNameA
+#define PathFindFileNameX PathFindFileNameA
 #endif
 
 #endif /* NT */
@@ -104,7 +107,7 @@ typedef enum {
 /* Structure to store infomation about possible displays */
 typedef struct {
 	char *name;			/* Display name */
-	char *description;	/* Description of display */
+	char *description;	/* Description of display or URL */
 	int sx,sy;			/* Displays offset in pixels */
 	int sw,sh;			/* Displays width and height in pixels*/
 #ifdef NT
@@ -172,8 +175,10 @@ struct _ramdac {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Dispwin object */
-
-/* !!!! Make changes in dispwin.c, webwin.c & madvrwin.c !!!! */
+/* This is used by all the different test patch window types, */
+/* dispwin, webwin, madvrwin and ccwin.
+/* !!!! Make changes in dispwin.c, webwin.c, madvrwin.c & ccwin.c !!!!  */
+/* !!!! if this structure gets changed. !!!! */
 
 struct _dispwin {
 
@@ -193,9 +198,17 @@ struct _dispwin {
 	double s_rgb[3];	/* Current color (possibly scaled range) */
 	double r_rgb[3];	/* Current color (raster value) */
 	int out_tvenc;		/* 1 to use RGB Video Level encoding */
-	int update_delay;	/* Update latency delay in msec, default 200 */
-	int min_update_delay;	/* Minimum update latency delay, default 20, overriden by EV */
+	int patch_delay;	/* Measured patch update latency delay in msec, default 200 */
+	int inst_reaction;	/* Measured instrument reaction time delay in msec, default 0 */
+	double rise_time;	/* Display settling rise time */
+	double fall_time;	/* Display settling fall time */
+	double de_aim;		/* Display settling deltaE aim */
+	int min_update_delay;	/* Minimum overall update latency delay, default 20, */
+							/* overriden by EnvVar */
+	double settle_mult;	/* Settling time multiplier */
 	int do_resp_time_del;	/* NZ to compute and use expected display response time */
+	int do_update_del;		/* NZ to do update delay */ 
+	double extra_update_delay;	/* Test window internal extra delay (used in delay cal.) */
 	int nowin;			/* Don't create a test window */
 	int native;			/*  X0 = use current per channel calibration curve */
 						/*  X1 = set native linear output and use ramdac high precision */
@@ -204,6 +217,7 @@ struct _dispwin {
 	ramdac *oor;		/* Original orgininal ramdac contents, NULL if not accessible */
 	ramdac *or;			/* Original ramdac contents, NULL if not accessible, restored on exit */
 	ramdac *r;			/* Ramdac in use for native mode or general use */
+	double width, height;	/* Orginial size in mm or % */
 	int blackbg;		/* NZ if black full screen background */
 
 	char *callout;		/* if not NULL - set color Shell callout routine */
@@ -254,7 +268,7 @@ struct _dispwin {
 	Atom icc_out_atom;			/* ICC profile atom for this output */
 #endif /* randr >= V 1.2 */
 
-	/* Test windo access */
+	/* Test window access */
 	Window mywindow;
 	GC mygc;
 
@@ -277,7 +291,7 @@ struct _dispwin {
 	
 #endif /* UNIX_X11 */
 
-	void *pcntx;				/* Private context (ie., webwin) */
+	void *pcntx;				/* Private context (ie., webwin, ccwin) */
 	volatile unsigned int ncix, ccix;	/* Counters to trigger webwin colorchange */
 	volatile int mg_stop;				/* Stop flag */
 
@@ -315,15 +329,29 @@ struct _dispwin {
 	/* Return nz on error */
 	int (*set_color)(struct _dispwin *p, double r, double g, double b);
 
+	/* Set/unset the blackground color flag. */
+	/* Will only change on next set_col() */
+	/* Return nz on error */
+	int (*set_bg)(struct _dispwin *p, int blackbg);
+
 	/* Optional - may be NULL */
 	/* set patch info */
 	/* Return nz on error */
 	int (*set_pinfo)(struct _dispwin *p, int pno, int tno);
 
-	/* Set an update delay, and return the previous value */
-	/* Note that 0 is a special case and forces a zero delay */
-	/* in spite of min_update_delay and do_resp_time_del */
-	int (*set_update_delay)(struct _dispwin *p, int update_delay);
+	/* Set a patch delay and instrument reaction time values. */
+	/* The overall delay between patch change and triggering */
+	/* the instrument is (patch_delay + display_settle - inst_reaction) */
+	/* and will never be less than the min_update_delay value. */
+	void (*set_update_delay)(struct _dispwin *p, int patch_delay, int inst_reaction);
+
+	/* Set the display settling time constants. Use -ve value to leave current value */
+	/* unchanged. (These values are used as part of the update delay calculations - see above). */
+	void (*set_settling_delay)(struct _dispwin *p, double rise_time, double fall_time, double de_aim);
+
+	/* Enable or disable the update delay. This is used to disable the update delay */
+	/* when measuring the patch_delay and inst_reaction */
+	void (*enable_update_delay)(struct _dispwin *p, int enable);
 
 	/* Set a shell set color callout command line */
 	void (*set_callout)(struct _dispwin *p, char *callout);
@@ -352,9 +380,16 @@ dispwin *new_dispwin(
 );
 
 /* Shared implementation */
+void dispwin_set_default_delays(dispwin *p);
+void dispwin_set_update_delay(dispwin *p, int patch_delay, int inst_reaction);
+void dispwin_set_settling_delay(dispwin *p, double rise_time, double fall_time, double de_aim);
+void dispwin_enable_update_delay(dispwin *p, int enable);
+int dispwin_compute_delay(dispwin *p, double *orgb);
+
 ramdac *dispwin_clone_ramdac(ramdac *r);
 void dispwin_setlin_ramdac(ramdac *r);
 void dispwin_del_ramdac(ramdac *r);
+
 
 
 #define DISPWIN_H

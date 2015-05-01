@@ -301,6 +301,9 @@ static int xcal_read(xcal *p, char *filename) {
 		return p->errc;
 	}
 
+	if (tcg->ntables < 1)
+		return 1;
+
 	rv = xcal_read_cgats(p, tcg, table, filename);
 
 	tcg->del(tcg);

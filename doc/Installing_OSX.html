@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="GENERATOR" content="Mozilla/4.73 [en] (WinNT; I)
       [Netscape]">
     <title>Argyll Installation on Apple OS X</title>
@@ -13,61 +13,66 @@
     <h1> <u>Installing the software on Apple OS X<br>
       </u></h1>
     <br>
-    You will need to unpack the downloaded file in the location you have
-    chosen to hold the executable files. Typically this might be in <span
-      style="font-style: italic;">/usr/bin</span>, or perhaps <span
-      style="font-style: italic;">$HOME/bin/</span>, or <i>even $HOME.</i><br>
+    You will need to unpack the downloaded file in such a way that the
+    files it contains end up in the location you have chosen to hold its
+    contents.<br>
     <br>
-    You can unpack it by control-click on the downloaded file and &#8220;Open
-    With&#8221; BOMArchiveHelper or Archive Utility. Drag the resulting folder
-    to where you want it, e.g. into your home folder (/Users/usrnam
-    where usrnam is your username).<br>
+    If you want to install it system wide, then you probably want to
+    unpack it in the <i>/Applications</i> folder, so that it ends up in
+    the <i>/Applications/Argyll_VX.X.X</i> folder.<br>
+    Another option is just to install it somewhere under your $HOME
+    folder, such as <span style="font-style: italic;">$HOME/</span><i>Argyll_VX.X.X</i>
+    or <span style="font-style: italic;">$HOME/</span><i>bin/Argyll_VX.X.X</i>,
+    depending on how you like to organize your applications and utility
+    programs. ($HOME is the shell symbolic name for your home folder,
+    typically /Users/<i>username</i>. Another abbreviation for it is the
+    ~ character.)<br>
+    <br>
+    You can unpack it by control-click on the downloaded file and “Open
+    With” BOMArchiveHelper or Archive Utility. Drag the resulting folder
+    to where you want it, e.g. into <i>/Applications</i>, <i>$HOME</i>
+    or <i>$HOME/bin</i>.<br>
     <br>
     Alternatively you can unpack it on the command line using&nbsp; the
     command <span style="font-weight: bold;">tar -zxf</span> <span
       style="font-weight: bold;">archivename.tgz</span>, which will
-    create a directory <span style="font-weight: bold;">Argyll_VX.X.X</span>,
-    where X.X.X is the version number, and the executables will be in <span
-      style="font-weight: bold;">Argyll_VX.X.X/bin</span>. <br>
+    create a folder <span style="font-weight: bold;">Argyll_VX.X.X</span>
+    in your current folder, where X.X.X is the version number, and the
+    executables will be in <span style="font-weight: bold;">Argyll_VX.X.X/bin</span>
+    sub-folder.<br>
     <br>
     Open a Terminal shell. This will be in
     Applications-&gt;Utilities-&gt;Terminal (Dragging it to the dock is
     a good idea to make it more accessible).<br>
     <br>
-    You will have to configure your $PATH environment variable to give
-    access to the executable from your command line environment, by
-    editing your <span style="font-weight: bold;">.profile</span> file.
-    You can do this using a graphical editor, by using the open command:<br>
+    You should configure your $PATH environment variable to give the
+    shell access to the executable from your command line environment
+    without having to spell out the whole path every time, by editing
+    your <span style="font-weight: bold;">.profile</span> file, which
+    will be in your $HOME folder. You can open a graphical editor on
+    this file by using the open command:<br>
     <br>
-    &nbsp; ~$open .profile<br>
+    &nbsp; open $HOME/.profile<br>
     <br>
-    or by using some other editor, such as <span style="font-weight:
-      bold;">vi</span>.<br>
+    or alternatively, use some other text editor that you are familiar
+    with.<br>
     <br>
-    And add a line similar to the following line to your .path file<br>
+    Add a line similar to the following line to your .profile file:<br>
     <br>
-    &nbsp; PATH=$PATH:$HOME/Argyll_VX.X.X/bin<br>
+    &nbsp; PATH=$PATH:/Applications/Argyll_VX.X.X/bin<br>
     <br>
-    where "$HOME/Argyll_VX.X.X/bin" is the path to the executable
-    directory.<br>
+    where "/Applications/Argyll_VX.X.X/bin" is the path to the folder
+    that contains the ArgyllCMS executables.<br>
+    Save your changes and exit the editor.<br>
     <br>
-    If you are unfamiliar with how to do this, consult an appropriate
-    tutorial, e.g. &lt;<a
-href="http://heather.cs.ucdavis.edu/matloff/public_html/UnixAndC/Unix/ShellIntro.pdf">ShellIntro</a>&gt;.
-The
-.tgz
-file
-also
-contains
-several
-useful
-reference
-
-
-
-    files (such as scanner chart recognition templates, sample
-    illumination spectrum etc.) in the ref sub-directory, as well as all
-    the current documentation in a doc sub-directory.<br>
+    If you want further guidance in setting up and using a command line
+    environment, then please consult an appropriate tutorial, e.g. &lt;<a
+href="http://heather.cs.ucdavis.edu/matloff/public_html/UnixAndC/Unix/ShellIntro.pdf">ShellIntro</a>&gt;.<br>
+    <br>
+    The .tgz file also contains several useful reference files (such as
+    scanner chart recognition templates, sample illumination spectrum
+    etc.) in the <b>ref</b> sub-folder, as well as all the current
+    documentation in a <b>doc</b> sub-folder.<br>
     <br>
     For most devices there is nothing special to do. Plug in and go.
     Some devices may not work without some extra help though:<br>
@@ -90,7 +95,7 @@ href="http://www.xrite.com/product_overview.aspx?ID=1161&amp;Action=support&amp;
     &nbsp;&nbsp;&nbsp; sudo spotread<br>
     <br>
     and then you will be asked for the root password.<br>
-    While these methods will work, they are incovenient. <br>
+    While these methods will work, they are inconvenient. <br>
     <br>
     3) Alter the X-Rite drivers Daeomon so that it runs under your user
     account.<br>
@@ -111,11 +116,23 @@ Type&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbs
 
 
 
+
+
+
+
+
+
       Value&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
     </span><br>
     &nbsp;&nbsp;&nbsp; UserName &nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 string&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
 
 
 
@@ -180,11 +197,23 @@ Type&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbs
 
 
 
+
+
+
+
+
+
       Value&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
     </span><br>
     &nbsp;&nbsp;&nbsp; UserName &nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 string&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
 
 
 
@@ -213,12 +242,18 @@ specbos
 
 
 
-        1201 and 1211</span><br>
+
+
+
+
+
+
+        1201 and 1211</span> and <u>Klein K10A</u><br>
     </h3>
     <br>
     If you are using the <b>JETI</b> specbos <span style="font-weight:
       bold;">1211</span><span style="font-weight: bold;"> </span>and <b>1201</b>,
-    then you may need to install the <a
+    or the <b>Klein K10A</b> then you may need to install the <a
       href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual COM
       Port Drivers</a> (VCP), if they are not already on your system.<br>
     <br>
@@ -227,7 +262,7 @@ specbos
     Argyll from accessing it. To overcome this, you need to install a
     codeless kernel extension if you wish to use the HCFR colorimeter,
     that prevents this from happening. From the command line you need to
-    create a directory called Argyll.kext somewhere convenient, and then
+    create a folder called Argyll.kext somewhere convenient, and then
     place in it one file called Info.plist, containing the following:<br>
     <br>
     &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
@@ -276,6 +311,12 @@ specbos
     &nbsp;&nbsp; &lt;key&gt;idVendor&lt;/key&gt;
     &lt;integer&gt;1243&lt;/integer&gt;<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
 
 
 

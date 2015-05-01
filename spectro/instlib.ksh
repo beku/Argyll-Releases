@@ -56,6 +56,8 @@ SPECTRO_FILES="
 	icoms.h
 	inst.h
 	inst.c
+	disptechs.h
+	disptechs.c
 	insttypes.c
 	insttypes.h
 	insttypeinst.h
@@ -95,10 +97,10 @@ SPECTRO_FILES="
 	colorhug.h
 	spyd2.c
 	spyd2.h
-	spyd2setup.h
-	spyd2PLD.h
 	specbos.h
 	specbos.c
+	kleink10.h
+	kleink10.c
 	oemarch.c
 	oemarch.h
 	oeminst.c

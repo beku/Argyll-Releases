@@ -3,8 +3,8 @@
 
 # Optimization and Debug flags
 
-#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
 #PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
 #PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
 #PREF_CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
@@ -24,7 +24,7 @@ Headers = rspl.h ;
 Library librspl : rspl.c $(SCAT).c rev.c gam.c spline.c opt.c : : : ../h ../numlib ../plot ;
 
 HDRS = ../h ../numlib ../plot $(TIFFINC) ;
-LINKLIBS = librspl ../numlib/libnum ../plot/libplot ../plot/libvrml ../icc/libicc $(TIFFLIB) $(JPEGLIB) ;
+LINKLIBS = librspl ../plot/libplot ../numlib/libnum ../numlib/libui ../plot/libvrml ../icc/libicc $(TIFFLIB) $(JPEGLIB) ;
 
 # Test programs
 MainsFromSources revbench.c c1.c cw1.c cw3.c c1df.c t2d.c t2ddf.c t3d.c t3ddf.c tnd.c trnd.c ;
@@ -36,7 +36,7 @@ if $(BUILD_TESTS) {
 	HDRS = ../h ../numlib ../plot ../icc ../rspl ../xicc ../gamut ../cgats ../spectro $(TIFFINC) ;
 	LINKLIBS = ../xicc/libxicc ../gamut/libgamut ../spectro/libinsttypes librspl
 	           ../cgats/libcgats ../icc/libicc ../plot/libplot ../plot/libvrml
-	           ../numlib/libnum $(TIFFLIB) $(JPEGLIB) ;
+	           ../numlib/libnum ../numlib/libui $(TIFFLIB) $(JPEGLIB) ;
 
 	# Smoothness factor tuning test in Nd.
 	Main smtnd : smtnd.c ;
@@ -58,8 +58,13 @@ if $(BUILD_TESTS) {
 }
 
 
-#	Main tt : tt.c : : ../xicc : : : ../plot/libvrml ../icc/libicc ;
+# Test code
+if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/rspl" {
+	#	Main tt : tt.c : : ../xicc : : : ../plot/libvrml ../icc/libicc ;
 
+	Main crossv : crossv.c : : : ../numlib ../plot : : ../plot/libplot ../numlib/libui ../numlib/libnum ;
+
+}
 if $(BUILD_JUNK) {
 
 	HDRS = ../h ../numlib ;

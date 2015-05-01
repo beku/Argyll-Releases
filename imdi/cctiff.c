@@ -17,6 +17,10 @@
 
 /* TTBD:
 
+	Add dithered 8 bit output mode. Generate 16 bit
+	internally, then apply screening down to 8 bits
+	Use render/thrscreen to do the hard work.
+
 	Should special case jpeg noop used to embed profile
 	in output, using jpeg_read_coefficients()/jpeg_write_coefficients()
 	rather than jpeg_start_decompress(), jpeg_read_scanlines() etc.
@@ -92,6 +96,7 @@
 #include "icc.h"
 #include "xicc.h"
 #include "imdi.h"
+#include "ui.h"
 
 #undef DEBUG		/* Print detailed debug info */
 
@@ -1711,12 +1716,15 @@ main(int argc, char *argv[]) {
 		} else {
 
 			if (wphotometric == PHOTOMETRIC_SEPARATED) {
-				icc *c = su.profs[su.lclut].c; 
+				icc *c = NULL;
 				icmColorantTable *ct;
 				int iset;
 				int inlen;
 				char *inames = NULL;
 
+				if (su.lclut >= 0 && su.lclut < su.nprofs)
+					c = su.profs[su.lclut].c; 
+ 
 				iset = ColorSpaceSignature2TiffInkset(su.outs, &inlen, &inames);
 
 				/* Use ICC profile ink names if they are available */

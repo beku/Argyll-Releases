@@ -116,3 +116,12 @@ available via the web (as examples of how it has been done, and the variety
 of facilities a CMM may make available.)
 
 
+============================================================================
+Autotools and some Linux systems expect env vars:
+
+CFLAGS: C flags, passed during compile AND link (e.g., -O2 -std=c99)
+CXXFLAGS: C++ flags, passed during compile AND link (e.g., -O2 -std=c++98)
+CPPFLAGS: pre-processor flags, passed ONLY during compile (e.g., -DNDEBUG=1 -Iadditional/include)
+LDFLAGS: linker flags, passed ONLY during link (e.g., -export_dynamic -Ladditional/libdir -llib)
+
+to have effect.

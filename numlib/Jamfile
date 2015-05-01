@@ -10,8 +10,8 @@ PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 #PREF_LINKFLAGS	= $(LINKPROFFLAG) ;    # Profile flags
 
 # Products
-Libraries = libnum ;
-Headers = numlib.h ;
+Libraries = libnum libui ;
+Headers = numlib.h libui.h ;
 
 #Install
 #InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
@@ -26,3 +26,10 @@ LINKLIBS = libnum ;
 # All test programs are made from a single source file
 MainsFromSources dnsqtest.c tpowell.c tdhsx.c LUtest.c svdtest.c zbrenttest.c soboltest.c ;
 
+# Compile .c as .m
+if $(OS) = MACOSX {
+	ObjectCcFlags ui : -ObjC ;
+}
+
+# UI setup library
+Library libui.lib : ui.c ;

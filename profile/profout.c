@@ -66,6 +66,7 @@
 #undef IMP_MONO					/* [Undef] Turn on development code */
 
 #define EMPH_DISP_BLACKPOINT	/* [Define] Increase weight near diplay black point */
+#define IGNORE_DISP_ZEROS	    /* [Define] Ignore points with zero value if not at dev. zero */
 #define NO_B2A_PCS_CURVES		/* [Define] PCS curves seem to make B2A less accurate. Why ? */
 #define USE_CAM_CLIP_OPT		/* [Define] Clip out of gamut in CAM space rather than PCS */
 #define USE_LEASTSQUARES_APROX	/* [Define] Use least squares fitting approximation in B2A */
@@ -126,7 +127,7 @@
 	looking up the profile in absolute mode.
 
 	For a Matrix profile, in the case of the white point this is
-	because we're not using the ICC 16 bit quantized value to
+	because we may not be using the ICC 16 bit quantized value to
 	create the relative transform matrix, and in the case of
 	the black point, it can never be a perfect match because the black
 	point returned by a profile lookup will be the quantized black
@@ -644,6 +645,7 @@ make_output_icc(
 	int verify,				/* nz to print verification */
 	int clipprims,			/* Clip white, black and primaries */
 	double wpscale,			/* >= 0.0 for media white point scale factor */
+//	double *bpo,			/* != NULL for XYZ black point override */
 	icxInk *oink,			/* Ink limit/black generation setup (NULL if n/a) */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
@@ -671,8 +673,8 @@ make_output_icc(
 	profxinf *xpi			/* Optional Profile creation extra data */
 ) {
 	int isdisp;				/* nz if this is a display device, 0 if output */
-	double dispLuminance = 0.0;	/* Display luminance. 0 if not known */
-	int isdnormed = 0;		/* Has display data been normalised to 100 ? */
+	double dispLuminance = 0.0;	/* Display luminance. 0.0 if not known */
+	int isdnormed = 0;		/* Has display data been normalised to white Y = 100 ? */
 	int allintents;			/* nz if all intents should possibly be created */
 	icmFile *wr_fp;
 	icc *wr_icco;
@@ -745,6 +747,8 @@ make_output_icc(
 		}
 
 		/* See if the CIE data has been normalised to Y = 100 */
+		/* If so, it's assumed to be by LUMINANCE_XYZ_CDM2 */
+		/* By default assume not. */
 		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
 		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
 			isdnormed = 0;
@@ -1020,15 +1024,7 @@ make_output_icc(
 		if (xpi != NULL && xpi->creator != 0L)
 			wh->creator = xpi->creator;
 
-#ifdef NT
-		wh->platform = icSigMicrosoft;
-#endif
-#ifdef __APPLE__
-		wh->platform = icSigMacintosh;
-#endif
-#if defined(UNIX) && !defined(__APPLE__)
-		wh->platform = icmSig_nix;
-#endif
+		/* Default platform is OK */
 
 		if (xpi != NULL && xpi->transparency)
 			wh->attributes.l |= icTransparency;
@@ -1656,15 +1652,34 @@ make_output_icc(
 				tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
 				tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
 				tpat[i].v[2] = *((double *)icg->t[0].fdata[i][Zi]);
-				if (!isLab && (!isdisp || isdnormed != 0)) {
-					tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
-					tpat[i].v[1] /= 100.0;
-					tpat[i].v[2] /= 100.0;
-				}
-				if (!isLab && wantLab) { /* Convert test patch result XYZ to PCS (D50 Lab) */
-					icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
-				} else if (isLab && !wantLab) {
-					icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+				/* For display, convert to measurement XYZ and re-normalise later */
+				if (isdisp) {
+					if (isLab) {
+						icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+						isLab = 0;
+					} else if (isdnormed) {
+						tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
+						tpat[i].v[1] /= 100.0;
+						tpat[i].v[2] /= 100.0;
+					}
+					if (isdnormed && dispLuminance > 0.0) {
+						tpat[i].v[0] *= dispLuminance;
+						tpat[i].v[1] *= dispLuminance;
+						tpat[i].v[2] *= dispLuminance;
+					}	/* else Hmm. */
+
+				/* Convert to normalised 0.0 - 1.0 range in target PCS */
+				} else {
+					if (!isLab) {
+						tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
+						tpat[i].v[1] /= 100.0;
+						tpat[i].v[2] /= 100.0;
+					}
+					if (!isLab && wantLab) { /* Convert test patch result XYZ to PCS (D50 Lab) */
+						icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
+					} else if (isLab && !wantLab) {
+						icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+					}
 				}
 			}
 
@@ -1684,10 +1699,14 @@ make_output_icc(
 			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
 			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
-			if (!isdisp || isdnormed != 0)
-				sp.norm = 100.0;
-			else
+			if (isdisp) {				/* convert to measurement values - re-norm later */
 				sp.norm = 1.0;
+				if (isdnormed)
+					sp.norm *= 100.0;
+				if (isdnormed && dispLuminance > 0.0)
+					sp.norm /= dispLuminance;
+			} else
+				sp.norm = 100.0;		/* Convert to 0.0 - 1.0 ref/trans range */
 
 			/* Find the fields for spectral values */
 			for (j = 0; j < sp.spec_n; j++) {
@@ -1820,7 +1839,6 @@ make_output_icc(
 			}
 
 			for (i = 0; i < npat; i++) {
-
 				tpat[i].w = 1.0;
 				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ci]) / 100.0;
 				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][mi]) / 100.0;
@@ -1841,59 +1859,45 @@ make_output_icc(
 
 				/* Convert it to CIE space */
 				sp2cie->convert(sp2cie, tpat[i].v, &sp);
-
 			}
 
 			sp2cie->del(sp2cie);		/* Done with this */
-
 		}
 
-		isLab = wantLab;		/* We now have what we want */
-
-		/* Normalize display values to Y = 1.0 if needed */
-		/* (re-norm spec derived, since observer may be different) */
-		if (isdisp && (isdnormed == 0 || spec != 0)) {
+		/* Normalize display values to Y = 1.0 */
+		if (isdisp) {
 			double scale = -1e6;
 
-			if (wantLab) {
-				double bxyz[3];
+			if (isLab)		/* assert */
+				error("Internal - display values must be XYZ for normalisation");
 
-				/* Locate max Y */
-				for (i = 0; i < npat; i++) {
-					icmLab2XYZ(&icmD50, bxyz,  tpat[i].v);
-					if (bxyz[1] > scale)
-						scale = bxyz[1];
-				}
-				
-				scale = 1.0/scale;
-
-				/* Scale max Y to 1.0 */
-				for (i = 0; i < npat; i++) {
-					icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
-					tpat[i].v[0] *= scale;
-					tpat[i].v[1] *= scale;
-					tpat[i].v[2] *= scale;
-					icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
-				}
-			} else {
-
-				/* Locate max Y */
-				for (i = 0; i < npat; i++) {
-					if (tpat[i].v[1] > scale)
-						scale = tpat[i].v[1];
-				}
-				
-				scale = 1.0/scale;
-
-				for (i = 0; i < npat; i++) {
-					tpat[i].v[0] *= scale;
-					tpat[i].v[1] *= scale;
-					tpat[i].v[2] *= scale;
-				}
+			/* Locate max Y */
+			for (i = 0; i < npat; i++) {
+				if (tpat[i].v[1] > scale)
+					scale = tpat[i].v[1];
 			}
-		}
-	}	/* End of reading in CGATs file */
+			
+			scale = 1.0/scale;
 
+			for (i = 0; i < npat; i++) {
+				tpat[i].v[0] *= scale;
+				tpat[i].v[1] *= scale;
+				tpat[i].v[2] *= scale;
+
+				if (wantLab)
+					icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
+			}
+
+			/* Change Black Point Override XYZ from reading to normalised */
+//			if (bpo != NULL) {
+//				bpo[0] *= scale;
+//				bpo[1] *= scale;
+//				bpo[2] *= scale;
+//			}
+		}
+		isLab = wantLab;		/* We now have what we want */
+
+	}	/* End of reading in CGATs file */
 
 #ifdef EMPH_DISP_BLACKPOINT
 	/* Add extra weighting to sample points near black for additive display. */
@@ -1903,20 +1907,20 @@ make_output_icc(
 	/* of the possible "scaled" viewing mode of additive display */
 	/* usage ? What about print and scan ?? */
 	if (isdisp && (imask == ICX_W || imask == ICX_RGB)) {
-		double minL = 1e6;;
+		double minL = 1e6;
 
 		/* Locate the lowest L* value */
 		for (i = 0; i < npat; i++) {
-			if (wantLab) {
-				if (tpat[i].v[0] < minL)
-					minL = tpat[i].v[0];
-			} else {
-				double lab[2];
+			double lab[3];
+
+			if (wantLab)
+				lab[0] = tpat[i].v[0];
+			else
 				icmXYZ2Lab(&icmD50, lab, tpat[i].v);
-				if (lab[0] < minL)
-					minL = lab[0];
-			}
+			if (lab[0] < minL)
+				minL = lab[0];
 		}
+//printf("~1 final minL = %f\n",minL);
 
 		/* Compute weighting factor */
 		/* (Hard to guess what numbers to put in here.. */
@@ -1934,10 +1938,51 @@ make_output_icc(
 				continue;
 			L = 1.0 + 19.0 * pow(1.0 - L, 3.0); 
 			tpat[i].w *= L;
-//printf("~1 pat %d %f %f %f weight %f\n", i,tpat[i].p[0], tpat[i].p[1], tpat[i].p[2], tpat[i].w);
+//printf("~1 pat %d: %f %f %f weight %f\n", i,tpat[i].p[0], tpat[i].p[1], tpat[i].p[2], tpat[i].w);
 		}
 	}
 #endif /* EMPH_DISP_BLACKPOINT */
+
+#ifdef IGNORE_DISP_ZEROS
+	/* If a display has a very good black, and the instrument is not sensitive */
+	/* enough to properly measur the near black values and returns 0.0, */
+	/* then the resulting profile will tend to incorrectly boost the */
+	/* dark shadows. A heuristic to counteract this problem is to */
+	/* ignore any readings that have any value <= 0.0 except */
+	/* those for device black. */ 
+	
+	if (isdisp && (imask == ICX_W || imask == ICX_RGB)) {
+		int noomit = 0;
+
+		for (i = 0; i < npat; i++) {
+			double xyz[3], L;
+			if (wantLab) 
+				icmLab2XYZ(&icmD50, xyz, tpat[i].v);
+			else
+				icmCpy3(xyz, tpat[i].v);
+
+			/* Don't ignore device zero point */
+			if (imask == ICX_W) {
+				if (tpat[i].p[0] <= 0.0)
+					continue;
+			} else {
+				if (tpat[i].p[0] <= 0.0
+				 && tpat[i].p[1] <= 0.0
+				 && tpat[i].p[2] <= 0.0)
+					continue;
+			}
+//printf("~1 pat %d: XYZ %f %f %f\n", i, xyz[0], xyz[1], xyz[2]);
+			/* Ignore any XYZ that is zero */
+			if (xyz[0] <= 0.0 || xyz[1] <= 0.0 || xyz[2] <= 0.0) {
+				tpat[i].w = 0.0;
+				noomit++;
+//printf("~1  ignored\n");
+			}
+		}
+		if (verb)
+			fprintf(verbo,"Omitted %d zero measurements\n",noomit);
+	}
+#endif /* IGNORE_DISP_ZEROS */
 
 	if (isLut) {
 		xicc *wr_xicc;			/* extention object */
@@ -1981,7 +2026,9 @@ make_output_icc(
 			               ICX_2PASSSMTH |
 #endif
 			               flags,
-			               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev, demph, 
+			               npat, npat, tpat, NULL, dispLuminance, wpscale,
+//				           bpo,
+				           smooth, avgdev, demph, 
 			               NULL, oink, cal, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -2187,6 +2234,9 @@ make_output_icc(
 						if (absname[i] == absname[j]) {
 							cx.abs_intent[j] = cx.abs_intent[i];
 							cx.abs_luo[j] = cx.abs_luo[i];
+							abs_xicc[j] = abs_xicc[i];
+							abs_icc[j] = abs_icc[i];
+							abs_fp[j] = abs_fp[i];
 							if (verb)
 								printf("Applying %s abstract profile '%s' to %s table\n",
 								i == 0 ? "first" : i == 1 ? "second" : "third",
@@ -2490,7 +2540,7 @@ make_output_icc(
 
 				optcomb tcomb = oc_imo;	/* Create all by default */
 
-				if ((xf = new_xfit()) == NULL) {
+				if ((xf = new_xfit(icco)) == NULL) {
 					error("profout: Creation of xfit object failed");
 				}
 					
@@ -2727,15 +2777,17 @@ make_output_icc(
 			/* Free up abstract transform */
 			for (i = 0; i < cx.ntables; i++) {
 				if (cx.abs_luo[i] != NULL) {
-					for (j = cx.ntables-1; j >= i; j--) {	/* Free all duplicates */
-						if (cx.abs_luo[j] == cx.abs_luo[i]) {
-							cx.abs_luo[j]->del(cx.abs_luo[j]);
-							abs_xicc[j]->del(abs_xicc[j]);
-							abs_icc[j]->del(abs_icc[j]);
-							abs_fp[j]->del(abs_fp[j]);
+					/* Free this and all associated resources */
+					cx.abs_luo[i]->del(cx.abs_luo[i]);
+					abs_xicc[i]->del(abs_xicc[i]);
+					abs_icc[i]->del(abs_icc[i]);
+					abs_fp[i]->del(abs_fp[i]);
+					/* Mark all duplicates as being free'd too */
+					for (j = i+1; j < cx.ntables; j++) {
+						if (cx.abs_luo[j] == cx.abs_luo[i])
 							cx.abs_luo[j] = NULL;
-						}
 					}
+					cx.abs_luo[i] = NULL;
 				}
 			}
 
@@ -2899,7 +2951,9 @@ make_output_icc(
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdRev,
 			           flags,		 		/* Compute white & black */
-		               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev, demph,
+		               npat, npat, tpat, NULL, dispLuminance, wpscale,
+//			           bpo,
+			           smooth, avgdev, demph,
 		               NULL, oink, cal, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 

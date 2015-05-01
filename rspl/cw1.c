@@ -4,7 +4,7 @@
 /************************************************/
 
 /* Discrete regularized spline versions */
-/* Test variable grid spacing in 1D
+/* Test variable grid spacing in 1D */
 
 /* Author: Graeme Gill
  * Date:   4/10/95
@@ -28,8 +28,9 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
-#include "plot.h"
 #include "rspl.h"
+#include "plot.h"
+#include "ui.h"
 
 double lin();
 void usage(void);
@@ -230,10 +231,10 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	
-		printf("Full scale: Black = lin, Red = even, Green = pow2\n");
+		printf("Full scale: Black = ref, Red = even, Green = pow2\n");
 		do_plot6(xx1,yy1[0],yy1[1],yy1[2],NULL,NULL,NULL,XRES);
 
-		printf("Magnified: Black = lin, Red = even, Green = pow2\n");
+		printf("Magnified: Black = ref, Red = even, Green = pow2\n");
 		do_plot6(xx2,yy2[0],yy2[1],yy2[2],NULL,NULL,NULL,XRES);
 	}
 	return 0;

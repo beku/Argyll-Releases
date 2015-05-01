@@ -52,20 +52,20 @@
 #include "xicc.h"
 #include "conv.h"
 #include "plot.h"
+#include "ui.h"
 #else /* SALONEINSTLIB */
 #include "sa_config.h"
 #include "numsup.h"
 #include "xspect.h"
 #include "conv.h"
 #endif /* SALONEINSTLIB */
-#include "ccss.h"
-#include "ccmx.h"
 #include "inst.h"
 #include "icoms.h"
+#include "ccss.h"
+#include "ccmx.h"
 #include "instappsup.h"
-#include "spyd2setup.h"
-#ifdef EN_SPYD2
-#include "spyd2setup.h"
+#ifdef ENABLE_USB
+# include "spyd2.h"
 #endif
 
 #if defined (NT)
@@ -238,12 +238,20 @@ static int gcc_bug_fix(int i) {
 }
 #endif	/* APPLE */
 
+/* A user callback to trigger for -O option */
+static inst_code uicallback(void *cntx, inst_ui_purp purp) {
+
+	if (purp == inst_armed)
+		return inst_user_trig;
+	return inst_ok;
+}
+
 /*
 
   Flags used:
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
-  upper     ... .  .  .  . .. ...  
+  upper     ... .  .  .. . .. ...  
   lower  . .... ..      .  .. . .. 
 
 */
@@ -255,8 +263,6 @@ usage(char *diag, ...) {
 	inst2_capability cap2 = 0;
 	fprintf(stderr,"Measure spot values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 2 or later\n");
-	if (setup_spyd2() == 2)
-		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -279,7 +285,8 @@ usage(char *diag, ...) {
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+				if ((paths[i]->itype == instSpyder1 && setup_spyd2(0) == 0)
+				 || (paths[i]->itype == instSpyder2 && setup_spyd2(1) == 0))
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
@@ -301,7 +308,7 @@ usage(char *diag, ...) {
 	fprintf(stderr," -I illum             Set simulated instrument illumination using FWA (def -i illum):\n");
 	fprintf(stderr,"                       M0, M1, M2, A, C, D50, D50M2, D65, F5, F8, F10 or file.sp]\n");
 #endif
-	fprintf(stderr," -i illum             Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
+	fprintf(stderr," -i illum             Choose illuminant for computation of CIE XYZ from spectral reflectance & FWA:\n");
 #ifndef SALONEINSTLIB
 	fprintf(stderr,"                       A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 #else
@@ -330,6 +337,7 @@ usage(char *diag, ...) {
 #endif /* !SALONEINSTLIB */
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
+	fprintf(stderr," -O                   Do one cal. or measure and exit\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
 	if (cap2 & inst2_ccmx)
 		fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
@@ -356,6 +364,7 @@ int main(int argc, char *argv[]) {
 	int debug = 0;
 	int docalib = 0;				/* Do a manual instrument calibration */
 	int nocal = 0;					/* Disable auto calibration */
+	int doone = 0;					/* Do one calibration or measure and exit */
 	int pspec = 0;					/* 1 = Print out the spectrum for each reading */
 									/* 2 = Plot out the spectrum for each reading */
 	int trans = 0;					/* Use transmissioin mode */
@@ -393,8 +402,10 @@ int main(int argc, char *argv[]) {
 	inst_code rv;
 	int uswitch = 0;				/* Instrument switch is enabled */
 	int spec = 0;					/* Need spectral data for observer/illuminant flag */
+	int tillum_set = 0;				/* User asked for custom target illuminant spectrum */
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
+	int illum_set = 0;				/* User asked for custom illuminant spectrum */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;				/* Custom illumination spectrum */
 	icxObserverType obType = icxOT_default;
@@ -403,7 +414,8 @@ int main(int argc, char *argv[]) {
 	xsp2cie *sp2cie = NULL;			/* default conversion */
 	xsp2cie *sp2cief[26];			/* FWA corrected conversions */
 	double wXYZ[3] = { -10.0, 0, 0 };/* White XYZ for display white relative */
-	double chmat[3][3];				/* Chromatic adapation matrix */
+	double chmat[3][3];				/* Chromatic adapation matrix for white point relative */
+	double XYZ[3] = { 0.0, 0.0, 0.0 };		/* Last XYZ scaled 0..100 or absolute */
 	double Lab[3] = { -10.0, 0, 0};	/* Last Lab */
 	double rXYZ[3] = { 0.0, -10.0, 0};	/* Reference XYZ */
 	double rLab[3] = { -10.0, 0, 0};	/* Reference Lab */
@@ -421,7 +433,6 @@ int main(int argc, char *argv[]) {
 
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
 	check_if_not_interactive();
-	setup_spyd2();				/* Load firware if available */
 
 	for (i = 0; i < 26; i++)
 		sp2cief[i] = NULL;
@@ -492,33 +503,33 @@ int main(int argc, char *argv[]) {
 				if (na == NULL) usage("Paramater expected following -I");
 				if (strcmp(na, "A") == 0
 				 || strcmp(na, "M0") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_A;
 				} else if (strcmp(na, "C") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0
 				        || strcmp(na, "M1") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_D50;
 				} else if (strcmp(na, "D50M2") == 0
 				        || strcmp(na, "M2") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_D65;
 				} else if (strcmp(na, "F5") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_F5;
 				} else if (strcmp(na, "F8") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_F8;
 				} else if (strcmp(na, "F10") == 0) {
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_F10;
 				} else {	/* Assume it's a filename */
-					spec = 1;
+					tillum_set = spec = 1;
 					tillum = icxIT_custom;
 					if (read_xspect(&cust_tillum, na) != 0)
 						usage("Failed to read custom target illuminant spectrum in file '%s'",na);
@@ -530,32 +541,32 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Paramater expected following -i");
 				if (strcmp(na, "A") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_A;
 				} else if (strcmp(na, "C") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_D50;
 				} else if (strcmp(na, "D50M2") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_D65;
 #ifndef SALONEINSTLIB
 				} else if (strcmp(na, "F5") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_F5;
 				} else if (strcmp(na, "F8") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_F8;
 				} else if (strcmp(na, "F10") == 0) {
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_F10;
 				} else {	/* Assume it's a filename */
-					spec = 1;
+					illum_set = spec = 1;
 					illum = icxIT_custom;
 					if (read_xspect(&cust_illum, na) != 0)
 						usage("Unable to read custom illuminant file '%s'",na);
@@ -622,9 +633,9 @@ int main(int argc, char *argv[]) {
 				if (argv[fa][2] != '\000') {
 					fa = nfa;
 					if (argv[fa][2] == 'b' || argv[fa][2] == 'B')
-						emiss = 2;
+						emiss = 2;		/* Display brightness relative */
 					else if (argv[fa][2] == 'w' || argv[fa][2] == 'W')
-						emiss = 3;
+						emiss = 3;		/* Display white point relative */
 					else
 						usage("-p modifier '%c' not recognised",argv[fa][2]);
 				}
@@ -697,6 +708,10 @@ int main(int argc, char *argv[]) {
 			/* No auto calibration */
 			} else if (argv[fa][1] == 'N') {
 				nocal = 1;
+
+			/* Do one cal. or measure and exit */
+			} else if (argv[fa][1] == 'O') {
+				doone = 1;
 
 			/* High res mode */
 			} else if (argv[fa][1] == 'H') {
@@ -773,6 +788,11 @@ int main(int argc, char *argv[]) {
 			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 		}
 	}
+
+	/* Check for some user mistakes */
+
+	if ((tillum_set || illum_set) && emiss)
+		warning("-I or -i parameter makes no sense with emissive or ambient measurement!");
 
 	/* - - - - - - - - - - - - - - - - - - -  */
 	if ((icmps = new_icompaths(g_log)) == NULL)
@@ -943,7 +963,7 @@ int main(int argc, char *argv[]) {
 						return -1;
 					}
 				} else
-					printf("Display type ignored - instrument doesn't support display type\n");
+					printf("Display type ignored - instrument doesn't support display type selection\n");
 			}
 
 		} else {
@@ -1083,7 +1103,7 @@ int main(int argc, char *argv[]) {
 					it->del(it);
 					return -1;
 				}
-				if ((rv = it->col_cor_mat(it, cx->matrix)) != inst_ok) {
+				if ((rv = it->col_cor_mat(it, cx->dtech, cx->cc_cbid, cx->matrix)) != inst_ok) {
 					printf("\nSetting Colorimeter Correction Matrix failed with error :'%s' (%s)\n",
 				     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 					cx->del(cx);
@@ -1122,7 +1142,7 @@ int main(int argc, char *argv[]) {
 					it->del(it);
 					return -1;
 				}
-				if ((rv = it->col_cal_spec_set(it, cs->samples, cs->no_samp)) != inst_ok) {
+				if ((rv = it->col_cal_spec_set(it, cs->dtech, cs->samples, cs->no_samp)) != inst_ok) {
 					printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
 				     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 					cs->del(cs);
@@ -1229,6 +1249,10 @@ int main(int argc, char *argv[]) {
 	if (verb)
 		printf("Init instrument success !\n");
 
+	if (doone) {	/* Set to trigger immediately */
+		it->set_uicallback(it, uicallback, NULL);
+	}
+
 	if (spec) {
 		/* Any non-illuminated mode has no illuminant */
 		if (emiss || tele || ambient)
@@ -1267,7 +1291,6 @@ int main(int argc, char *argv[]) {
 	/* Read spots until the user quits */
 	for (ix = 1;; ix++) {
 		ipatch val;
-		double XYZ[3] = { 0.0, 0.0, 0.0 };		/* XYZ scaled 0..100 or absolute */
 		double tXYZ[3];
 #ifndef SALONEINSTLIB
 		double cct, vct, vdt;
@@ -1425,7 +1448,7 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, doone);
 				if (ev != inst_ok) {	/* Abort or fatal error */
 					printf("\nSpot read got abort or error from calibration\n");
 					break;
@@ -1445,6 +1468,9 @@ int main(int argc, char *argv[]) {
 						break;			/* Abort */
 					}
 				}
+
+				if (doone)
+					break;
 			}
 
 			if (ambient == 2) {	/* Flash ambient */
@@ -1609,7 +1635,7 @@ int main(int argc, char *argv[]) {
 		} else if ((rv & inst_mask) == inst_needs_cal) {
 			inst_code ev;
 			printf("\n\nSpot read failed because instruments needs calibration.\n");
-			ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+			ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, doone);
 			if (ev != inst_ok) {	/* Abort or fatal error */
 				printf("\nSpot read got abort or error from calibrate\n");
 				break;
@@ -1790,7 +1816,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			ev = inst_handle_calibrate(it, inst_calt_available, inst_calc_none, NULL, NULL);
+			ev = inst_handle_calibrate(it, inst_calt_available, inst_calc_none, NULL, NULL, doone);
 			if (ev != inst_ok) {	/* Abort or fatal error */
 				printf("\nSpot read got abort or error from calibrate\n");
 				break;
@@ -1874,8 +1900,9 @@ int main(int argc, char *argv[]) {
 
 				printf("\nRefresh rate hasn't been calibrated\n");
 
-				if ((ev = it->get_set_opt(it, inst_opt_get_dtinfo, &refrmode, NULL)) != inst_ok) {
-					printf("Can't get curretn refresh mode from instrument\n");
+				/* (refrmode may be the default disptype_unknown refrmode) */
+				if ((ev = it->get_disptechi(it, NULL, &refrmode, NULL)) != inst_ok) {
+					printf("Can't get current refresh mode from instrument\n");
 					--ix;
 					continue;
 				}
@@ -1885,7 +1912,7 @@ int main(int argc, char *argv[]) {
 					continue;
 				}
 
-				ev = inst_handle_calibrate(it, inst_calt_ref_freq, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_ref_freq, inst_calc_none, NULL, NULL, doone);
 
 				if (ev != inst_ok) {	/* Abort or fatal error */
 					printf("\nSpot read got abort or error from calibrate\n");
@@ -2169,9 +2196,6 @@ int main(int argc, char *argv[]) {
 				  else {	/* emiss == 3, white point relative */
 
 					/* Normalize to white and scale to 0..100 */
-//					XYZ[0] = XYZ[0] * icmD50_100.X / wXYZ[0];
-//					XYZ[1] = XYZ[1] * icmD50_100.Y / wXYZ[1];
-//					XYZ[2] = XYZ[2] * icmD50_100.Z / wXYZ[2];
 					icmMulBy3x3(XYZ, chmat, XYZ);
 					icmScale3(XYZ, XYZ, 100.0);
 				}
@@ -2326,6 +2350,9 @@ int main(int argc, char *argv[]) {
 				fprintf(fp,"\n");
 			}
 		}
+		if (doone)
+			break;
+
 	}	/* Next reading */
 
 	/* Release paper */

@@ -51,6 +51,7 @@
 #include "rspl.h"
 #include "xicc.h"
 #include "plot.h"
+#include "ui.h"
 
 
 #define RSPLFLAGS (0 /* | RSPL_2PASSSMTH | RSPL_EXTRAFIT2 */)
@@ -1366,7 +1367,22 @@ int main(int argc, char *argv[]) {
 		           NULL);				/* iwidth */
 
 
-		if (verb > 1) {
+		/* Compute & show fit quality */
+		if (verb > 0) {
+			double avgde = 0.0, maxde = 0.0;
+			for (i = 0; i < n_pvals[j]; i++) {
+				co tp;	/* Test point */
+				double de;
+				tp.p[0] = pvals[j][i].dev;
+				raw[j]->interp(raw[j], &tp);
+				de = icmLabDE(pvals[j][i].Lab, tp.v);
+
+				avgde += de;
+				if (de > maxde)
+					maxde = de;
+			}
+			avgde /= (double)n_pvals[j];
+			printf("Chan %d raw fit avg DE %f, max %f\n",j,avgde,maxde);
 		}
 
 		free(dpoints);

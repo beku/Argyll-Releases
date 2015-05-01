@@ -30,8 +30,8 @@ Library libgamut : gamut.c ;
 # Gamut mapping library
 Library libgammap : gammap.c nearsmth.c ;
 
-LINKLIBS = libgammap libgamut ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum
-           ../plot/libvrml ;
+LINKLIBS = libgammap libgamut ../rspl/librspl ../icc/libicc ../cgats/libcgats
+           ../plot/libplot ../numlib/libnum ../numlib/libui ../plot/libvrml ;
 
 # Utilities
 Main viewgam : viewgam.c ;
@@ -56,7 +56,7 @@ Main GenVisGam : GenVisGam.c ;
 #Main tttt : tttt.c ;
 
 LINKLIBS = libgammap libgamut ../icc/libicc ../cgats/libcgats ../xicc/libxicc
-           ../rspl/librspl ../numlib/libnum ../plot/libplot ../plot/libvrml ;
+           ../rspl/librspl ../plot/libplot ../plot/libvrml ../numlib/libnum ../numlib/libui ;
 
 # Mapping test routine
 Main maptest : maptest.c ;

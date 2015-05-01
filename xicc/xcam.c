@@ -126,7 +126,7 @@ double Yb,		/* Relative Luminance of Background to reference white */
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-double Yg,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+double Yg,		/* Glare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {

@@ -26,6 +26,7 @@
 #include "numlib.h"
 #include "gamut.h"
 #include "cgats.h"
+#include "vrml.h"
 
 /* 
 	This program reads one or more CGATS format triangular gamut
@@ -40,7 +41,7 @@
 
 #undef DEBUG
 
-#undef HALF_HACK /* 27.0 */
+#undef HALF_HACK /* 27.0 */		/* Crude cutting plane */
 
 void usage(char *diag, ...) {
 	fprintf(stderr,"View gamuts Version %s\n",ARGYLL_VERSION_STR);
@@ -53,7 +54,7 @@ void usage(char *diag, ...) {
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: viewgam { [-c color] [-t trans] [-w|s] infile.gam } ... outfile.wrl\n");
+	fprintf(stderr,"usage: viewgam { [-c color] [-t trans] [-w|s] infile.gam } ... outfile%s\n",vrml_ext());
 	fprintf(stderr," -c color       Color to make gamut, r = red, g = green, b = blue\n"); 
 	fprintf(stderr,"                c = cyan, m = magenta, y = yellow, e = grey, w = white\n"); 
 	fprintf(stderr,"                n = natural color\n"); 
@@ -66,12 +67,11 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -k             Add markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," -i             Compute and print intersecting volume of first 2 gamuts\n");
 	fprintf(stderr," -I isect.gam   Same as -i, but save intersection gamut to isect.gam\n");
-	fprintf(stderr," outfile.wrl    Name of output .wrl file\n");
+	fprintf(stderr,"                (Set env. ARGYLL_3D_DISP_FORMAT to VRML, X3D or X3DOM to change format)\n");
+	fprintf(stderr," outfile        Base name of output %s file\n",vrml_ext());
 	fprintf(stderr,"\n");
 	exit(1);
 }
-
-#define GCENT 50.0		/* Center of object view */
 
 typedef enum {
 	gam_red       = 0,
@@ -86,7 +86,7 @@ typedef enum {
 } gam_colors;
 
 struct {
-	double r, g, b;
+	double rgb[3];
 } color_rgb[8] = {
 	{ 1, 0, 0 },	/* gam_red */
 	{ 0, 1, 0 },	/* gam_green */
@@ -172,8 +172,8 @@ main(int argc, char *argv[]) {
 	int doaxes = 1;
 	int docusps = 0;
 	int isect = 0;
-	FILE *wrl;
-	char out_name[MAXNAMEL+1];
+	vrml *wrl;
+	char out_name[MAXNAMEL+1+10];
 	char iout_name[MAXNAMEL+1] = "\000";;
 	if (argc < 3)
 		usage("Too few arguments, got %d expect at least 2",argc-1);
@@ -313,9 +313,9 @@ main(int argc, char *argv[]) {
 	/* so unwind it. */
 
 	if (ng < 2)
-		usage("Not enough arguments to specify output VRML files");
+		usage("Not enough arguments to specify output %s files",vrml_format());
 
-	strncpy(out_name,gds[--ng].in_name,MAXNAMEL); out_name[MAXNAMEL] = '\000';
+	strncpy(out_name, gds[--ng].in_name,MAXNAMEL); out_name[MAXNAMEL] = '\000';
 
 #ifdef DEBUG
 	for (n = 0; n < ng; n++) {
@@ -328,102 +328,10 @@ main(int argc, char *argv[]) {
 	printf("Output file is '%s'\n",out_name);
 #endif	/* DEBUG */
 
-	/* Open up the output file */
-	if ((wrl = fopen(out_name,"w")) == NULL)
-		error("Error opening output file '%s'\n",out_name);
+	/* Create the VRML object */
+	if ((wrl = new_vrml(out_name, doaxes, vrml_lab)) == NULL)
+		error("Error creating %s object '%s%s'\n",vrml_format(),out_name,vrml_ext());
 	
-	/* Write the header info */
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-  	fprintf(wrl,"  children [\n");
-    fprintf(wrl,"    NavigationInfo {\n");
-	fprintf(wrl,"      type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"    } # We'll add our own light\n");
-	fprintf(wrl,"\n");
-#ifdef NEVER
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"      direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"      direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-#else
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        intensity 0.2\n");
-	fprintf(wrl,"        ambientIntensity 0.1\n");
-	fprintf(wrl,"        direction -1 -1 -1\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        intensity 0.6\n");
-	fprintf(wrl,"        ambientIntensity 0.2\n");
-	fprintf(wrl,"        direction 1 1 1\n");
-	fprintf(wrl,"    }\n");
-#endif
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"      position 0 0 340      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes) {
-		/* Define the axis boxes */
-		struct {
-			double x, y, z;			/* Box center */
-			double wx, wy, wz;		/* Box size */
-			double r, g, b;			/* Box color */
-		} axes[5] = {
-			{ 0, 0,   50-GCENT, 2, 2, 100, .7, .7, .7 },	/* L axis */
-			{ 50, 0,  0-GCENT,  100, 2, 2,  1,  0,  0 },	/* +a (red) axis */
-			{ 0, -50, 0-GCENT,  2, 100, 2,  0,  0,  1 },	/* -b (blue) axis */
-			{ -50, 0, 0-GCENT,  100, 2, 2,  0,  1,  0 },	/* -a (green) axis */
-			{ 0,  50, 0-GCENT,  2, 100, 2,  1,  1,  0 },	/* +b (yellow) axis */
-		};
-
-		/* Define the labels */
-		struct {
-			double x, y, z;
-			double size;
-			char *string;
-			double r, g, b;
-		} labels[6] = {
-			{ -2, 2, -GCENT + 100 + 10, 10, "+L*",  .7, .7, .7 },	/* Top of L axis */
-			{ -2, 2, -GCENT - 10,      10, "0",    .7, .7, .7 },	/* Bottom of L axis */
-			{ 100 + 5, -3,  0-GCENT,  10, "+a*",  1,  0,  0 },	/* +a (red) axis */
-			{ -5, -100 - 10, 0-GCENT,  10, "-b*",  0,  0,  1 },	/* -b (blue) axis */
-			{ -100 - 15, -3, 0-GCENT,  10, "-a*",  0,  0,  1 },	/* -a (green) axis */
-			{ -5,  100 + 5, 0-GCENT,  10, "+b*",  1,  1,  0 },	/* +b (yellow) axis */
-		};
-
-		fprintf(wrl,"    # Lab axes as boxes:\n");
-		for (n = 0; n < 5; n++) {
-			fprintf(wrl,"    Transform { translation %f %f %f\n", axes[n].x, axes[n].y, axes[n].z);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"        Shape{\n");
-			fprintf(wrl,"          geometry Box { size %f %f %f }\n",
-			                       axes[n].wx, axes[n].wy, axes[n].wz);
-			fprintf(wrl,"          appearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[n].r, axes[n].g, axes[n].b);
-			fprintf(wrl,"        }\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-		}
-		fprintf(wrl,"    # Axes identification:\n");
-		for (n = 0; n < 6; n++) {
-			fprintf(wrl,"    Transform { translation %f %f %f\n", labels[n].x, labels[n].y, labels[n].z);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"        Shape{\n");
-			fprintf(wrl,"          geometry Text { string [\"%s\"]\n",labels[n].string);
-			fprintf(wrl,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
-			                                  labels[n].size);
-			fprintf(wrl,"                        }\n");
-			fprintf(wrl,"          appearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[n].r, labels[n].g, labels[n].b);
-			fprintf(wrl,"        }\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-		}
-	}
-
 	/* Read each input in turn */
 	for (n = 0; n < ng; n++) {
 		int i;
@@ -464,35 +372,18 @@ main(int argc, char *argv[]) {
 		if (pp->t[0].ftype[bf] != r_t)
 			error("Field LAB_B is wrong type");
 
-		/* Write the vertexes out */
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    Transform {\n");
-		fprintf(wrl,"      translation 0 0 0\n");
-		fprintf(wrl,"      children [\n");
-		fprintf(wrl,"        Shape { \n");
-		if (gds[n].in_rep == gam_wire) {
-			fprintf(wrl,"          geometry IndexedLineSet {\n");
-		} else {
-			fprintf(wrl,"          geometry IndexedFaceSet {\n");
-			fprintf(wrl,"            ccw FALSE\n");
-			fprintf(wrl,"            convex TRUE\n");
-		}
-		fprintf(wrl,"\n");
-		fprintf(wrl,"            coord Coordinate { \n");
-		fprintf(wrl,"              point [			# Verticy coordinates\n");
+		wrl->start_line_set(wrl, 0);
 
 		/* Spit out the point values, in order. */
 		/* Note that a->x, b->y, L->z */
 		for (i = 0; i < nverts; i++) {
-			double L, a, b;
-			L = *((double *)pp->t[0].fdata[i][Lf]);
-			a = *((double *)pp->t[0].fdata[i][af]);
-			b = *((double *)pp->t[0].fdata[i][bf]);
-			fprintf(wrl,"                %f %f %f,\n",a, b, L - GCENT);
+			double pos[3];
+			pos[0] = *((double *)pp->t[0].fdata[i][Lf]);
+			pos[1] = *((double *)pp->t[0].fdata[i][af]);
+			pos[2] = *((double *)pp->t[0].fdata[i][bf]);
+			
+			wrl->add_vertex(wrl, 0, pos);
 		}
-		fprintf(wrl,"              ]\n");
-		fprintf(wrl,"            }\n");
-		fprintf(wrl,"\n");
 
 		/* Write the triangles/wires out */
 		if ((v0f = pp->find_field(pp, 1, "VERTEX_0")) < 0)
@@ -508,8 +399,6 @@ main(int argc, char *argv[]) {
 		if (pp->t[1].ftype[v2f] != i_t)
 			error("Field VERTEX_2 is wrong type");
 
-		fprintf(wrl,"            coordIndex [ 		# Indexes of poligon Verticies \n");
-
 		for (i = 0; i < ntris; i++) {
 			int v0, v1, v2;
 			v0 = *((int *)pp->t[1].fdata[i][v0f]);
@@ -524,54 +413,43 @@ main(int argc, char *argv[]) {
 #endif /* HALF_HACK */
 
 			if (gds[n].in_rep == gam_wire) {
-				if (v0 < v1)				/* Only output 1 wire of two on an edge */
-					fprintf(wrl,"              %d, %d, -1\n", v0, v1);
-				if (v1 < v2)
-					fprintf(wrl,"              %d, %d, -1\n", v1, v2);
-				if (v2 < v0)
-					fprintf(wrl,"              %d, %d, -1\n", v2, v0);
+				int ix[2];
+				if (v0 < v1) {				/* Only output 1 wire of two on an edge */
+					ix[0] = v0;
+					ix[1] = v1;
+					wrl->add_line(wrl, 0, ix);
+				}
+				if (v1 < v2) {
+					ix[0] = v1;
+					ix[1] = v2;
+					wrl->add_line(wrl, 0, ix);
+				}
+				if (v2 < v0) {
+					ix[0] = v2;
+					ix[1] = v0;
+					wrl->add_line(wrl, 0, ix);
+				}
 			} else {
-				fprintf(wrl,"              %d, %d, %d, -1\n", v0, v1, v2);
+				int ix[3];
+				ix[0] = v0;
+				ix[1] = v1;
+				ix[2] = v2;
+				wrl->add_triangle(wrl, 0, ix);
 			}
 		}
-		fprintf(wrl,"            ]\n");
-		fprintf(wrl,"\n");
 
-		/* Write the colors out */
-		if (gds[n].in_colors == gam_natural) {
-			fprintf(wrl,"            colorPerVertex TRUE\n");
-			fprintf(wrl,"            color Color {\n");
-			fprintf(wrl,"              color [			# RGB colors of each vertex\n");
-
-			for (i = 0; i < nverts; i++) {
-				double rgb[3], Lab[3];
-				Lab[0] = *((double *)pp->t[0].fdata[i][Lf]);
-				Lab[1] = *((double *)pp->t[0].fdata[i][af]);
-				Lab[2] = *((double *)pp->t[0].fdata[i][bf]);
-				gamut_Lab2RGB(rgb, Lab);
-				fprintf(wrl,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-			}
-			fprintf(wrl,"              ] \n");
-			fprintf(wrl,"            }\n");
+		/* Write the wires or triangles out */
+		if (gds[n].in_rep == gam_wire) {
+			if (gds[n].in_colors == gam_natural)
+				wrl->make_lines_vc(wrl, 0, gds[n].in_trans);
+			else
+				wrl->make_lines_cc(wrl, 0, gds[n].in_trans, color_rgb[gds[n].in_colors].rgb);
+		} else {
+			if (gds[n].in_colors == gam_natural)
+				wrl->make_triangles_vc(wrl, 0, gds[n].in_trans);
+			else
+				wrl->make_triangles(wrl, 0, gds[n].in_trans, color_rgb[gds[n].in_colors].rgb);
 		}
-		fprintf(wrl,"          }\n");
-		fprintf(wrl,"          appearance Appearance { \n");
-		fprintf(wrl,"            material Material {\n");
-		if (gds[n].in_trans > 0.0) {
-			fprintf(wrl,"              transparency %f\n", gds[n].in_trans);
-		}
-		fprintf(wrl,"              ambientIntensity 0.3\n");
-		fprintf(wrl,"              shininess 0.5\n");
-		if (gds[n].in_colors != gam_natural) {
-			fprintf(wrl,"              emissiveColor %f %f %f\n",
-			   color_rgb[gds[n].in_colors].r, color_rgb[gds[n].in_colors].g, color_rgb[gds[n].in_colors].b);
-		}
-		fprintf(wrl,"            }\n");
-		fprintf(wrl,"          }\n");
-		fprintf(wrl,"        }	# end Shape\n");
-		fprintf(wrl,"      ] # end children\n");
-		fprintf(wrl,"    } # end Transform\n");
-		fprintf(wrl,"\n");
 
 		/* See if there are cusp values */
 		if (docusps) {
@@ -590,39 +468,19 @@ main(int argc, char *argv[]) {
 					break;
 				}
 
-				gamut_Lab2RGB(rgb, Lab);
-
-				fprintf(wrl,"\n");
-				fprintf(wrl,"    Transform {\n");
-				fprintf(wrl,"      translation %f %f %f\n",Lab[1], Lab[2], Lab[0]-GCENT);
-				fprintf(wrl,"      children [\n");
-				fprintf(wrl,"		Shape { \n");
-				fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
-				fprintf(wrl,"         appearance Appearance { material Material {\n");
-				if (gds[n].in_trans > 0.0)
-				fprintf(wrl,"         transparency %f\n", gds[n].in_trans);
 				if (gds[n].in_colors != gam_natural)
-				fprintf(wrl,"          diffuseColor %f %f %f\n", color_rgb[gds[n].in_colors].r, color_rgb[gds[n].in_colors].g, color_rgb[gds[n].in_colors].b);
+					wrl->add_marker(wrl, Lab, color_rgb[gds[n].in_colors].rgb, 2.0);
 				else
-				fprintf(wrl,"          diffuseColor  %f %f %f\n", rgb[0], rgb[1], rgb[2]);
-				fprintf(wrl,"		  }\n");
-				fprintf(wrl,"		}\n");
-				fprintf(wrl,"      }\n");
-				fprintf(wrl,"     ]\n");
-				fprintf(wrl,"    }\n");
+					wrl->add_marker(wrl, Lab, NULL, 2.0);
 			}
-			fprintf(wrl,"\n");
 		}
-
 		pp->del(pp);		/* Clean up */
 	}
 
-	/* Write the trailer */
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	/* Close the file */
-	fclose(wrl);
+	/* Write the file out */
+	if (wrl->flush(wrl))
+		error("Closing output file '%s%s'\n",out_name,vrml_ext());
+	wrl->del(wrl);
 
 	if (isect && ng >= 2) {
 		gamut *s, *s1, *s2;

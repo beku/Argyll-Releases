@@ -3,7 +3,7 @@
   <head>
     <title>ccxxmake</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -41,8 +41,7 @@
     subsequent measurements on that Display using such Colorimeters, by
     using it with the <a href="dispcal.html#X">dispcal</a>, <a
       href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
-    -X option, or it can be <a
-      href="oeminst.html">installed</a>, and
+    -X option, or it can be <a href="oeminst.html">installed</a>, and
     will then appear in the available display type selection (<b>-y</b>
     option).<br>
     <br>
@@ -53,9 +52,12 @@
       style="font-weight: bold;">ccmx</span> (Colorimeter Correction
     Matrix) files.<br>
     <h3>Usage Summary</h3>
-    <small style="font-family: monospace;">ccxxmake [-options]
+    <small style="font-family: monospace;">ccxxmake -t dtech [-options]
       correction.ccmx<br>
     </small><small style="font-family: monospace;">&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -76,6 +78,9 @@
 Create
 CCSS
 rather
+
+
+
 
 
 
@@ -114,9 +119,15 @@ two
 
 
 
+
+
+
     .ti3 files rather than measure.<br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;</span><font
       style="font-family: monospace;" size="-1"><a href="#display">-display
+
+
+
 
 
 
@@ -163,8 +174,14 @@ m
 
 
 
+
+
+
       for VideoLUT access.</font><br style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#d">-d
+
+
+
 
 
 
@@ -203,8 +220,14 @@ list
 
 
 
+
+
+
       (default 1)</font><br>
     <span style="font-family: monospace;">&nbsp;<a href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -236,7 +259,14 @@ list
 
 
 
-      [MSWin] Display via MadVR Video Renderer</span><br
+
+
+
+      [MSWin] Display via MadVR Video Renderer</span><br>
+    <tt>&nbsp;</tt><tt><a href="#dcc">-dcc[:n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </tt><tt>Display via n'th ChromeCast (default 1, ? for list)</tt><br
       style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;</font><font
       style="font-family: monospace;" size="-1"><a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -255,10 +285,12 @@ list
 
 
 
+
+
+
       Use telephoto mode (ie. for a projector) (if available)</font><br
       style="font-family: monospace;">
-    &nbsp; <font size="-1"><span style="font-family: monospace;"><a
-          href="#y">-y X</a>
+    &nbsp; <tt></tt><tt><font size="-1"><a href="#y">-y X</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 
@@ -276,27 +308,16 @@ list
 
 
 
-        Display type - instrument specific list to choose from.</span></font><font
-      style="font-family: monospace;" size="-1"> (CCMX)</font><br
-      style="font-family: monospace;">
-    <font style="font-family: monospace;" size="-1">&nbsp;<a href="#P">-P
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-        ho,vo,ss[,vs]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Position test
-      window and scale it</font><br style="font-family: monospace;">
+        Display type - instrument specific list to choose from.</font></tt><tt>
+      (CCMX)</tt><tt><br>
+    </tt><tt>&nbsp;<a href="#z">-z disptype</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Different display type for spectrometer (see -y)</tt><tt><br>
+    </tt><tt> </tt><tt>&nbsp;</tt><tt><a href="#P">-P ho,vo,ss[,vs]</a></tt><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Position test window and scale it</tt><br style="font-family:
+      monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
@@ -305,6 +326,9 @@ left/top,
 0.5
 =
 center,
+
+
+
 
 
 
@@ -344,8 +368,14 @@ normal,
 
 
 
+
+
+
       2.0 = double etc.</font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -360,6 +390,9 @@ normal,
     <font style="font-family: monospace;" size="-1">&nbsp;</font><font
       style="font-family: monospace;" size="-1"><a href="#F">-F</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -402,9 +435,15 @@ on
 
 
 
+
+
+
       test window<br>
     </small><font style="font-family: monospace;" size="-1">&nbsp;<a
         href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -440,10 +479,16 @@ on
 
 
 
+
+
+
       Use high resolution spectrum mode (if available)</font><font
       style="font-family: monospace;" size="-1"></font><br
       style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#C">-C
+
+
+
 
 
 
@@ -491,9 +536,15 @@ sequence
 
 
 
+
+
+
       combination steps (default 3)</font><br style="font-family:
       monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W
+
+
+
 
 
 
@@ -517,6 +568,9 @@ flow
 control:
 n
 =
+
+
+
 
 
 
@@ -558,31 +612,226 @@ overall
 
 
 
-      escription</small><br>
+
+
+
+      description</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#I">-I
         "displayname"</a> &nbsp;&nbsp;&nbsp;&nbsp; </small><span
       style="font-family: monospace;">Set display make and model
-      description</span><small style="font-family: monospace;"><br>
-      &nbsp;</small><small style="font-family: monospace;"><a href="#T">-T
+      description</span><small style="font-family: monospace;">
+      (optional)<br>
+      &nbsp;</small><small style="font-family: monospace;"><a href="#T">-t
+
+
+        dtech</a>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Set display technology type<br>
+      &nbsp; &nbsp;
+      c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+      CRT<br>
+      &nbsp;&nbsp;&nbsp;
+      m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+      Plasma<br>
+      &nbsp;&nbsp;&nbsp;
+      l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+      LCD<br>
+      &nbsp;&nbsp;&nbsp;
+      1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+      LCD CCFL<br>
+      &nbsp;&nbsp;&nbsp;
+      2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL IPS<br>
+      &nbsp;&nbsp;&nbsp;
+      3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL VPA<br>
+      &nbsp;&nbsp;&nbsp;
+      4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL TFT<br>
+      &nbsp;&nbsp;&nbsp;
+      L&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL Wide Gamut<br>
+      &nbsp;&nbsp;&nbsp;
+      5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL Wide Gamut IPS<br>
+      &nbsp;&nbsp;&nbsp;
+      6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL Wide Gamut VPA<br>
+      &nbsp;&nbsp;&nbsp;
+      7&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      CCFL Wide Gamut TFT<br>
+      &nbsp;&nbsp;&nbsp;
+      e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      White LED<br>
+      &nbsp;&nbsp;&nbsp;
+      8&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      White LED IPS<br>
+      &nbsp;&nbsp;&nbsp;
+      9&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      White LED VPA<br>
+      &nbsp;&nbsp;&nbsp;
+      a&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      White LED TFT<br>
+      &nbsp;&nbsp;&nbsp;
+      b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RGB LED<br>
+      &nbsp;&nbsp;&nbsp;
+      b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RGB LED IPS<br>
+      &nbsp;&nbsp;&nbsp;
+      c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RGB LED VPA<br>
+      &nbsp;&nbsp;&nbsp;
+      d&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RGB LED TFT<br>
+      &nbsp;&nbsp;&nbsp;
+      h&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RG Phosphor<br>
+      &nbsp;&nbsp;&nbsp;
+      e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RG Phosphor IPS<br>
+      &nbsp;&nbsp;&nbsp;
+      f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RG Phosphor VPA<br>
+      &nbsp;&nbsp;&nbsp;
+      g&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
+      RG Phosphor TFT<br>
+      &nbsp;&nbsp;&nbsp;
+      o&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LED
+      OLED<br>
+      &nbsp;&nbsp;&nbsp;
+      a&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LED
+      AMOLED<br>
+      &nbsp;&nbsp;&nbsp;
+      p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DLP
+      Projector<br>
+      &nbsp;&nbsp;&nbsp;
+      h&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DLP
+      Projector RGB Filter Wheel<br>
+      &nbsp;&nbsp;&nbsp;
+      i&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DPL
+      Projector RGBW Filter Wheel<br>
+      &nbsp;&nbsp;&nbsp;
+      j&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DLP
+      Projector RGBCMY Filter Wheel<br>
+      &nbsp;&nbsp;&nbsp;
+      u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+    </small><small style="font-family: monospace;"><small
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>Unknown<br>
+    </small> <tt>&nbsp;<a href="#U">-U c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-        "displaytech"</a> &nbsp;&nbsp;&nbsp;&nbsp; </small><span
-      style="font-family: monospace;">Set display technology description</span>
-    (ie. CRT, LCD etc.)<small style="font-family: monospace;"></small><br>
-    <tt>&nbsp;<a href="#U">-U c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
@@ -601,9 +850,15 @@ overall
 
 
 
+
+
+
         &nbsp;&nbsp;&nbsp;&nbsp; Override refresh, non-refresh display
         mode</span></font><br>
     <tt>&nbsp;<a href="#YR">-Y R:<i>rate</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
       Override measured refresh rate with rate Hz</tt><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
         style=" font-family: monospace;" href="#YA">-<font size="-1">Y</font>A</a><span
@@ -706,6 +961,9 @@ overall
 
 
 
+
+
+
       1,2</span> . Some experimentation may be needed using <a
       href="dispwin.html">dispwin</a> on such systems, to discover what
     screen has access to the VideoLUT hardware, and which screens the
@@ -726,7 +984,9 @@ overall
     URL will be printed once the server is started, or you could run <span
       style="font-weight: bold;">ipconfig</span> (MSWin) or <span
       style="font-weight: bold;">/sbin/ifconfig</span> (Linux or OS X)
-    and identify an internet address for your machine that way.<br>
+    and identify an internet address for your machine that way. You may
+    have to modify any firewall to permit port 8080 to be accessed on
+    your machine.<br>
     <br>
     <a name="dmadvr"></a><span style="font-weight: bold;">-dmadvr</span>
     [MSWin only] causes test patches to be displayed using the MadVR
@@ -734,6 +994,14 @@ overall
     software and load a video clip in pause for this to work. MadVR
     rendering does not need or support VideoLUT access. Test patch
     colors <u>will</u> be processed by the MadVR 3dLut.<br>
+    <br>
+    <a name="dcc"></a><span style="font-weight: bold;">-dcc</span> or <b>-dcc:<i>no</i></b>
+    causes test patches to be displayed using and available <a
+      href="http://en.wikipedia.org/wiki/Chromecast">ChromeCast</a> to
+    your TV. Use <b>-dcc:?</b> to display a list of ChromeCasts on your
+    local network. You may have to modify any firewall to permit port
+    8081 to be accessed on your machine if it falls back to the Default
+    receiver.<br>
     <br>
     <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
     allows measuring in telephoto mode, using instruments that support
@@ -766,6 +1034,12 @@ overall
     must be selected whenever the CCMX is used with this instrument.
     Installed CCMX files will automatically select the appropriate base
     type.<br>
+    <br>
+    <a name="z"></a>The <b>-z</b> flag allows setting a different
+    Display Type for the reference spectral instrument, such as refresh
+    or non-refresh type, if it supports it. You may have to use this if
+    you are setting a specific base type for the colorimeter using -y,
+    and the spectrometer doesn't have this display type.<br>
     <br>
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>
     parameter allows you to position and size the test patch window. By
@@ -815,6 +1089,9 @@ overall
     <a name="L"></a> The -<span style="font-weight: bold;">H</span>
     option on high resolution spectral mode, if the instrument supports
     it, such as the Eye-One Pro. See <a href="instruments.html">Operation
+
+
+
 
 
 
@@ -895,32 +1172,26 @@ overall
     included in the parameter, and not mistaken for the start of another
     flag, or as a final command line parameter. <br>
     <br>
-    <a name="I"></a>The <b>-I</b> parameter allows setting of the
-    display description string in the resulting <span
+    <a name="I"></a>The <b>-I</b> parameter allows optional setting of
+    the display description string in the resulting <span
       style="font-weight: bold;">ccmx/ccss</span> file. Since the
     default display description is probably very generic, it is <span
       style="font-weight: bold;">highly recommended</span> that a
-    description of the make and model of the display be provided here,
-    or set a display technology description using <span
-      style="font-weight: bold;">-T</span> (see below). The default or
-    given display description will be printed before the menu. With most
-    command line shells, it will be necessary to enclose the parameter
-    with double quotes, so that spaces and other special characters are
-    included in the parameter, and not mistaken for the start of another
-    flag, or as a final command line parameters.<br>
+    description of the make and model of the display be provided here.
+    The default or given display description will be printed before the
+    menu. With most command line shells, it will be necessary to enclose
+    the parameter with double quotes, so that spaces and other special
+    characters are included in the parameter, and not mistaken for the
+    start of another flag, or as a final command line parameters.<br>
     <br>
-    <a name="T"></a>The <b>-T</b> parameter allows setting of the
-    display technology description string in the resulting <span
-      style="font-weight: bold;">ccmx/ccss</span> file. The
-    applicability of the calibration mainly depends on the technology
-    type of the display, so a description of the technology (ie. "CRT",
-    "LCD", "LCD + backlight type + LCD type",&nbsp; etc.) is <span
-      style="font-weight: bold;">highly recommended</span>, because it
-    can make the calibration more widely usable. With most command line
-    shells, it will be necessary to enclose the parameter with double
-    quotes, so that spaces and other special characters are included in
-    the parameter, and not mistaken for the start of another flag, or as
-    a final command line parameters.<br>
+    <a name="T"></a>The <b>-t</b> parameter allows setting of the
+    display technology type from the available list. You can get a usage
+    that includes the list using "ccxxmake -??". This is a required
+    parameter, since it conveys information about the refresh type and
+    settling time of the display. If the specific details of the display
+    are not known (i.e. backlight type, pannel type etc.), then choose
+    the next most generic type. If none of these are applicable, choose
+    "Unknown".<br>
     <br>
     <a name="U"></a>The <b>-U</b> parameter allows setting of the user
     interface selection character this display type can be selected by,
@@ -939,13 +1210,15 @@ overall
 
 
 
+
+
+
     <b>-Y n</b> options overrides the refresh display mode set by the <a
-      href="spotread.html#y">-y display type
-      selection</a>, with <b>-Y</b><span style="font-weight: bold;"> r</span>
-    forcing refresh display mode, and <b>-Y n</b> forcing a non-refresh
-    display mode. Not all instruments support a display measurement
-    refresh mode, or the ability to override the mode set by the display
-    type selection.<br>
+      href="spotread.html#y">-y display type selection</a>, with <b>-Y</b><span
+      style="font-weight: bold;"> r</span> forcing refresh display mode,
+    and <b>-Y n</b> forcing a non-refresh display mode. Not all
+    instruments support a display measurement refresh mode, or the
+    ability to override the mode set by the display type selection.<br>
     <br>
     <a name="YR"></a> The -<span style="font-weight: bold;">Y R:<i>rate</i></span>
     options overrides calibration of the instrument refresh rate. This

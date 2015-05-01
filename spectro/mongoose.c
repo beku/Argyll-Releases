@@ -18,6 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+/*
+	Fedora 18+ and similar pose a problem with their use of FirewallD.
+
+	Either the user has to enable tcp ports 8080 & 8081 in their zone using
+	firewall-config, or we have to add a DBUS function here to add and then
+	remove the port dynamically, which will probably require root access :-(
+
+	There's no doco for the last - see:
+	gdbus introspect --system --dest org.fedoraproject.FirewallD1
+                     --object-path /org/fedoraproject/FirewallD1
+
+
+	Maybe we could supply a firewalld.service configuration file for
+	the Argyll apps ? We'd have to use a fixed port no. though ?
+
+	Something like:
+
+       <?xml version="1.0" encoding="utf-8"?>
+       <service version="1.0">
+         <short>ArgyllCMS</short>
+         <description>Allow web window and ChromeCast access</description>
+         <port port="8080" protocol="tcp"/>
+         <port port="8081" protocol="tcp"/>
+       </service>
+
+	added to /usr/lib/firewalld/services
+ */
+
 #if defined(_WIN32)
 #define _CRT_SECURE_NO_WARNINGS // Disable deprecation warning in VS2005
 #else 
@@ -183,6 +211,7 @@ typedef struct DIR {
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -4026,9 +4055,109 @@ static int set_ports_option(struct mg_context *ctx) {
   if (!success) {
     close_all_listening_sockets(ctx);
   }
-
   return success;
 }
+
+// Get the allocated port number of the first port 0 listener,
+// or the last non-0 port listener.
+// Return 0 on error
+int mg_get_listening_port(struct mg_context *ctx) {
+  struct socket *sp, *tmp;
+  union usa rsa; 		/* resolved socket address */
+  socklen_t rsa_len = sizeof(rsa);
+  int rv = 0;
+  for (sp = ctx->listening_sockets; sp != NULL; sp = sp->next) {
+	if (ntohs(sp->lsa.sin.sin_port) == 0) {
+	  if (!getsockname(ctx->listening_sockets->sock, (struct sockaddr *)&rsa, &rsa_len))
+		rv = ntohs(rsa.sin.sin_port);
+		break;
+	} else {
+	  rv = ntohs(sp->lsa.sin.sin_port);		/* Return the last port found */
+    }
+  }
+  return rv;
+}
+
+// Get a URL for accessing the server. */
+// Return NULL on error. Free after use.
+char *mg_get_url(struct mg_context *ctx) {
+  int portno = mg_get_listening_port(ctx);
+  char *rv = NULL;
+
+  if (portno == 0)
+		return NULL;
+
+  /* Create a suitable URL for accessing the server */
+#if _WIN32
+  {
+  	char szHostName[255];
+  	struct hostent *host_entry;
+  	char *localIP;
+  	char buf[100];
+
+  	/* We assume WinSock has been started by mongoose */
+
+  	// Get the local hostname
+  	gethostname(szHostName, 255);
+  	host_entry = gethostbyname(szHostName);
+  	/* Get first entry */
+  	localIP = inet_ntoa(*(struct in_addr *)*host_entry->h_addr_list);
+
+  	sprintf(buf,"http://%s:%d/",localIP,portno);
+  	rv = strdup(buf);
+  }
+#else
+  {
+  	struct ifaddrs *ifAddrStruct = NULL;
+  	struct ifaddrs *ifa = NULL;
+  	void *tmpAddrPtr = NULL;
+  	char abuf[INET_ADDRSTRLEN] = "";
+#ifdef AF_INET6
+  	char abuf6[INET6_ADDRSTRLEN] = "";
+#endif
+  	char buf[100];
+  
+  	getifaddrs(&ifAddrStruct);
+  
+  	/* Look first for the first IPV4 address */
+  	for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+#ifdef AF_INET6
+      if (ifa->ifa_addr->sa_family==AF_INET) { /* IP4 ? */
+#endif
+        if (strncmp(ifa->ifa_name, "lo",2) == 0 || abuf[0] != '\000')
+  		  continue;		/* Skip local */
+  		tmpAddrPtr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+  		inet_ntop(AF_INET, tmpAddrPtr, abuf, INET_ADDRSTRLEN);
+		sprintf(buf,"http://%s:%d/",abuf,portno);
+		break;
+      }
+  	}
+
+#ifdef AF_INET6
+  	/* If that didn't work, look for IPV6 address */
+	if (ifa == NULL) {
+  	  for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+  	    if (ifa->ifa_addr->sa_family==AF_INET6) { /* IP6 ? */
+  	  	  if (strncmp(ifa->ifa_name, "lo",2) == 0 || abuf6[0] != '\000')
+  	  	    continue;		/* Skip local */
+  	  	  tmpAddrPtr = &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+  	  	  inet_ntop(AF_INET6, tmpAddrPtr, abuf6, INET6_ADDRSTRLEN);
+		  sprintf(buf,"http://[%s]:%d/",abuf6,portno);
+	  	  break;
+  	    }
+      }
+	}
+#endif
+    if (ifAddrStruct != NULL)
+    	freeifaddrs(ifAddrStruct);
+
+    rv = strdup(buf);
+  }
+#endif /* _WIN32 */
+
+  return rv;
+}
+
 
 static void log_header(const struct mg_connection *conn, const char *header,
                        FILE *fp) {

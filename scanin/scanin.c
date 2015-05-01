@@ -42,6 +42,7 @@
 #include "xicc.h"
 #include "scanrd.h"
 #include "tiffio.h"
+#include "ui.h"
 
 /* Utilities */
 

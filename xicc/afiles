@@ -54,6 +54,8 @@ cam02plot.c
 moncurve.c
 moncurve.h
 monctest.c
+bt1886.h
+bt1886.c
 fbview.c
 xfbview.c
 icheck.c

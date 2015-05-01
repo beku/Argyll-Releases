@@ -32,6 +32,8 @@
 #include "gamut.h"
 #include "rspl.h"
 #include "gammap.h"
+#include "vrml.h"
+#include "ui.h"
 
 void usage(void) {
 	fprintf(stderr,"Map bteween two gamuts, Version %s\n",ARGYLL_VERSION_STR);
@@ -55,11 +57,14 @@ main(int argc, char *argv[]) {
 	int verb = 0;
 	gammap *map;			/* Regular split gamut mapping */
 	icxGMappingIntent gmi;
+	char gammapwrl[30] = "gammap";	/* Diagnostic file name */
 
 	gamut *gin, *gout;		/* Input and Output gamuts */
 	gamut *gimg = NULL;		/* Optional image gamut */
 
 	error_program = argv[0];
+
+	strcat(gammapwrl, vrml_ext());
 
 	if (argc < 3)
 		usage();
@@ -203,7 +208,7 @@ main(int argc, char *argv[]) {
 		17,				/* rspl resolution of 17 */
 		NULL,			/* No input range override */
 		NULL,
-		"gammap.wrl"	/* Diagnostic plot */
+		gammapwrl		/* Diagnostic plot */
 	);
 
 	if (map == NULL) {

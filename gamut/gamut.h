@@ -344,8 +344,9 @@ struct _gamut {
 	int (*vector_isect)(struct _gamut *s, double *p1, double *p2, double *min, double *max,
 	                                                               double *mint, double *maxt,
 	                                                               gtri **mntri, gtri **mxtri);
-							/* Compute the intersection of the vector p1->p2 with */
-							/* the gamut surface. min is the intersection in the p1 direction, */
+							/* Compute the intersection of the (extended to infinity) vector */
+							/* p1->p2 with the gamut surface. */
+							/* min is the intersection in the p1 direction, */
 							/* max is intersection in the p2 direction. mint and maxt are */
 							/* the parameter values at the two intersection points, a value of 0 */
 							/* being at p1 and 1 being at p2. mintri and maxtri return the */
@@ -384,11 +385,11 @@ struct _gamut {
 
 																/* Following return nz on error: */
 	int (*write_vrml)(struct _gamut *s, char *filename,
-	                              int doaxes, int docusps); /* Write to a VRML .wrl file */
+	                              int doaxes, int docusps); /* Write to a VRML .wrl/.x3d file */
 	int (*write_gam)(struct _gamut *s, char *filename);		/* Write to a CGATS .gam file */
 	int (*read_gam)(struct _gamut *s, char *filename);		/* Read from a CGATS .gam file */
 
-	int (*write_trans_vrml)(struct _gamut *s, char *filename, /* Write transformed VRML .wrl */
+	int (*write_trans_vrml)(struct _gamut *s, char *filename, /* Write transformed VRML/X3D .wrl */
 		int doaxes, int docusps, void (*transform)(void *cntx, double out[3], double in[3]), /* with xform */
 		void *cntx);
 

@@ -37,19 +37,19 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifndef NT
-#include <sys/file.h>
+# include <sys/file.h>
+# include <unistd.h>
 #endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <unistd.h>
 #include <time.h>
 
-#include "yajl/yajl_common.h"
-#include "yajl/yajl_gen.h"
-#include "yajl/yajl_parse.h"
+#include "yajl_common.h"
+#include "yajl_gen.h"
+#include "yajl_parse.h"
 
 #include "jcnf.h"
 
@@ -464,7 +464,7 @@ static int jcnf_yajl_boolean(void * ctx, int boolVal) {
     return 1;
 }
 
-static int jcnf_yajl_integer(void *ctx, long integerVal) {
+static int jcnf_yajl_integer(void *ctx, longlong integerVal) {
 	jcnf *p = (jcnf *)ctx;
 	char *t1;
 
@@ -507,7 +507,7 @@ static int jcnf_yajl_double(void *ctx, double doubleVal) {
 }
 
 static int jcnf_yajl_string(void *ctx, const unsigned char *stringVal,
-                     unsigned int stringLen) {
+                     size_t stringLen) {
 	jcnf *p = (jcnf *)ctx;
 	char *t1, *t2;
 
@@ -608,7 +608,7 @@ static int jcnf_yajl_start_map(void *ctx) {
 }
 
 static int jcnf_yajl_map_key(void *ctx, const unsigned char * stringVal,
-                     unsigned int stringLen) {
+                     size_t stringLen) {
 	jcnf *p = (jcnf *)ctx;
 	int i;
 
@@ -760,11 +760,8 @@ static jc_error jcnf_read(
 ) {
 	jc_error ev;
 	yajl_handle hand;
-	yajl_parser_config cfg = { 0, 1 };		/* Validate UTF8 strings ? */
 	unsigned char buf[BUF_SIZE];	
 	struct stat sbuf;
-
-	cfg.allowComments = 1;
 
 	if ((p->fp = fopen(p->fname, p->modify ? "r+" : "r")) == NULL) {
 		if (!p->modify)
@@ -780,7 +777,10 @@ static jc_error jcnf_read(
 	if ((ev = jcnf_lock_file(p)) != jc_ok)
 		return ev;
 
-	hand = yajl_alloc(&callbacks, &cfg, NULL, (void *)p);
+	hand = yajl_alloc(&callbacks, NULL, (void *)p);
+
+	yajl_config(hand, yajl_allow_comments, 1);
+	yajl_config(hand, yajl_dont_validate_strings, 1);
 
 	/* Parse the file */
 	for(;;) {
@@ -799,9 +799,7 @@ static jc_error jcnf_read(
 
 			/* read file data, pass to parser */
 			stat = yajl_parse(hand, buf, rd);
-			if (stat != yajl_status_insufficient_data &&
-				stat != yajl_status_ok)
-			{
+			if (stat != yajl_status_ok) {
 				unsigned char * str = yajl_get_error(hand, 1, buf, rd);
 				fflush(stdout);
 				fprintf(stderr, "%s", (char *) str);
@@ -839,11 +837,10 @@ static jc_error jcnf_write(
 ) {
 	FILE *fp;		/* For temporary file */
 	char *tname = NULL;
-    yajl_gen_config conf = { 1, "  " };
 	yajl_gen g;
     yajl_status stat;
 	const unsigned char * buf;
-	unsigned int len;
+	size_t len;
 	int clevel = 0;			/* Current level */
 	char *pkey = "";		/* Previous key */
 	char *ckey;				/* Current key */
@@ -891,7 +888,11 @@ static jc_error jcnf_write(
 	}
 #endif
 
-	g = yajl_gen_alloc(&conf, NULL);
+	g = yajl_gen_alloc(NULL);
+
+	yajl_gen_config(g, yajl_gen_beautify, 1);
+	yajl_gen_config(g, yajl_gen_indent_string, "\t");
+	yajl_gen_config(g, yajl_gen_validate_utf8, 1);
 
 	/* Generate the file */
 	for (i = 0; i < p->nkeys; i++, pkey = ckey) { 

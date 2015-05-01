@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="GENERATOR" content="Mozilla/4.73 [en] (WinNT; I)
       [Netscape]">
     <title>Argyll Installation on Linux</title>
@@ -46,8 +46,18 @@
 
 
 
+
+
+
+
+
     the <span style="font-weight: bold;">/etc/rc.local</span> startup
     script. You may also have to run <span style="font-weight: bold;">xset
+
+
+
+
+
 
 
 
@@ -172,45 +182,88 @@
     probably need to disable libmtp (look in the udev configuration).<br>
     <br>
     The <b>JETI</b> specbos <span style="font-weight: bold;">1211</span><span
-      style="font-weight: bold;"> </span>and <b>1201</b> makes use of
-    the <a href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual
-      COM Port Drivers</a> (VCP), that should come with any recent
-    version of Linux.<br>
+      style="font-weight: bold;"> </span>and <b>1201</b>, and the <b>Klien
+
+
+
+
+      K10A</b> makes use of the <a
+      href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual COM
+      Port Drivers</a> (VCP), that should come with any recent version
+    of Linux. You may have to add yourself to the <b>dialout</b> group
+    to be able to open the instrument.<br>
     <br>
     <span style="font-weight: bold;"></span>
     <hr style="width: 100%; height: 2px;">
     <h5><span style="color: rgb(204, 51, 204);"><a name="None"></a>No
         device configuration needed:</span></h5>
-    Some systems have in place&nbsp; a security configuration such that
+    A few systems have in place&nbsp; a security configuration such that
     anyone logging in at the console of a machine has access to all the
     local devices.<span style="color: rgb(204, 51, 204);"><span
         style="font-weight: bold;"><br>
       </span></span>
     <h5><span style="color: rgb(204, 51, 204);"><a name="udev1"></a>USB
-        instruments access using udev:<br>
+        instruments access using udev with existing </span><span
+        style="color: rgb(204, 51, 204);"><span style="font-weight:
+          bold;"><font color="#330033">/etc/udev/rules.d</font> or</span>
+        <font color="#330033"> /usr/lib/udev/rules.d/69-cd-sensors.rules</font>
+        file.<br>
       </span></h5>
-    <span style="color: rgb(204, 51, 204);"> </span>Most recent systems
-    use udev to manage device names and permissions, but by default
-    color instruments may not be accessible to normal system users.<br>
+    <span style="color: rgb(204, 51, 204);"> </span>Recent Fedora based
+    systems include Gnome Color Manager, which comes with a udev rule
+    for color instruments. You can check this by looking for the <span
+      style="font-weight: bold;">/etc/udev/rules.d</span> or in <b>/usr/lib/udev/rules.d/69-cd-sensors.rules</b>
+    file. If this exists and is up to date enough to include the
+    instrument you want to use, then all you have to do is add yourself
+    to the <b>colord</b> group, ie:<br>
+    <br>
+    &nbsp;&nbsp; sudo usermod -a -G colord $USER<br>
+    <br>
+    If the <b>69-cd-sensors.rules</b> file is out of date and does not
+    include the latest instruments supported by Argyll, then the
+    simplest thing to do is to replace the <b>69-cd-sensors.rules</b>
+    file with the <span style="font-weight: bold;">usb/</span><span
+      style="font-weight: bold;">55-Argyll.rules</span>. You will need
+    to do this as root, and set the owner as root, group root,
+    permissions 644. You may need to re-plug in your instrument to get
+    changes to the udev rules recognised.<br>
+    <h5><span style="color: rgb(204, 51, 204);"><a name="udev2"></a>USB
+        instruments access using udev, with no existing <font
+          color="#330033">/etc/udev/rules.d</font> or <font
+          color="#330033">/usr/lib/udev/rules.d/69-cd-sensors.rules</font>
+        file.<br>
+      </span></h5>
+    Most recent systems use udev to manage device names and permissions,
+    but by default color instruments may not be accessible to normal
+    system users.<br>
     To solve this a udev rule file needs to be added that modifies the
     group and permission of any Color Measurement Instruments, and you
     may then need to add yourself to that group.<br>
+    <br>
+    First check whether other rules are in <span style="font-weight:
+      bold;">/etc/udev/rules.d</span> or in <b>/usr/lib/udev/rules.d</b>,
+    and use the appropriate directory.<br>
+    (You may also want to check in that directory whether
+    55-Argyll.rules or some other .rules file that is setup to enable
+    color instruments already exists in that directory.)<br>
     <br>
     <span style="font-weight: bold;"></span>Copy the file <span
       style="font-weight: bold;">usb/</span><span style="font-weight:
       bold;">55-Argyll.rules</span> from the binary or source
     distribution into <span style="font-weight: bold;">/etc/udev/rules.d/55-Argyll.rules</span>
-    with&nbsp;owner root, group root, permissions 644.<br>
-    (There may already be a file that handles some of the color
-    instruments as part of your installation. You need to check though
-    that it is up to date.)<br>
+    or <span style="font-weight: bold;">/usr/lib/udev/rules.d/55-Argyll.rules
+
+
+
+    </span>(as appropriate) with&nbsp;owner root, group root,
+    permissions 644.<br>
     <br>
     If you are on an <span style="font-weight: bold;">older system</span>
     that uses a udev that doesn't recognize the syntax used in
     55-Argyll.rules, or that doesn't have rules to create the libusb
     /dev/bus/usb/00X/00Y device entries, you should install the <span
-      style="font-weight: bold;">usb/45-Argyll.rules</span> file
-    instead.<br>
+      style="font-weight: bold;">usb/45-Argyll.rules</span> file instead
+    - See below.<br>
     <br>
     On recent systems the new rules file will be notices as soon as you
     plug the instrument in again.<br>
@@ -221,127 +274,14 @@
 
 
 
+
+
+
+
+
     <b>/sbin/udevcontrol reload_rules</b> or&nbsp; <span
       style="font-weight: bold;">/sbin/udevstart</span> or reboot to get
     the new file noticed.<br>
-    <br>
-    ----------------- cut here ---------------------<br>
-    # udev rule to recognize instruments and make them accessible to
-    user applications.<br>
-    # Copy this to /etc/udev/rules.d/55-Argyll.rules<br>
-    <br>
-    # Skip all this to speed things up if it'a not a usb add.<br>
-    ACTION!="add", GOTO="argyll_rules_end"<br>
-    SUBSYSTEM!="usb", GOTO="argyll_rules_end"<br>
-    <br>
-    # Recognize the color measurement devices<br>
-    <br>
-    # Colorimtre HCFR<br>
-    ATTRS{idVendor}=="04db", ATTRS{idProduct}=="005b",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # MonacoOPTIX (Same as i1 Display 1)<br>
-    ATTRS{idVendor}=="0670", ATTRS{idProduct}=="0001",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # HueyL (not tested)<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5001",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # HueyL (not tested)<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5010",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1Display 3<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5020",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # ColorMunki Smile<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="6003",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # DTP20<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d020",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # DTP92Q (not tested)<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d092",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # DTP94<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d094",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # i1Pro<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2000",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1Monitor<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2001",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1Display<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2003",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1 io table (not tested)<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2004",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # Huey<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2005",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1 iSis (not tested)<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2006",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # ColorMunki<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2007",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # Spyder 1<br>
-    ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0100",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # Spyder 2<br>
-    ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0200",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # Spyder 3<br>
-    ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0300",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # Spyder 4<br>
-    ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0400",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # ColorHug, old and new<br>
-    ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="f8da",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    ATTRS{idVendor}=="273f", ATTRS{idProduct}=="1001",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    <br>
-    # Let udev-acl manage these devices, if it's available<br>
-    TEST=="/var/run/ConsoleKit/database",
-    ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}="1"<br>
-    <br>
-    # Otherwise, restrict access to members of the plugdev group,<br>
-    # which the user may have to add to the system.<br>
-    ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}!="*?",
-    MODE="660", GROUP="plugdev"<br>
-    <br>
-    # Set ID_VENDOR and ID_MODEL acording to VID and PID<br>
-    IMPORT{program}="usb-db %p"<br>
-    <br>
-    LABEL="argyll_rules_end"<br>
-    ----------------- cut here ---------------------<br>
     <br>
     (You may want to refer to <a
       href="http://reactivated.net/writing_udev_rules.html">this
@@ -352,52 +292,55 @@ href="http://www.google.com/search?hl=en&amp;q=man+udev&amp;btnG=Search&amp;meta
     <span style="font-weight: bold;">YOU THEN MAY NEED TO:</span><br>
     <br>
     If your system is <span style="font-weight: bold;">not</span> using
-    the new ACL to manage device access for console users (the file <span
-      style="font-weight: bold;">/lib/udev/udev-acl</span> doesn't exist
-    on your system), then you will <span style="text-decoration:
-      underline;">need to add</span> yourself to the <span
-      style="font-weight: bold;">plugdev</span> group, if you are not
-    already a member of it. You can do this either by using a "Users and
-    Groups" system administration tool, or on the command line running
-    as root:<br>
+    the ACL to manage device access for console users (the file <span
+      style="font-weight: bold;">/var/run/ConsoleKit/database</span>
+    doesn't exist on your system), then you will <span
+      style="text-decoration: underline;">need to add</span> yourself to
+    the <span style="font-weight: bold;">colord</span> group, if you
+    are not already a member of it. You can do this either by using a
+    "Users and Groups" system administration tool, or on the command
+    line running as root:<br>
     <br>
-    &nbsp;&nbsp; sudo usermod -a -G plugdev yourusernamehere<br>
+    &nbsp;&nbsp; sudo usermod -a -G colord $USER<br>
     <br>
     or<br>
     &nbsp;&nbsp;&nbsp; su root<br>
-    &nbsp;&nbsp;&nbsp; usermod -a -G plugdev yourusernamehere<br>
+    &nbsp;&nbsp;&nbsp; usermod -a -G colord $USER<br>
     <br>
     (If the usermod program isn't found as root, it might be in
     /usr/sbin, ie. use /usr/sbin/usermod .... etc.<br>
     &nbsp;If usermod doesn't recognize the -a flag try "usermod -A
-    plugdev yourusernamehere".<br>
+    colord $USER".<br>
     &nbsp;If this doesn't work you will have to run "id yourusername" to
     list the current supplemental<br>
-    &nbsp;groups, and add them plus plugdev using just "usermod -G
+    &nbsp;groups, and add them plus colord using just "usermod -G
     group1,group2,... yourusername")<br>
     <br>
-    You may find that the <span style="font-weight: bold;">plugdev</span>
-    group doesn't exist on your system, and if so you will need to
-    create it:<br>
+    You may find that the <b>colord</b><b></b> group doesn't exist on
+    your system, and if so you will need to create it:<br>
     <br>
-    &nbsp; sudo groupadd -r plugdev<br>
+    &nbsp; sudo groupadd -r colord<br>
     <br>
-    and then add yourself to the plugdev group.<br>
+    and then add yourself to the <b>colord</b> group.<br>
     <br>
     You may have to log out and then in again for the groups to become
     effective.<br>
     <br>
     You can check whether the instrument is being recognized and set to
-    the plugdev group by comparing the output of <span
+    the colord group by comparing the output of <span
       style="font-weight: bold;">ls -l -R /dev/bus/usb</span> without
     and then with the instrument plugged in.<br>
     <br>
     You can test whether your instrument is accessible by plugging it in
     and then running "spotread -?" and looking for it listed after the <span
       style="font-weight: bold;">-c</span> option.<br>
-    <span style="font-weight: bold;"></span> &nbsp;
     <h5><span style="color: rgb(204, 51, 204);"><a name="hotplug"></a>USB
 instruments
+
+
+
+
+
 
 
 
@@ -419,78 +362,6 @@ instruments
     with owner root, group root, permissions 644.<span
       style="font-weight: bold;"></span><br>
     <br>
-    &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
-    # hotplug device mapping to handling script.<br>
-    # Copy this to /etc/hotplug/usb/Argyll.usermap<br>
-    #<br>
-    # Detect instruments by their USB VID and PID<br>
-    #<br>
-    # DTP20<br>
-    Argyll 0x0003 0x0765 0xd020 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # DTP92Q - not tested<br>
-    Argyll 0x0003 0x0765 0xd092 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # DTP94<br>
-    Argyll 0x0003 0x0765 0xd094 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # MonacoOPTIX (Same as i1 Display 1)<br>
-    Argyll 0x0003 0x0670 0x0001 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # i1 Display<br>
-    Argyll 0x0003 0x0971 0x2003 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # i1 Display 3<br>
-    Argyll 0x0003 0x0765 0x5020 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # i1 Monitor<br>
-    Argyll 0x0003 0x0971 0x2001 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # i1 Pro<br>
-    Argyll 0x0003 0x0971 0x2000 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # ColorMunki<br>
-    Argyll 0x0003 0x0971 0x2007 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # ColorMunki Smile<br>
-    Argyll 0x0003 0x0765 0x6003 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # Colorimtre HCFR<br>
-    Argyll 0x0003 0x04DB 0x005B 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # Spyder 2<br>
-    Argyll 0x0003 0x085C 0x0200 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # Spyder 3<br>
-    Argyll 0x0003 0x085C 0x0300 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # Spyder 4<br>
-    Argyll 0x0003 0x085C 0x0400 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # Huey<br>
-    Argyll 0x0003 0x0971 0x2005 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    #<br>
-    # ColorHug<br>
-    Argyll 0x0003 0x04D8 0xF8DA 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    Argyll 0x0003 0x273F 0x1001 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
-    0x00 0x00000000<br>
-    &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
     <br>
     &nbsp;(For even older versions, append the lines above to <span
       style="font-weight: bold;">/etc/hotplug/usb.usermap</span>, and
@@ -502,49 +373,37 @@ instruments
     with owner root, group root, permissions 744.<span
       style="font-weight: bold;"></span><br>
     <br>
-    &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
-    #!/bin/sh<br>
-    # Copy to /etc/hotplug/usb/Argyll<br>
-    #<br>
-    # Argyll hotplug script. Adds the USB devices to the plugdev group.<br>
-    if [ "${ACTION}" = "add" ] &amp;&amp; [ -f "${DEVICE}" ]<br>
-    then<br>
-    &nbsp;&nbsp;&nbsp; chgrp plugdev "${DEVICE}"<br>
-    &nbsp;&nbsp;&nbsp; chmod 660 "${DEVICE}"<br>
-    fi<br>
-    &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
-    <br>
     <span style="font-weight: bold;">YOU THEN NEED TO:</span><br>
     <br>
     You will then <span style="text-decoration: underline;">need to add</span>
-    yourself to the <span style="font-weight: bold;">plugdev</span>
+    yourself to the <span style="font-weight: bold;">colord</span>
     group, if you are not already a member of it. You can do this either
     by using a "Users and Groups" system administration tool, or on the
     command line running as root:<br>
     <br>
-    &nbsp;&nbsp; sudo usermod -a -G plugdev yourusernamehere<br>
+    &nbsp;&nbsp; sudo usermod -a -G colord $USER<br>
     <br>
     or<br>
     &nbsp;&nbsp;&nbsp; su root<br>
-    &nbsp;&nbsp;&nbsp; usermod -a -G plugdev yourusernamehere<br>
+    &nbsp;&nbsp;&nbsp; usermod -a -G colord $USER<br>
     <br>
     <br>
     (If the usermod program isn't found as root, it might be in
     /usr/sbin, ie. use /usr/sbin/usermod .... etc.<br>
     &nbsp;If usermod doesn't recognize the -a flag try "usermod -A
-    plugdev yourusernamehere".<br>
+    colord $USER".<br>
     &nbsp;If this doesn't work you will have to run "id yourusername" to
     list the current suplemental<br>
-    &nbsp;groups, and add plugdev using just "usermod -G
+    &nbsp;groups, and add colord using just "usermod -G
     group1,group2,... yourusername")<br>
     <br>
-    You may find that the <span style="font-weight: bold;">plugdev</span>
+    You may find that the <span style="font-weight: bold;">colord</span>
     group doesn't exist on your system, and if so you will need to
     create it:<br>
     <br>
-    &nbsp; sudo groupadd -r plugdev<br>
+    &nbsp; sudo groupadd -r colord<br>
     <br>
-    and then add youself to the plugdev group.<br>
+    and then add youself to the colord group.<br>
     <br>
     You may have to log out and then in again for the groups to become
     effecive.<br>
@@ -555,6 +414,11 @@ instruments
     <span style="font-weight: bold;"></span>&nbsp; <br>
     <h5><span style="color: rgb(204, 51, 204);"><a name="serial"></a>Serial
 instruments
+
+
+
+
+
 
 
 
@@ -573,16 +437,16 @@ instruments
     administration tool, or on the command line using "usermod":<br>
     <br>
     &nbsp;&nbsp;&nbsp; su root<br>
-    &nbsp;&nbsp;&nbsp; usermod -a -G tty,uucp yourusernamehere<br>
+    &nbsp;&nbsp;&nbsp; usermod -a -G tty,uucp $USER<br>
     <br>
     or<br>
     <br>
-    &nbsp;&nbsp; sudo usermod -a -G tty,uucp yourusernamehere<br>
+    &nbsp;&nbsp; sudo usermod -a -G tty,uucp $USER<br>
     <br>
     (If the usermod program isn't found as root, it might be in
     /usr/sbin, ie. use /usr/sbin/usermod .... etc.<br>
     &nbsp;If usermod doesn't recognize the -a flag try "usermod -A
-    plugdev yourusernamehere".<br>
+    colord $USER".<br>
     &nbsp;If this doesn't work you will have to run "id yourusername" to
     list the current suplemental<br>
     &nbsp;groups, and add a tty or uucp group using just "usermod -G

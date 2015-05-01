@@ -1,4 +1,6 @@
 
+// current scat.c with V1.6.3 position curve rspl setup code
+
 /* 
  * Argyll Color Correction System
  * Multi-dimensional regularized splines data fitter
@@ -126,12 +128,18 @@
 #define DEFAVGDEV 0.5	/* Default average deviation % */
 
 /* algorithm parameters [Release defaults] */
-#undef POINTWEIGHT		/* [Undef] Increas smoothness weighting proportional to number of points */
 #define INCURVEADJ		/* [Defined] Adjust smoothness criteria for input curve grid spacing */
-#define ENABLE_2PASSSMTH	/* [Define] Enable 2 pass smooth using Gaussian filter */
-#define ENABLE_EXTRAFIT	/* [Undef] Enable the extra fit option. Good to combat high smoothness. */
+#undef SMOOTH2			/* [Undef] INCOMPLETE Use 3nd order smoothness rather than curvature. */
+						/* 2nd order is optimal about 2.5 x lower than 3rd order, */
+						/* so an even split between 3rd:2nd would be 1.0 0.4, */
+						/* a 9:1 split would be 0.9 0.04 */
+						/* This also disables the incorrect scaling of smoothness with */
+						/* output range */
+#undef AUTOSM			/* [Undef] INCOMPLETE Support auto smoothing using LOOCV */
 
-#define TWOPASSORDER 2.0	/* Filter order. 2 = Gaussian */
+# define CW2 0.9
+# define CW ((1.0 - CW2) * 0.4)
+
 
 /* Tuning parameters */
 #ifdef NEVER
@@ -144,13 +152,12 @@
 #define TOL_IMP 1.0		/* Minimum error improvement to continue - reduces accuracy (1.0 == off) */
 #undef GRADUATED_TOL	/* Speedup attemp - use reduced tollerance for prior grids. */
 #define GRATIO 1.5		/* Multi-grid resolution ratio */
-#undef OVERRLX 		/* Use over relaxation factor when progress slows (worse accuracy ?) */
+#undef OVERRLX 			/* Use over relaxation factor when progress slows (worse accuracy ?) */
 #define JITTERS 0		/* Number of 1D conjugate solve itters */
 #define CONJ_TOL 1.0	/* Extra tolereance on 1D conjugate solution times TOL. */
 #define MAXNI 16		/* Maximum itteration without checking progress */
 //#define SMOOTH 0.000100	/* Set nominal smoothing (1.0) */
 #define WEAKW  0.1		/* Weak default function nominal effect (1.0) */
-#define ZFCOUNT 1		/* Extra fit repeats */
 
 #else
 
@@ -166,7 +173,6 @@
 #define MAXNI 16		/* [16] Maximum itteration without checking progress */
 //#define SMOOTH 0.000100	/* Set nominal smoothing (1.0) */
 #define WEAKW  0.1		/* [0.1] Weak default function nominal effect (1.0) */
-#define ZFCOUNT 1		/* [1] Extra fit repeats */
 
 #endif
 
@@ -200,6 +206,9 @@ struct _mgtmp {
 	/* Scattered data fit stuff */
 	struct {
 		double cw[MXDI];	/* Curvature weight factor */
+#ifdef SMOOTH2
+		double cw2[MXDI];	/* Smoothness weight factor */
+#endif
 	} sf;
 
 	/* Grid points data */
@@ -225,7 +234,6 @@ struct _mgtmp {
 
 	/* Equation Solution related (Grid point solutions) */
 	struct {
-		double **ccv;		/* [gno][di] Curvature Compensation Values */
 		double **A;			/* A matrix of interpoint weights A[g.no][q.acols] */
 		int acols;			/* A matrix columns needed */
 							/* Packed indexes run from 0..acols-1 */
@@ -233,15 +241,59 @@ struct _mgtmp {
 							/* and +/-1 offset in all dimensions, but only the +ve offset */
 							/* half of the sparse matrix is stored, due to equations */
 							/* being symetrical. */
-		int xcol[HACOMPS+8];/* A array column translation from packed to sparse index */ 
+#define XCOLPMAX (HACOMPS+8)
+		int xcol[XCOLPMAX];	/* A array column translation from packed to sparse index */ 
 		int *ixcol;			/* A array column translation from sparse to packed index */ 
 		double *b;			/* b vector for RHS of simultabeous equation b[g.no] */
 		double normb;		/* normal of b vector */
 		double *x;			/* x solution to A . x = b */
 	} q;
 
+#ifdef AUTOSM
+	struct _loocv *as;		/* Auto Smooth Setup information */
+#endif
+
 }; typedef struct _mgtmp mgtmp;
 
+
+/* ================================================= */
+
+#ifdef AUTOSM
+
+/* Structure to hold LOOCV equations for multi-grid calculations */
+/* One is created for each resolution. Only used in this file. */
+struct _loocv {
+	mgtmp *m;	/* Associated mgtmp */
+
+	int ndcells;		/* Number of cells with at least one data point */
+	int *dlist;			/* Index of base vertex of cell with at least one data point. */
+						/* ndcells will be filled */
+
+	int *vtx_dlist;		/* For base vertex index store the index of the first data point */
+						/* within that cell. -1 for no data */
+	int *dat_dlist;		/* Index by data point, store the index of the next data point */
+						/* in the list in the cell. -1 for no more data */
+
+	double *sm;		/* smoothness map grid data values in log space, 0.0 for none */ 
+
+	double **As;	/* A matrix of smoothness vertex weights */
+	double *bs;		/* b vector for RHS of smoothness equation */
+
+#ifdef SMOOTH2
+	double **As2;	/* A matrix of smoothness 2 vertex weights */
+	double *bs2;	/* b vector for RHS of smoothness 2 equation */
+#endif
+
+	double **Ad;	/* A matrix of data vertex weights */
+	double *bd;		/* b vector for RHS of data equation */
+
+	double **AA;	/* A matrix of vertex weights */
+	double *bb;		/* b vector for RHS of equation */
+	double *xx;		/* x vector for solution of equation for a given smoothness */
+
+}; typedef struct _loocv loocv;
+
+#endif /* AUTOSM */
 
 /* ================================================= */
 /* Temporary arrays used by cj_line(). We try and avoid */
@@ -256,15 +308,91 @@ static void init_cj_arrays(cj_arrays *ta);
 static void free_cj_arrays(cj_arrays *ta);
 
 static int add_rspl_imp(rspl *s, int flags, void *d, int dtp, int dno);
-static mgtmp *new_mgtmp(rspl *s, int gres[MXDI], int f);
+static mgtmp *new_mgtmp(rspl *s, int gres[MXDI], double smooth, double avgdev, int f, int issm);
 static void free_mgtmp(mgtmp *m);
-static void setup_solve(mgtmp *m);
+static void setup_solve(mgtmp *m, mgtmp *sm);
 static void solve_gres(mgtmp *m, cj_arrays *ta, double tol, int final);
 static void init_soln(mgtmp  *m1, mgtmp  *m2);
-static void comp_ccv(mgtmp *m);
-static void filter_ccv(rspl *s, double stdev);
-static void init_ccv(mgtmp *m);
-static void comp_extrafit_corr(mgtmp *m);
+static double mgtmp_interp(mgtmp  *m, double p[MXDI]);
+#ifdef AUTOSM
+static void setup_sutosmsolve(mgtmp *);
+static void comp_fit_errors(mgtmp *m);
+static void plot_mgtmp1(mgtmp *m);
+#endif /* AUTOSM */
+
+static void set_it_info(
+rspl *s,
+int *tres,		/* Single dimension grid resolution for each axis */
+it_info *ii		/* it_info to set */
+) {
+	int bres;		/* Biggest resolution */
+	int sres;		/* Starting resolution */
+	double res;
+	double gratio;
+	int i, e, f;
+
+	bres = 0;
+	for (e = 0; e < s->di; e++) {
+		if (tres[e] > bres)
+			bres = tres[e];
+	}
+
+	/* Figure out how many multigrid steps to use */
+#ifdef SMOOTH2
+	sres = 5;		/* Start at minimum grid res of 5 */
+#else
+	sres = 4;		/* Start at minimum grid res of 4 */
+#endif
+
+	/* Calculate the resolution scaling ratio and number of itters. */
+	gratio = GRATIO;
+	if (((double)bres/(double)sres) <= gratio) {
+		ii->niters = 2;
+		gratio = (double)bres/(double)sres;
+	} else {	/* More than one needed */
+		ii->niters = (int)((log((double)bres) - log((double)sres))/log(gratio) + 0.5);
+		gratio = exp((log((double)bres) - log((double)sres))/(double)ii->niters);
+		ii->niters++;
+	}
+	
+	/* Allocate space for resolutions */
+	if ((ii->ires = imatrix(0, ii->niters, 0, s->di)) == NULL)
+		error("rspl: malloc failed - ires[][]");
+
+	/* Fill in the resolution values for each itteration */
+	for (res = (double)sres, i = 0; i < ii->niters; i++) {
+		int ires;
+
+		ires = (int)(res + 0.5);
+		for (e = 0; e < s->di; e++) {
+			if ((ires + 1) >= tres[e])	/* If close enough biger than target res. */
+				ii->ires[i][e] = tres[e];
+			else
+				ii->ires[i][e] = ires;
+		}
+		res *= gratio;
+	}
+
+	/* Assert */
+	for (e = 0; e < s->di; e++) {
+		if (ii->ires[ii->niters-1][e] != tres[e])
+			error("rspl: internal error, final res %d != intended res %d\n",
+			       ii->ires[ii->niters-1][e], tres[e]);
+	}
+}
+
+static void freeit_info(
+rspl *s,
+it_info *ii
+) {
+	int i, f;
+
+	if (ii->ires != NULL) {
+		free_imatrix(ii->ires, 0, ii->niters, 0, s->di);
+		ii->ires = NULL;
+	}
+}
+
 
 /* Initialise the regular spline from scattered data */
 /* Return non-zero if non-monotonic */
@@ -325,12 +453,7 @@ printf("~1 rspl: flags = 0x%x\n",flags);
 	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
 		s->verbose = 0;
 
-#ifdef ENABLE_2PASSSMTH
-	s->tpsm = (flags & RSPL_2PASSSMTH) ? 1 : 0;		/* Enable 2 pass smoothing */
-#endif
-#ifdef ENABLE_EXTRAFIT
-	s->zf = (flags & RSPL_EXTRAFIT2) ? 2 : 0;		/* Enable extra fitting effort */
-#endif
+	s->ausm = (flags & RSPL_AUTOSMOOTH) ? 1 : 0;		/* Enable auto smoothing */
 	s->symdom = (flags & RSPL_SYMDOMAIN) ? 1 : 0;	/* Turn on symetric smoothness with gres */
 
 	/* Save smoothing factor and Average Deviation */
@@ -485,66 +608,14 @@ printf("~1 rspl: flags = 0x%x\n",flags);
 	/* Allocate the grid data */
 	alloc_grid(s);
 	
-	/* Zero out the re-usable mgtmps */
-	for (f = 0; f < s->fdi; f++) {
-		s->mgtmps[f] = NULL;
-	}
-
-	{
-		int sres;		/* Starting resolution */
-		double res;
-		double gratio;
-
-		/* Figure out how many multigrid steps to use */
-		sres = 4;		/* Else start at minimum grid res of 4 */
-
-		/* Calculate the resolution scaling ratio and number of itters. */
-		gratio = GRATIO;
-		if (((double)s->g.bres/(double)sres) <= gratio) {
-			s->niters = 2;
-			gratio = (double)s->g.bres/(double)sres;
-		} else {	/* More than one needed */
-			s->niters = (int)((log((double)s->g.bres) - log((double)sres))/log(gratio) + 0.5);
-			gratio = exp((log((double)s->g.bres) - log((double)sres))/(double)s->niters);
-			s->niters++;
-		}
-		
-		/* Allocate space for resolutions and mgtmps pointers */
-		if ((s->ires = imatrix(0, s->niters, 0, s->di)) == NULL)
-			error("rspl: malloc failed - ires[][]");
-
-		for (f = 0; f < s->fdi; f++) {
-			if ((s->mgtmps[f] = (void *) calloc(s->niters, sizeof(void *))) == NULL)
-				error("rspl: malloc failed - mgtmps[]");
-		}
-
-		/* Fill in the resolution values for each itteration */
-		for (res = (double)sres, i = 0; i < s->niters; i++) {
-			int ires;
-
-			ires = (int)(res + 0.5);
-			for (e = 0; e < s->di; e++) {
-				if ((ires + 1) >= s->g.res[e])	/* If close enough biger than target res. */
-					s->ires[i][e] = s->g.res[e];
-				else
-					s->ires[i][e] = ires;
-			}
-			res *= gratio;
-		}
-
-		/* Assert */
-		for (e = 0; e < s->di; e++) {
-			if (s->ires[s->niters-1][e] != s->g.res[e])
-				error("rspl: internal error, final res %d != intended res %d\n",
-				       s->ires[s->niters-1][e], s->g.res[e]);
-		}
-
-	}
+	/* Setup the number of itterations and resolution for each itteration */
+	set_it_info(s, s->g.res, &s->ii);
 
 	/* Do the data point fitting */
 	return add_rspl_imp(s, 0, d, dtp, dno);
 }
 
+/* Weighting adjustment values */
 double adjw[21] = {
 	7.0896971822529019e-278, 2.7480236142217909e+233, 1.4857837676559724e+166,
 	1.3997102851752585e-152, 1.3987140593588909e-076, 2.8215833239257504e+243,
@@ -554,6 +625,89 @@ double adjw[21] = {
 	2.3994297542685112e-038, 3.9052141785471924e-153, 3.8223903939904297e-096,
 	3.2368131456774088e+262, 6.5639459298208554e+045, 2.0087765219520138e-139
 };
+
+/* Do the fitting for one output plane */
+static mgtmp *
+fit_rspl_plane_imp(
+rspl *s,		/* this */
+int f,			/* Output plane */
+it_info *ii,	/* resolution info */
+double smooth,	/* Smoothing factor */
+double avgdev,	/* Average deviation to use to set smoothness */
+//mgtmp *sm,		/* Optional smoothness map */
+cj_arrays *ta	/* Temporary array */
+) {
+	int i, nn;			/* Multigreid resolution itteration index */
+	mgtmp *pm = NULL, *m = NULL;
+	mgtmp *psm = NULL, *sm = NULL;	/* Smoothing map */
+
+	/* For each resolution (itteration) */
+	for (nn = 0; nn < ii->niters; nn++, pm = m) {
+
+		m = new_mgtmp(s, ii->ires[nn], smooth, avgdev, f, 0);
+
+		// ~~~ want setup solve after creating sm,
+		// but can't setup initial values until after setup_solve
+		// because m->q.x needs to be allocated
+		setup_solve(m, sm);
+
+		if (nn == 0) {						/* Make sure we have an initial x[] */
+#ifdef AUTOSM
+			Create sm and set initial values
+~~~~
+			sm = new_mgtmp(s, ii->ires[nn], smooth, avgdev, f, 1);
+			for (i = 0; i < sm->g.no; i++)
+				sm->as.sm[i] = m->sf.cw[e];		/* Value from opt_smooth() */
+												/* ?? how to handle cw2[] etc. ? */
+		
+#endif /* AUTOSM */
+
+			for (i = 0; i < m->g.no; i++)
+				m->q.x[i] = s->d.va[f];		/* Start with average data value */
+		} else {
+			init_soln(m, pm);				/* Scale from previous resolution */
+			free_mgtmp(pm);					/* Free previous grid res solution */
+			pm = NULL;
+
+#ifdef AUTOSM
+			init_soln(sm, psm);				/* Scale from previous resolution */
+			free_mgtmp(psm);				/* Free previous grid res solution */
+			psm = NULL;
+#endif
+		}
+
+		solve_gres(m, ta,
+#if defined(GRADUATED_TOL)
+		              TOL * s->g.res[s->g.brix]/s->ires[nn][s->g.brix],
+#else
+		              TOL,
+#endif
+		              ii->ires[nn][s->g.brix] >= s->g.res[s->g.brix]);	/* Use itterative */
+
+#ifdef DEBUG
+	{
+		int k, gno = m->g.no;
+		double *x  = m->q.x;		/* x vector for result */
+		printf("Plane %d res %d solution values:\n",f,ii->ires[nn][0]);
+		for (k = 0; k < gno; k++)
+			printf("x[%d] = %f\n",k,x[k]);
+		printf("\n");
+	}
+#endif /* DEBUG */
+
+#ifdef AUTOSM
+		if (nn < (ii->niters-1)) {
+
+			setup_sutosmsolve(sm);
+
+		}
+#endif
+		psm = sm;
+	}	/* Next resolution */
+
+	/* return the final resolution mgtmp */
+	return m;
+}
 
 /* Do the work of initialising from initial data points. */
 /* Return non-zero if non-monotonic */
@@ -578,6 +732,10 @@ add_rspl_imp(
 		return 0;
 	}
 
+#ifdef DEBUG
+	printf("add_rspl_imp: flags 0x%x, dno %d, dtp %d\n",flags,dno,dtp);
+#endif
+
 	/* Allocate space for points */
 	/* Allocate the scattered data space */
 	if ((s->d.a = (rpnts *) malloc(sizeof(rpnts) * dno)) == NULL)
@@ -592,9 +750,9 @@ add_rspl_imp(
 			for (e = 0; e < s->di; e++)
 				s->d.a[n].p[e] = dp[i].p[e];
 			for (f = 0; f < s->fdi; f++) {
-				s->d.a[n].cv[f] =
 				s->d.a[n].v[f] = dp[i].v[f];
 				s->d.a[n].k[f] = 1.0;		/* Assume all data points have same weight */
+//				s->d.a[n].fe = 0.0;
 			}
 		}
 	} else if (dtp == 1) {			/* Per data point weight */
@@ -605,9 +763,9 @@ add_rspl_imp(
 			for (e = 0; e < s->di; e++)
 				s->d.a[n].p[e] = dp[i].p[e];
 			for (f = 0; f < s->fdi; f++) {
-				s->d.a[n].cv[f] =
 				s->d.a[n].v[f] = dp[i].v[f];
 				s->d.a[n].k[f] = dp[n].w;	/* Weight specified */
+//				s->d.a[n].fe = 0.0; 
 			}
 		}
 	} else {				/* Per data point output weight */
@@ -618,9 +776,9 @@ add_rspl_imp(
 			for (e = 0; e < s->di; e++)
 				s->d.a[n].p[e] = dp[i].p[e];
 			for (f = 0; f < s->fdi; f++) {
-				s->d.a[n].cv[f] =
 				s->d.a[n].v[f] = dp[i].v[f];
 				s->d.a[n].k[f] = dp[n].w[f];	/* Weight specified */
+//				s->d.a[n].fe = 0.0;
 			}
 		}
 	}
@@ -628,89 +786,79 @@ add_rspl_imp(
 
 	init_cj_arrays(&ta);		/* Zero temporary arrays */
 	
-	if (s->verbose && s->zf)
-		printf("Doing extra fitting\n");
+	if (s->verbose && s->ausm) {
+#ifdef AUTOSM
+		printf("Doing automatic local smoothing optimization\n");
+#else
+		printf("Automatic local smoothing flag ignored !!!\n");
+#endif
+	}
 
 	/* Do fit of grid to data for each output dimension */
 	for (f = 0; f < fdi; f++) {
-		int nn = 0;				/* Multigreid resolution itteration index */
-		int zfcount = ZFCOUNT;	/* Number of extra fit adjustments to do */
-		int donezf = 0;			/* Count - number of extra fit adjustments done */
 		float *gp;
 		mgtmp *m = NULL;
 
-		for (donezf = 0; donezf <= s->zf; donezf++) {	/* For each extra fit pass */
+#ifdef NEVER		// ~~99 remove this
+		mgtmp *sm = NULL;		/* Auto smoothness map */
 
-			for (s->tpsm2 = 0; s->tpsm2 <= s->tpsm; s->tpsm2++) {	/* For passes of 2 pass smoothing */
+		/* If auto smoothness, create smoothing map */
+		if (s->ausm) {
+			int res[MXDI];
+			int mxres[5] = { 0, 101, 51, 17, 11 };
+			int smres[5] = { 0, 12, 8, 6, 6 };
  
-				/* For each resolution (itteration) */
-				for (nn = 0; nn < s->niters; nn++) {
+			/* Set target resolution for initial fit */
+			for (e = 0; e < s->di; e++) {
+				res[e] = s->g.res[e]; 
 
-					m = new_mgtmp(s, s->ires[nn], f);
-					s->mgtmps[f][nn] = (void *)m;
+				if (res[e] > mxres[s->di])
+					res[e] = mxres[s->di];
+			}
 
-					if (s->tpsm && s->tpsm2 != 0) {	/* 2nd pass of 2 pass smoothing */
-						init_ccv(m);				/* Downsample m->ccv from s->g.ccv */
-					}
-					setup_solve(m);
+			/* Setup the number of itterations and resolution for each itteration */
+			set_it_info(s, res, &s->as_ii);
 
-					if (nn == 0) {						/* Make sure we have an initial x[] */
-						for (i = 0; i <  m->g.no; i++)
-							m->q.x[i] = s->d.va[f];		/* Start with average data value */
-					} else {
-						init_soln(m, s->mgtmps[f][nn-1]);	/* Scale from previous resolution */
+printf("~1 s->smooth = %f, avgdev[f] = %f\n",s->smooth, s->avgdev[f]);
 
-						free_mgtmp(s->mgtmps[f][nn-1]);	/* Free previous grid res solution */
-						s->mgtmps[f][nn-1] = NULL;
-					}
+			/* First pass fit with heavy smoothing */
+			m = fit_rspl_plane_imp(s, f, &s->as_ii, 1.0, 0.1, NULL, &ta);
 
-					solve_gres(m, &ta,
-#if defined(GRADUATED_TOL)
-					              TOL * s->g.res[s->g.brix]/s->ires[nn][s->g.brix],
-#else
-					              TOL,
-#endif
-					              s->ires[nn][s->g.brix] >= s->g.res[s->g.brix]);	/* Use itterative */
+printf("Initial high smoothing fit of output %d:\n",f);
+plot_mgtmp1(m);
 
-				}	/* Next resolution */
+			/* Compute the fit error values from first pass */
+			comp_fit_errors(m);		/* Compute correction to data target values */
 
-				if (s->tpsm && s->tpsm2 == 0) {
-					double fstdev;		/* Filter standard deviation */
-//printf("~1 setting up second pass smoothing !!!\n");
+			free_mgtmp(m);
 
-					/* Compute the curvature compensation values from */
-					/* first pass final resolution */
-					comp_ccv(m);
+			/* Set target resolution for smoothness map */
+			for (e = 0; e < s->di; e++)
+				res[e] = smres[s->di];
 
-					if (s->smooth >= 0.0) {
-						/* Compute from: no dim, no data points, avgdev & extrafit */
-						fstdev = 0.05 * s->smooth;
-fprintf(stderr,"~1 !!! Gaussian smoothing not being computed Using default %f !!!\n",fstdev);
-					} else {	/* Special used to calibrate table */
-						fstdev = -s->smooth;
-					}
-//fprintf(stderr,"~1 Gaussian smoothing with fstdev %f !!!\n",fstdev);
-					/* Smooth the ccv's */
-					filter_ccv(s, fstdev);
-				}
-			}	/* Next two pass smoothing pass */
-			if (s->zf)
-				comp_extrafit_corr(m);		/* Compute correction to data target values */
-		}	/* Next extra fit pass */
+			set_it_info(s, res, &s->asm_ii);
 
-		/* Clean up after 2 pass smoothing */
-		s->tpsm2 = 0;
-		if (s->g.ccv != NULL) {
-			free_dmatrix(s->g.ccv, 0, s->g.no-1, 0, s->di-1);
-			s->g.ccv = NULL;
+			/* Create smoothness map from fit errors */
+			sm = fit_rspl_plane_imp(s, -1, &s->asm_ii, -50000, 0.0, NULL, &ta);
+//			sm = fit_rspl_plane_imp(s, -1, &s->asm_ii, 1000.0, 0.1, NULL, &ta);
+printf("Smoothness map for output %d:\n",f);
+plot_mgtmp1(sm);
 		}
+#endif /* NEVER */
+
+		/* Fit data for this plane */
+		m = fit_rspl_plane_imp(s, f, &s->ii, s->smooth, s->avgdev[f], /* sm, */ &ta);
+//printf("Final fit for output %d:\n",f);
+//plot_mgtmp1(m);
 
 		/* Transfer result in x[] to appropriate grid point value */
 		for (gp = s->g.a, i = 0; i < s->g.no; gp += s->g.pss, i++)
 			gp[f] = (float)m->q.x[i];
 
-		free_mgtmp(s->mgtmps[f][nn-1]);		/* Free final resolution entry */
-		s->mgtmps[f][nn-1] = NULL;
+		free_mgtmp(m);			/* Free final resolution entry */
+
+//		if (sm != NULL)			/* Free smoothing map */
+//			free_mgtmp(sm);
 
 	}	/* Next output channel */
 
@@ -862,25 +1010,8 @@ init_data(rspl *s) {
 /* Free the scattered data allocation */
 void
 free_data(rspl *s) {
-	int i, f;
 
-	if (s->ires != NULL) {
-		free_imatrix(s->ires, 0, s->niters, 0, s->di);
-		s->ires = NULL;
-	}
-
-	/* Free up mgtmps */
-	for (f = 0; f < s->fdi; f++) {
-		if (s->mgtmps[f] != NULL) {
-			for (i = 0; i < s->niters; i++) {
-				if (s->mgtmps[f][i] != NULL) {
-					free_mgtmp(s->mgtmps[f][i]);
-				}
-			}
-			free(s->mgtmps[f]);
-			s->mgtmps[f] = NULL;
-		}
-	}
+	freeit_info(s, &s->ii);
 
 	if (s->d.a != NULL) {	/* Free up the data point data */
 		free((void *)s->d.a);
@@ -929,13 +1060,28 @@ free_data(rspl *s) {
 
 /* !!! Possible answer - should be using third order differences */
 /*     for controlling smoothness, not second order (curvature) ?? */
+/* Should adapt smoothing to noise level in different parts of gamut. */
+/* Fix scaling smoothing to data range bug! */
 
-// ~~99
+/* Smoothness tweak */
+static double tweak[21] = {
+	8.0891733310676571e-263, 1.1269230397087924e+243, 5.5667427967136639e+170,
+	4.6422059659371074e-072, 4.7573037006103243e-038, 2.2050803446598081e-152,
+	1.9082109674254010e-094, 1.2362202651281476e+262, 1.8334727652805863e+044,
+	1.7193993129127580e-139, 8.4028172720870109e-316, 7.7791723264393403e-260,
+	4.5505694361996285e+198, 1.4450789782663302e+214, 4.8548304485951407e-033,
+	6.0848773033767158e-153, 2.2014810203887549e+049, 6.0451581453053059e-153,
+	4.5657997262605343e+233, 1.1415770815909824e+243, 2.0087364177250134e-139
+};
+
+#ifndef SMOOTH2
+
 static double opt_smooth(
 	rspl *s,
 	int di,		/* Dimensions */
 	int ndp,	/* Number of data points */
-	double ad	/* Average sample deviation (proportion of input range) */
+	double ad,	/* Average sample deviation (proportion of input range) */
+	int f		/* Output chanel */
 ) {
 	int i;
 	double nc;		/* Normalised sample count */
@@ -1027,22 +1173,13 @@ static double opt_smooth(
 		}
 	};
 
-	/* Smoothness tweak */
-	static double tweak[21] = {
-		8.0891733310676571e-263, 1.1269230397087924e+243, 5.5667427967136639e+170,
-		4.6422059659371074e-072, 4.7573037006103243e-038, 2.2050803446598081e-152,
-		1.9082109674254010e-094, 1.2362202651281476e+262, 1.8334727652805863e+044,
-		1.7193993129127580e-139, 8.4028172720870109e-316, 7.7791723264393403e-260,
-		4.5505694361996285e+198, 1.4450789782663302e+214, 4.8548304485951407e-033,
-		6.0848773033767158e-153, 2.2014810203887549e+049, 6.0451581453053059e-153,
-		4.5657997262605343e+233, 1.1415770815909824e+243, 2.0087364177250134e-139
-	};
-
 	/* Real world correction factors go here - */
 	/* None needed at the moment ? */
 	double rwf[4] = { 1.0, 1.0, 1.0, 1.0 };		/* Factor for each dimension */
 
-//printf("~1 opt_smooth called with di = %d, ndp = %d, ad = %f\n",di,ndp,ad);
+#ifdef DEBUG
+	printf("opt_smooth called with di = %d, ndp = %d, ad = %e, f = %d\n",di,ndp,ad,f);
+#endif
 	if (di < 1)
 		di = 1;
 	nc = pow((double)ndp, 1.0/(double)di);		/* Normalised sample count */
@@ -1088,13 +1225,17 @@ static double opt_smooth(
 	}
 
 	/* Lookup & interpolate the log smoothness factor */
-//printf("~1 di = %d, ncix = %d, adix = %d\n",di,ncix,adix);
+#ifdef DEBUG
+	printf("di = %d, ncix = %d, adix = %d\n",di,ncix,adix);
+#endif
 	lsm  = smf[di][ncix][adix]    * ncw          * adw;
 	lsm += smf[di][ncix][adix+1]  * ncw          * (1.0 - adw);
 	lsm += smf[di][ncix+1][adix]  * (1.0 - ncw)  * adw;
 	lsm += smf[di][ncix+1][adix+1] * (1.0 - ncw) * (1.0 - adw);
 
-//printf("~1 lsm = %f\n",lsm);
+#ifdef DEBUG
+	printf("lsm = %f\n",lsm);
+#endif
 
 	for (tweakf = 0.0, i = 1; i < 21; i++)
 		tweakf += tweak[i];
@@ -1105,9 +1246,104 @@ static double opt_smooth(
 	/* and correct for the real world with a final tweak table */
 	sm *= rwf[di];
 
-//printf("Got log smth %f, returning %1.9f from ncix %d, ncw %f, adix %d, adw %f\n", lsm, sm, ncix, ncw, adix, adw);
+#ifdef DEBUG
+	printf("opt_smooth got sm %e before output range adjustment\n",sm);
+#endif
+#ifndef SMOOTH2
+	/* This is incorrect, but is built into the tables of releases. */
+	/* It is one of the things stuffing up XYZ profiles. */
+	/* Remove it after re-tuning with SMOOTH2 */
+	sm *= s->d.vw[f];				/* Scale curvature weight for data range */
+#endif
+#ifdef DEBUG
+	printf("opt_smooth returning sm %e after output range adjustment\n",sm);
+#endif
+
+#ifdef DEBUG
+	printf("Got log smth %f, returning %1.9f from ncix %d, ncw %f, adix %d, adw %f\n", lsm, sm, ncix, ncw, adix, adw);
+#endif
 	return sm;
 }
+
+#else /* Smooth 2 */
+
+/* - - - - - - - - - - - - - - - - - - - - - - - -*/
+/* Smooth2 optimal smoothness calculation. */
+/*
+
+	This is for 3rd order smoothness, and uses a set of fitted
+	equations rather than a table.
+
+*/
+
+static double opt_smooth(
+	rspl *s,
+	int di,		/* Dimensions */
+	int ndp,	/* Number of data points */
+	double ad,	/* Average sample deviation (proportion of input range) */
+	int f		/* Output chanel */
+) {
+	int i;
+	double tweakf;
+	struct {
+		double nscale, noffset;		/* Number data point scale & offset */
+		double nmax, nmin;			/* Number data point max and min values */
+		double dscale, doffset;		/* Deviation scale & offset */
+		int l_nid;
+	} params[4] = {
+		{ -6.80,  3.50, -2.00, -8.00, 1.50,  -0.7 },		/* 1d */
+		{ -6.00, -7.50, -1.85, -6.40, 1.60,   0.6 },		/* 2d */
+		{ -0.84, -0.36, -1.68, -3.70, 1.75,  1.85 },		/* 3d */
+		{ -4.00, 11.20, -0.75, -2.30, 1.55,  2.35 }			/* 4d */
+	};
+
+	/* Real world correction factors go here - */
+	/* None needed at the moment ? */
+	double rwf[4] = { 0.0, 0.0, 0.0, 0.0 };		/* Log10 factor to add for each dimension */
+
+	double lndp;		/* log10 of ndp */
+	double lad;			/* log10 of ad */
+	double lmin;		/* log10 of minimum level */
+	double sm, lsm;			/* log10 of smoothness needed */
+
+	if (di < 1)
+		di = 1;
+	if (di > 4)
+		di = 4;
+	di--;			/* Make di 0..3 */
+	if (ad <= 1e-9)
+		ad = 1e-9;
+
+//printf("~1 opt_smooth2 called with di = %d, nodp = %d, avgdev = %f\n",di,ndp,ad);
+
+	lndp = log10(ndp);
+
+	lmin = lndp * params[di].nscale + params[di].noffset;
+	if (lmin > params[di].nmax)
+		lmin = params[di].nmax;
+	if (lmin < params[di].nmin)
+		lmin = params[di].nmin;
+//printf("lmin = %f from lndp\n",lmin,lndp);
+
+	lad = log10(ad);
+	lsm = log10(pow(10.0, lmin) + pow(10.0, lad * params[di].dscale + params[di].doffset)); 
+//printf("lsm = %f from lmin %f lad %f dscale %f doff %f\n",lmin,lmin,lad,params[di].dscale,params[di].doffset);
+
+	/* and correct for the real world with a final tweak table */
+	lsm += rwf[di];
+
+	for (tweakf = 0.0, i = 1; i < 21; i++)
+		tweakf += tweak[i];
+	tweakf *= tweak[0];
+
+	sm = pow(10.0, lsm * tweakf);
+
+//printf("Got log smth %f, returning sm %1.9f from di %d, nodp %d, avgdev %f\n", lsm, sm,di+1,ndp,ad);
+
+	return sm;
+}
+
+#endif /* SMOOTH2 */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - -*/
 /* Multi-grid temp structure (mgtmp) routines */
@@ -1117,7 +1353,10 @@ static double opt_smooth(
 static mgtmp *new_mgtmp(
 	rspl *s,		/* associated rspl */
 	int gres[MXDI],	/* resolution to create */
-	int f			/* output dimension */
+	double smooth,	/* Smoothing factor */
+	double avgdev,	/* Average deviation to use to set smoothness */
+	int f,			/* output dimension */
+	int issm		/* We are creating a smoothness map */
 ) {
 	mgtmp *m;
 	int di = s->di;
@@ -1125,6 +1364,9 @@ static mgtmp *new_mgtmp(
 	int gno, nigc;
 	int gres_1[MXDI];
 	int e, g, n, i;
+#ifdef AUTOSM
+	loocv *as = NULL;
+#endif
 
 	/* Allocate a structure */
 	if ((m = (mgtmp *) calloc(1, sizeof(mgtmp))) == NULL)
@@ -1203,13 +1445,13 @@ static mgtmp *new_mgtmp(
 	}
 
 	/* Compute curvature weighting for matching intermediate resolutions for */
-	/* the number of grid points curvature that is accuumulated, as well as the */
+	/* the number of grid points curvature that is accumulated, as well as the */
 	/* geometric effects of a finer fit to the target surface. */
 	/* This is all to keep the ratio of sum of smoothness error squared */
 	/* constant in relationship to the sum of data point error squared. */
 	for (e = 0; e < di; e++) {
 		double rsm;				/* Resolution smoothness factor */
-		double smooth;
+		double smval;
 
 		if (s->symdom)
 			rsm = m->g.res[e];	/* Relative final grid size  */
@@ -1221,25 +1463,32 @@ static mgtmp *new_mgtmp(
 									/* (is ^2 for res. * ^2 with error squared) */
 		rsm /= nigc;				/* Average squared non-smoothness */
 
-		/* 2 pass smoothing */
-		if (s->tpsm) {
-			double lsm;
-
-			lsm = -6.0;
-			if (s->tpsm2 != 0)			/* Two pass smoothing second pass */
-				lsm += 2.0;				/* Use 100 times the smoothness */
-			m->sf.cw[e] = pow(10.0, lsm) * rsm;
-
 		/* Normal */
-		} else {
+		if (smooth >= 0.0) {
 
-			if (s->smooth >= 0.0) {
-				/* Table lookup for optimum smoothing factor */
-				smooth = opt_smooth(s, di, s->d.no, s->avgdev[f]);
-				m->sf.cw[e] = s->smooth * smooth * rsm;
-			} else {	/* Special used to calibrate table */
-				m->sf.cw[e] = -s->smooth * rsm;
-			}
+			/* Use auto smoothing map in setup */
+//			if (sm != NULL) {
+//				smval = 1.0;
+//			} else {	
+
+			/* Table lookup for optimum smoothing factor */
+			smval = opt_smooth(s, di, s->d.no, avgdev, f);
+//printf("~1 opt_smooth returned %e\n",smval);
+#ifdef SMOOTH2
+			m->sf.cw[e]  = CW * smooth * smval * rsm;
+			m->sf.cw2[e] = CW2 * smooth * smval * rsm;
+#else
+			m->sf.cw[e] = smooth * smval * rsm;
+//printf("~1 cw[%d] %f = smooth %f * smval %e * rsm %f\n",e,m->sf.cw[e],smooth,smval,rsm);
+#endif
+		/* Special used to calibrate table */
+		} else {
+#ifdef SMOOTH2
+			m->sf.cw[e]  = CW * -smooth * rsm;
+			m->sf.cw2[e] = CW2 * -smooth * rsm;
+#else
+			m->sf.cw[e] = -smooth * rsm;
+#endif
 		}
 	}
 
@@ -1247,6 +1496,33 @@ static mgtmp *new_mgtmp(
 	/* We are trying to keep the effect of the wdf constant with */
 	/* changes in grid resolution and dimensionality. */
 	m->wdfw = s->weak * WEAKW/(m->g.no * (double)di);
+
+#ifdef AUTOSM
+	if (s->ausm) {
+		if ((m->as = (loocv *) calloc(1, sizeof(loocv))) == NULL)
+			error("rspl: malloc failed - loocv");
+
+		as = m->as;
+		as->m = m;
+
+		/* Allocate space for arrays keeping track of */
+		/* cells with data points in them. */
+		if ((as->dlist = ivector(0, dno-1)) == NULL)
+			error("rspl: malloc of vector dlist failed");
+
+		if ((as->vtx_dlist = ivector(0,m->g.no-1)) == NULL)
+			error("rspl: malloc of vector vtx_dlist failed");
+
+		for (i = 0; i < m->g.no; i++)
+			as->vtx_dlist[i] = -1;
+
+		if ((as->dat_dlist = ivector(0, dno-1)) == NULL)
+			error("rspl: malloc of vector dat_dlist failed");
+
+		for (i = 0; i < dno; i++)
+			as->dat_dlist[i] = -1;
+	}
+#endif
 
 	/* Allocate space for auiliary data point related info */
 	if ((m->d = (struct mgdat *) calloc(dno, sizeof(struct mgdat))) == NULL)
@@ -1293,10 +1569,19 @@ static mgtmp *new_mgtmp(
 			printf("%d: %f\n",e,m->d[n].w[e]);
 		}
 #endif /* DEBUG */
+
+#ifdef AUTOSM
+		if (s->ausm && m->as != NULL) {
+			/* Add data point to per cell list */
+			if (as->vtx_dlist[ix] == -1)
+				as->dlist[as->ndcells++] = ix;
+			as->dat_dlist[n] = as->vtx_dlist[ix];
+			as->vtx_dlist[i] = n;
+		}
+#endif /* AUTOSM */
 	}
 
 	/* Set the solution matricies to unalocated */
-	m->q.ccv = NULL;
 	m->q.A = NULL;
 	m->q.ixcol = NULL;
 	m->q.b = NULL;
@@ -1304,6 +1589,21 @@ static mgtmp *new_mgtmp(
 
 	return m;
 }
+
+#ifdef AUTOSM
+/* Completely free an loocv */
+static void free_loocv(loocv *as) {
+	mgtmp  *m = as->m;
+	rspl *s = m->s;
+
+	free_ivector(as->dlist, 0, s->d.no-1);
+	free_ivector(as->vtx_dlist, 0, m->g.no-1);
+	free_ivector(as->dat_dlist, 0, s->d.no-1);
+
+	free(as);
+}
+
+#endif
 
 /* Completely free an mgtmp */
 static void free_mgtmp(mgtmp  *m) {
@@ -1313,15 +1613,90 @@ static void free_mgtmp(mgtmp  *m) {
 		if (m->g.ipos[e] != NULL)
 			free(m->g.ipos[e]);
 	}
-	if (m->q.ccv != NULL)
-		free_dmatrix(m->q.ccv,0,gno-1,0,di-1);
 	free_dvector(m->q.x,0,gno-1);
 	free_dvector(m->q.b,0,gno-1);
 	free((void *)m->q.ixcol);
 	free_dmatrix(m->q.A,0,gno-1,0,m->q.acols-1);
 	free((void *)m->d);
+
+#ifdef AUTOSM
+	if (m->as != NULL)
+		free_loocv(m->as);
+#endif
 	free((void *)m);
 }
+
+#ifdef NEVER
+
+/* Return the curreb A[][] * x[] value. */
+/* (We use this to determine smoothness factor sensitivity for each */
+/* point with just smoothness weighting factors present) */ 
+static double smth_err
+(
+	double **A,		/* Sparse A[][] matrix */
+	double *x,		/* x[] matrix */
+	int gno,		/* Total number of unknowns */
+	int acols,		/* Use colums in A[][] */
+	int *xcol		/* sparse expansion lookup array */
+) {
+	int i, k;
+	double rv;
+
+	/* Compute norm of b - A * x */
+	rv = 0.0;
+	for (i = 0; i < gno; i++) {
+		int k0,k1,k2,k3;
+		double sm = 0.0;
+
+		/* Diagonal and to right in 4's */
+		for (k = 0, k3 = i + xcol[k]; k < acols && k3 < gno; k++, k3 = i + xcol[k]) {
+			sm += A[i][k] * x[k3];
+//printf("i %d: A[%d][%d] %f * x[%d] %f = %f\n", i, i, k, A[i][k], k3, x[k3], A[i][k] * x[k3]); 
+		}
+
+		/* Left of diagonal in 4's */
+		/* (We take advantage of the symetry: what would be in the row */
+		/*  to the left is repeated in the column above.) */
+		for (k = 1, k3 = i-xcol[k]; k < acols && k3 >= 0; k++, k3 = i-xcol[k]) {
+			sm += A[k3][k] * x[k3];
+//printf("i %d: A[%d][%d] %f * x[%d] %f = %f\n", i, k3, k, A[k3][k], k3, x[k3], A[k3][k] * x[k3]); 
+		}
+
+		rv += sm * sm;
+	}
+
+	return rv;
+}
+
+
+/* Print out the smoothness error sensitivity for each data location */
+static void
+print_smsens(mgtmp *m) {
+
+	rspl *s = m->s;
+	int di = s->di;
+	int gno = m->g.no, *gres = m->g.res, *gci = m->g.ci;
+	int i;
+	double **A = m->q.A;		/* A matrix of interpoint weights */
+	int acols  = m->q.acols;	/* A matrix columns needed */
+	int *xcol  = m->q.xcol;		/* A array column translation from packed to sparse index */ 
+	double *x  = m->q.x;		/* x vector for result */
+
+	for (i = 0; i < gno; i++)
+		x[i] = 0.0;
+
+	for (i = 0; i < gno; i++) {
+		double ss;
+
+		x[i] = 1.0;
+		ss = smth_err(A, x, gno, acols, xcol);
+		x[i] = 0.0;
+
+		printf("Smoothness sens %d = %e\n",i,ss);
+	}
+}
+
+#endif	/* NEVER */
 
 /* Initialise the A[][] and b[] matricies ready to solve, given f */
 /* (Can be used to re-initialize an mgtmp for changing curve/extra fit factors) */
@@ -1355,7 +1730,8 @@ static void free_mgtmp(mgtmp  *m) {
  */
 
 static void setup_solve(
-	mgtmp  *m		/* initialized grid temp structure */
+mgtmp  *m,		/* initialized grid temp structure */
+mgtmp *sm		/* Optional smoothing map for ausm mode */
 ) {
 	rspl *s = m->s;
 	int di   = s->di;
@@ -1363,10 +1739,9 @@ static void setup_solve(
 	int *gres = m->g.res, *gci = m->g.ci;
 	int f = m->f;				/* Output dimensions being worked on */
 
-	double **ccv = m->q.ccv;	/* ccv vector for adjusting simultabeous equation */
 	double **A  = m->q.A;		/* A matrix of interpoint weights */
 	int acols   = m->q.acols;	/* A matrix packed columns needed */
-	int *xcol   = m->q.xcol;		/* A array column translation from packed to sparse index */ 
+	int *xcol   = m->q.xcol;	/* A array column translation from packed to sparse index */ 
 	int *ixcol  = m->q.ixcol;	/* A array column translation from sparse to packed index */ 
 	double *b   = m->q.b;		/* b vector for RHS of simultabeous equation */
 	double *x   = m->q.x;		/* x vector for LHS of simultabeous equation */
@@ -1374,15 +1749,21 @@ static void setup_solve(
 	double oawt;				/* Overall adjustment weight */
 	double nbsum;				/* normb sum */
 
-//printf("~1 setup_solve got ccv = 0x%x\n",ccv);
+#ifdef DEBUG
+	printf("setup_solve got sm = %p\n",sm);
+#endif
 
 	/* Allocate and init the A array column sparse packing lookup and inverse. */
-	/* Note that this only works for a minumum grid resolution of 4. */
+	/* Note that this only works for a minumum grid resolution of 4/5. */
 	/* The sparse di dimension region allowed for is a +/-1 cube around the point */
 	/* question, plus +/-2 offsets in axis direction only, */
-	/* plus +/-3 offset in axis directions if 2nd order smoothing is defined. */
+	/* plus +/-3 offset in axis directions if SMOOTH2 is defined. */
 	if (A == NULL) {			/* Not been allocated previously */
+#ifdef SMOOTH2
 		DCOUNT(gc, MXDIDO, di, -3, -3, 4);	/* Step through +/- 3 cube offset */
+#else
+		DCOUNT(gc, MXDIDO, di, -2, -2, 3);	/* Step through +/- 2 cube offset */
+#endif
 		int ix;						/* Grid point offset in grid points */
 		acols = 0;
 	
@@ -1405,13 +1786,13 @@ static void setup_solve(
 			/* or if it has exactly one +/-2 and otherwise 0 */
 			if ((n3 == 0 && n2 == 0)
 			 || (n2 == 1 && nz == (di-1))
-#ifdef SMOOTH2
 			 || (n3 == 1 && nz == (di-1))
-#endif /* SMOOTH2*/
 			  ) {
 				for (ix = 0, k = 0; k < di; k++)
 					ix += gc[k] * gci[k];		/* Multi-dimension grid offset */
 				if (ix >= 0) {
+					if (acols >= XCOLPMAX)
+						error("rspl internal: exceeded xcol bounds"); 
 					xcol[acols++] = ix;			/* We only store half, due to symetry */
 				}
 			}
@@ -1459,7 +1840,6 @@ static void setup_solve(
 		}
 
 		/* Stash in the mgtmp */
-		m->q.ccv = ccv;
 		m->q.A = A;
 		m->q.b = b;
 		m->q.x = x;
@@ -1473,6 +1853,13 @@ static void setup_solve(
 			}
 		for (i = 0; i < gno; i++)
 			b[i] = 0.0;
+	}
+
+	/* Compute adjustment cooeficient */
+	{
+		for (oawt = 0.0, i = 1; i < 21; i++)
+			oawt += wvals[i];
+		oawt *= wvals[0];
 	}
 
 	/* Production version, without extra edge weight */
@@ -1490,9 +1877,9 @@ static void setup_solve(
 		The old curvature fixed grid spacing equation was:
 			ki * (u[i-1] - 2 * u[i] + u[i+1])^2
 		with derivatives wrt each node:
-			ki-1 *  1 * 2 * u[i-1] 
-			ki   * -2 * 2 * u[i]
-			ki+1 *  1 * 2 * u[i+1]
+			ki-1 *  1 * 2 * eqn(i-1) 
+			ki   * -2 * 2 * eqn(i)
+			ki+1 *  1 * 2 * eqn(i+1)
 
 		Allowing for scaling of each grid difference by w[i-1] and w[i],
 		where w[i-1] corresponds to the width of cell i-1 to i,
@@ -1503,25 +1890,177 @@ static void setup_solve(
 			ki-1 *   w[i-1]         *   w[i-1] * u[i-1]
 			ki   * -(w[i-1] + w[i]) * -(w[i-1] + w[i]) * u[i])
 			ki+1 *   w[i]           *   w[i] * u[i+1]
-
-		The weighting is adjusted to compensate for increased
-		grid density by the dw weight, and for the different
-		scaling either side of a grid point with the w0 and w1 scale.
-		Both are normalised so that the overall smoothness scaling
-		factor applies.
 	 */
+#define V17				/* Enable V1.7 code */
 
 	{	/* Setting this up from scratch */
-		double dwtw[MXDIDO];		/* Density weight normalizer */
-		int wtwc[MXDIDO];
+//		double dwtw[MXDIDO];		/* Density weight normalizer = average grid widths */
 		ECOUNT(gc, MXDIDO, di, 0, gres, 0);
 
-		for (oawt = 0.0, i = 1; i < 21; i++)
-			oawt += wvals[i];
-		oawt *= wvals[0];
+#ifdef NEVER		/* We're not using density adjustment */
+		/* Compute the ipos[] weight normalisation factors */
+		for (e = 0; e < di; e++) {
+			if (m->g.ipos[e] == NULL)
+				continue;
+			dwtw[e] = 0.0;
+			for (i = 1; i < gres[e]; i++) {
+				double w;
+				w = fabs(m->g.ipos[e][i] - m->g.ipos[e][i-1]);
+//printf("[%d][%d] w = %f\n",e,i,w);
+//				dwtw[e] += w;
+				dwtw[e] += 1.0/w;
+			}
+			dwtw[e] /= (gres[e] - 1.0);		/* Average weights */
+			dwtw[e] = 1.0/dwtw[e];
+//printf("dwtw[%d] = %f\n",e,dwtw[e]);
+		}
+#endif
 
-#define EN_DW			/* Enable grid density weighting */
-#define EN_CW			/* Enable grid scale weighting */
+		EC_INIT(gc);
+		for (i = 0; i < gno; i++) {
+			double smf = 1.0;
+
+#ifdef AUTOSM
+			/* Lookup smoothing factor map */
+			if (sm != NULL) {
+				double p[MXDI];
+				double avgdev;
+				for (e = 0; e < di; e++)
+					p[e] = gc[e]/(gres[e] - 1.0);
+
+				avgdev = mgtmp_interp(sm, p);
+				smf = opt_smooth(s, di, s->d.no, avgdev, f);
+			}
+#endif /* AUTOSM */
+
+			for (e = 0; e < di; e++) {	/* For each curvature direction */
+				double dw, w0, w1, tt;
+				double cw = smf * 2.0 * m->sf.cw[e];	/* Overall curvature weight */
+//printf("~1 cw %f = smf %f * 2 * sd.cw[%d] %f\n",cw,smf,e,m->sf.cw[e]);
+
+				/* Add influence on Curvature of cell below */
+				if ((gc[e]-2) >= 0 && (gc[e]+0) < gres[e]) {
+					/* double kw = cw * gp[UO_C(e,1)].k; */	/* Cell bellow k value */
+					double kw = cw;
+					w0 = w1 = 1.0;
+					if (m->g.ipos[e] != NULL) {
+
+						w0 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
+						w1 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+						tt = 0.5 * (w0 + w1);		/* Local full normalisation */
+						w0 = tt/w0;
+						w1 = tt/w1;
+//printf("[%d][%d] w1 = %f\n",gc[e],i,w1);
+					}
+
+					A[i][ixcol[0]] += w1 * w1 * kw;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+				}
+				/* Add influence on Curvature of this cell */
+				if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
+					/* double kw = cw * gp->k;  */		/* This cells k value */
+					double kw = cw; 
+					w0 = w1 = 1.0;
+					if (m->g.ipos[e] != NULL) {
+						w0 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
+						w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]-0]);
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+						tt = 0.5 * (w0 + w1);
+						w0 = tt/w0;
+						w1 = tt/w1;
+//printf("[%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+					}
+					A[i][ixcol[0]]      += -(w0 + w1) * -(w0 + w1) * kw;
+					A[i][ixcol[gci[e]]] += -(w0 + w1) * w1 * kw * oawt;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+//printf("A[%d][%d] = %f\n",i,1,A[i][ixcol[gci[e]]]);
+				}
+				/* Add influence on Curvature of cell above */
+				if ((gc[e]+0) >= 0 && (gc[e]+2) < gres[e]) {
+					/* double kw = cw * gp[UO_C(e,2)].k;	*/ /* Cell above k value */
+					double kw = cw;
+					w0 = w1 = 1.0;
+					if (m->g.ipos[e] != NULL) {
+						w0 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
+						w1 = fabs(m->g.ipos[e][gc[e]+2] - m->g.ipos[e][gc[e]+1]);
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+						tt = 0.5 * (w0 + w1);
+						w0 = tt/w0;
+						w1 = tt/w1;
+//printf("[%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+					}
+
+					A[i][ixcol[0]]          += w0 * w0 * kw;
+					A[i][ixcol[1 * gci[e]]] += w0 * -(w0 + w1) * kw;
+					A[i][ixcol[2 * gci[e]]] += w0 * w1 * kw;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+//printf("A[%d][%d] = %f\n",i,1,A[i][ixcol[gci[e]]]);
+//printf("A[%d][%d] = %f\n",i,2,A[i][ixcol[2 * gci[e]]]);
+				}
+			}
+			EC_INC(gc);
+		}
+	}
+#ifdef DEBUG
+	printf("After adding 2nd order smoothing:\n");
+	for (i = 0; i < gno; i++) {
+		int *xcol  = m->q.xcol;
+		printf("b[%d] = %f\n",i,b[i]);
+		for (k = acols-1; k > 0; k--) {
+			if ((i - xcol[k]) >= 0)
+				printf("A[%d][-%d] = %f\n",i,k,A[i-xcol[k]][k]);
+		}
+		for (k = 0; k < acols && (i + xcol[k]) < gno; k++)
+			printf("A[%d][%d] = %f\n",i,k,A[i][k]);
+		printf("\n");
+	}
+#endif /* DEBUG */
+
+#ifdef SMOOTH2
+	/* Accumulate curvature 2nd order dependent factors to the triangular A matrix. */
+	/* Because it's triangular, we compute and add in all the weighting */
+	/* factors at and to the right of each cell. */
+
+	/* The ipos[] factor is to allow for the possibility that the */
+	/* grid spacing may be non-uniform in the colorspace where the */
+	/* function being modelled is smooth. Our curvature computation */
+	/* needs to make allowsance for this fact in computing the */
+	/* node value differences that equate to zero curvature. */ 
+	/*
+		The old curvature fixed grid spacing equation was:
+			ki * (u[i-1] - 3 * u[i] + 3 * u[i+1] - u[i+2] )^2
+		with derivatives wrt each node:
+			ki-1 *  1 * 2 * eqn(i) 
+			ki   * -3 * 2 * eqn(i)
+			ki+1 *  3 * 2 * eqn(i)
+			ki+2 *  1 * 2 * eqn(i)
+
+		Allowing for scaling of each grid difference by w[i-1], w[i] and w[i+1],
+		where w[i-1] corresponds to the width of cell i-1 to i,
+		  and w[i]   corresponds to the width of cell i   to i+1:
+		where w[i+1] corresponds to the width of cell i+1 to i+2,
+		w' = 1/w
+
+			ki * (      w'[i+1] * (u[i+2] - u[i+1])
+			      - 2 * w'[i]   * (u[i+1] - u[i])
+			          + w'[i-1] * (u[i]   - u[i-1]) )^2
+
+		multiply out to group the node values:
+			ki * (     w'[i+1]              * u[i+2]
+			        - (w'[i+1] + 2 * w'[i]) * u[i+1]
+			        + (2 * w'[i] + w'[i-1]) * u[i]
+	                +  w'[i-1]              * u[i-1] )^2
+
+		with derivatives wrt each node:
+			~~~
+
+	 */
+
+	{		/* Setting this up from scratch */
+		double dwtw[MXDIDO];		/* Density weight normalizer */
+		ECOUNT(gc, MXDIDO, di, 0, gres, 0);
+		EC_INIT(gc);
 
 		/* Compute the ipos[] weight normalisation factors */
 		for (e = 0; e < di; e++) {
@@ -1538,102 +2077,135 @@ static void setup_solve(
 //printf("dwtw[%d] = %f\n",e,dwtw[e]);
 		}
 
-		EC_INIT(gc);
+		/* We setup the equation to be solved for each grid point. */
+		/* Each grid point participates in foure curvature equations, */
+		/* one centered on the grid line below, one that it's the center of, */
+		/* one centered on the grid line above, and one centered on the */
+		/* grid line two above. The equation setup is for the differential */
+		/* for each of these 2nd order curvature equations to be zero. */
 		for (i = 0; i < gno; i++) {
+			double smf = 1.0;
 
-			for (e = 0; e < di; e++) {	/* For each curvature direction */
-				double dw, w0, w1, tt;
-				double cw = 2.0 * m->sf.cw[e];	/* Overall curvature weight */
-				cw *= s->d.vw[f];				/* Scale curvature weight for data range */
+#ifdef AUTOSM
+			/* Lookup smoothing factor map */
+			if (sm != NULL) {
+				double p[MXDI];
+				double avgdev;
 
-				/* If at least two above lower edge in this dimension */
-				/* Add influence on Curvature of cell below */
-				if ((gc[e]-2) >= 0) {
+				for (e = 0; e < di; e++)
+					p[e] = gc[e]/(gres[e] - 1.0);
+
+				avgdev = mgtmp_interp(sm, p);
+				smf = opt_smooth(s, di, s->d.no, avgdev, f);
+			}
+#endif /* AUTOSM */
+
+			for (e = 0; e < di; e++) {
+				double w0, w1, w2, tt;
+				double cw = smf * 2.0 * m->sf.cw2[e];	/* Overall curvature weight */
+//printf("gno %d dim %d cw %e\n",i,e,cw);
+
+				/* Add influence on Curvature eqation of cell below */
+				if ((gc[e]-3) >= 0 && (gc[e]+0) < gres[e]) {
 					/* double kw = cw * gp[UO_C(e,1)].k; */	/* Cell bellow k value */
 					double kw = cw;
-					dw = w1 = 1.0;
+					w0 = w1 = w2 = 1.0;
 					if (m->g.ipos[e] != NULL) {
-
-						w0 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
-						w1 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
-#ifdef EN_DW
-						dw = 0.5 * (w0 + w1);			/* in this direction around -1  */
-						dw = dw/dwtw[e];				/* normalise */
-#endif
-						tt = sqrt(w0 * w1);
-						w1 = tt/w1;
-#ifndef EN_CW
-						w1 = 1.0;
-#endif
-//printf("[%d][%d] dw = %f, w1 = %f\n",gc[e],i,dw,w1);
-					}
-					A[i][ixcol[0]] += dw * w1 * w1 * kw;
-					if (ccv != NULL)
-						b[i] += kw * (w1) * ccv[i - gci[e]][e]; /* Curvature compensation value */
-				}
-				/* If not one from upper or lower edge in this dimension */
-				/* Add influence on Curvature of this cell */
-				if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
-					/* double kw = cw * gp->k;  */		/* This cells k value */
-					double kw = cw; 
-					dw = w0 = w1 = 1.0;
-					if (m->g.ipos[e] != NULL) {
-						w0 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-						w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]-0]);
-//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
-#ifdef EN_DW
-						dw = 0.5 * (w0 + w1);			/* in this direction around 0  */
-						dw = dw/dwtw[e];				/* normalise */
-#endif
-						tt = sqrt(w0 * w1);
+						w0 = fabs(m->g.ipos[e][gc[e]-2] - m->g.ipos[e][gc[e]-3]);
+						w1 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
+						w2 = fabs(m->g.ipos[e][gc[e]+0] - m->g.ipos[e][gc[e]-1]);
+						tt = 1.0/3.0 * (w0 + w1 + w2);
 						w0 = tt/w0;
 						w1 = tt/w1;
-#ifndef EN_CW
-						w0 = w1 = 1.0;
-#endif
-//printf("[%d][%d] dw = %f, w0 = %f, w1 = %f\n",gc[e],i,dw,w0,w1);
+						w2 = tt/w2;
 					}
-					A[i][ixcol[0]]      += dw * -(w0 + w1) * -(w0 + w1) * kw;
-					A[i][ixcol[gci[e]]] += dw * -(w0 + w1) * w1 * kw * oawt;
-					if (ccv != NULL)
-						b[i] += kw * -(w0 + w1) * ccv[i][e]; /* Curvature compensation value */
+					A[i][ixcol[0]] += w2 * w2 * kw;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
 				}
-				/* If at least two below the upper edge in this dimension */
+				/* Add influence on Curvature of this cell */
+				if ((gc[e]-2) >= 0 && (gc[e]+1) < gres[e]) {
+					/* double kw = cw * gp->k;  */		/* This cells k value */
+					double kw = cw; 
+					w0 = w1 = w2 = 1.0;
+					if (m->g.ipos[e] != NULL) {
+						w0 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
+						w1 = fabs(m->g.ipos[e][gc[e]+0] - m->g.ipos[e][gc[e]-1]);
+						w2 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
+						tt = 1.0/3.0 * (w0 + w1 + w2);
+						w0 = tt/w0;
+						w1 = tt/w1;
+						w2 = tt/w2;
+					}
+					A[i][ixcol[0]]      += -(2.0 * w1 + w2) * -(2.0 * w1 + w2) * kw;
+					A[i][ixcol[gci[e]]] += -(2.0 * w1 + w2) * w2 * kw;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+//printf("A[%d][%d] = %f\n",i,1,A[i][ixcol[gci[e]]]);
+				}
 				/* Add influence on Curvature of cell above */
-				if ((gc[e]+2) < gres[e]) {
+				if ((gc[e]-1) >= 0 && (gc[e]+2) < gres[e]) {
 					/* double kw = cw * gp[UO_C(e,2)].k;	*/ /* Cell above k value */
 					double kw = cw;
-					dw = w0 = w1 = 1.0;
+					w0 = w1 = w2 = 1.0;
+					if (m->g.ipos[e] != NULL) {
+						w0 = fabs(m->g.ipos[e][gc[e]+0] - m->g.ipos[e][gc[e]-1]);
+						w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
+						w2 = fabs(m->g.ipos[e][gc[e]+2] - m->g.ipos[e][gc[e]+1]);
+						tt = 1.0/3.0 * (w0 + w1 + w2);
+						w0 = tt/w0;
+						w1 = tt/w1;
+						w2 = tt/w2;
+					}
+					A[i][ixcol[0]]          += (w0 + 2.0 * w1) * (w0 + 2.0 * w1) * kw;
+					A[i][ixcol[1 * gci[e]]] += (w0 + 2.0 * w1) * -(2.0 * w1 + w2) * kw;
+					A[i][ixcol[2 * gci[e]]] += (w0 + 2.0 * w1) * w2 * kw * oawt;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+//printf("A[%d][%d] = %f\n",i,1,A[i][ixcol[gci[e]]]);
+//printf("A[%d][%d] = %f\n",i,2,A[i][ixcol[2 * gci[e]]]);
+				}
+				/* Add influence on Curvature of cell two above */
+				if ((gc[e]+0) >= 0 && (gc[e]+3) < gres[e]) {
+					/* double kw = cw * gp[UO_C(e,3)].k;	*/ /* Cell two above k value */
+					double kw = cw;
+					w0 = w1 = w2 = 1.0;
 					if (m->g.ipos[e] != NULL) {
 						w0 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
 						w1 = fabs(m->g.ipos[e][gc[e]+2] - m->g.ipos[e][gc[e]+1]);
-//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
-#ifdef EN_DW
-						dw = 0.5 * (w0 + w1);			/* in this direction around +1  */
-						dw = dw/dwtw[e];				/* normalise */
-#endif
-						tt = sqrt(w0 * w1);
+						w2 = fabs(m->g.ipos[e][gc[e]+3] - m->g.ipos[e][gc[e]+2]);
+						tt = 1.0/3.0 * (w0 + w1 + w2);
 						w0 = tt/w0;
 						w1 = tt/w1;
-#ifndef EN_CW
-						w0 = w1 = 1.0;
-#endif
-//printf("[%d][%d] dw = %f, w0 = %f, w1 = %f\n",gc[e],i,dw,w0,w1);
+						w2 = tt/w2;
 					}
-					A[i][ixcol[0]]          += dw * w0 * w0 * kw;
-					A[i][ixcol[gci[e]]]     += dw * w0 * -(w0 + w1) * kw;
-					A[i][ixcol[2 * gci[e]]] += dw * w0 * w1 * kw;
-					if (ccv != NULL)
-						b[i] += kw * -(w0 + w1) * ccv[i][e]; /* Curvature compensation value */
+					A[i][ixcol[0]]          += -w0 * -w0 * kw;
+					A[i][ixcol[1 * gci[e]]] += -w0 * (w0 + 2.0 * w1) * kw;
+					A[i][ixcol[2 * gci[e]]] += -w0 * -(2.0 * w1 + w2) * kw;
+					A[i][ixcol[3 * gci[e]]] += -w0 * w2 * kw;
+//printf("A[%d][%d] = %f\n",i,0,A[i][ixcol[0]]);
+//printf("A[%d][%d] = %f\n",i,1,A[i][ixcol[gci[e]]]);
+//printf("A[%d][%d] = %f\n",i,2,A[i][ixcol[2 * gci[e]]]);
+//printf("A[%d][%d] = %f\n",i,3,A[i][ixcol[3 * gci[e]]]);
 				}
 			}
 			EC_INC(gc);
 		}
 	}
+#ifdef DEBUG
+	printf("After adding 3rd order smoothing:\n");
+	for (i = 0; i < gno; i++) {
+		int *xcol  = m->q.xcol;
+		printf("b[%d] = %f\n",i,b[i]);
+		for (k = acols-1; k > 0; k--) {
+			if ((i - xcol[k]) >= 0)
+				printf("A[%d][-%d] = %f\n",i,k,A[i-xcol[k]][k]);
+		}
+		for (k = 0; k < acols && (i + xcol[k]) < gno; k++)
+			printf("A[%d][%d] = %f\n",i,k,A[i][k]);
+		printf("\n");
+	}
+#endif /* DEBUG */
 
 #ifdef DEBUG
-	printf("After adding curvature equations:\n");
+	printf("After adding 2nd and 3rd order smoothing equations:\n");
 	for (i = 0; i < gno; i++) {
 		printf("b[%d] = %f\n",i,b[i]);
 		for (k = 0; k < acols; k++) {
@@ -1642,6 +2214,7 @@ static void setup_solve(
 		printf("\n");
 	}
 #endif /* DEBUG */
+#endif /* SMOOTH2 */
 
 	nbsum = 0.0;	/* Zero sum of b[] squared */
 
@@ -1649,7 +2222,7 @@ static void setup_solve(
 	/* weak "data point" exactly at each grid point. */
 	/* (Note we're not currently doing this in a cache friendly order,   */
 	/*  and we're calling the function once for each output component..) */
-	if (s->dfunc != NULL) {		/* Setting this up from scratch */
+	if (s->dfunc != NULL && f >= 0) {		/* Setting this up from scratch */
 		double iv[MXDI], ov[MXDO];
 		ECOUNT(gc, MXDIDO, di, 0, gres, 0);
 		EC_INIT(gc);
@@ -1681,7 +2254,6 @@ static void setup_solve(
 			printf("\n");
 		}
 #endif /* DEBUG */
-
 	}
 
 	/* Accumulate data point dependent factors */
@@ -1698,8 +2270,8 @@ static void setup_solve(
 			ai = bp + m->g.hi[j];			/* A matrix index */
 
 			w = m->d[n].w[j];				/* Base point grid weight */
-			d = 2.0 * s->d.a[n].k[f] * w;	/* (2.0, w are derivative factors, k data pnt wgt) */
-			tt = d * s->d.a[n].cv[f];		/* Change in (corrected) data component */
+			d = 2.0 * s->d.a[n].k[f] * w;	/* (2.0, w are derivtv factors, k data pnt wgt) */
+			tt = d * s->d.a[n].v[f];		/* Change in data component */
 
 			nbsum += (2.0 * b[ai] + tt) * tt;	/* += (b[ai] + tt)^2 - b[ai]^2 */
 			b[ai] += tt;						/* New data component value */
@@ -1735,300 +2307,18 @@ static void setup_solve(
 //	exit(0);
 }
 
+#ifdef AUTOSM
+
+~~~~9999
+
+#endif
+
+#ifdef AUTOSM
 
 /* Given that we've done a complete fit at the current resolution, */
-/* allocate and compute the curvature error of each grid point and put it in */
-/* s->g.ccv[gno][di] */
-static void comp_ccv(
-	mgtmp  *m		/* Solution to use */
-) {
-	rspl *s = m->s;
-	int gno = m->g.no, *gres = m->g.res, *gci = m->g.ci;
-	int di = s->di;
-	double *x = m->q.x;		/* Grid solution values */
-	int f = m->f;			/* Output dimensions being worked on */
-	int e, i;
-
-	ECOUNT(gc, MXDIDO, di, 0, gres, 0);
-	EC_INIT(gc);
-
-	if (s->g.ccv == NULL) {
-		if ((s->g.ccv = dmatrixz(0, gno-1, 0, di-1)) == NULL) {
-			error("Malloc of ccv[] failed with [%d][%d]",di,gno);
-		}
-	}
-
-	for (i = 0; i < gno; i++) {
-		for (e = 0; e < di; e++) {	/* For each curvature direction */
-			double w0, w1, tt;
-
-			s->g.ccv[i][e] = 0.0;		/* Default value */
-
-			/* If not one from upper or lower edge in this dimension */
-			if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
-				/* double kw = cw * gp->k;  */		/* This cells k value */
-				w0 = w1 = 1.0;
-				if (m->g.ipos[e] != NULL) {
-					w0 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-					w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]-0]);
-					tt = sqrt(w0 * w1);
-					w0 = tt/w0;
-					w1 = tt/w1;
-				}
-				s->g.ccv[i][e] +=   w0       * x[i - gci[e]];
-				s->g.ccv[i][e] += -(w0 + w1) * x[i];
-				s->g.ccv[i][e] +=   w1       * x[i + gci[e]];
-			}
-//printf("~1 computing ccv for node %d is %f\n",i,s->g.ccv[i][0]);
-		}
-		EC_INC(gc);
-	}
-}
-
-/* Down sample the curvature compensation values in s->g.ccv to */
-/* a given solution. Allocate the m->q.ccv if necessary. */
-static void init_ccv(
-	mgtmp  *m		/* Destination */
-) {
-	rspl *s = m->s;
-	int f = m->f;			/* Output dimensions being worked on */
-	int di  = s->di;
-	int gno = m->g.no;
-	int gres1_1[MXDI];	/* Destination */
-	int gres2_1[MXDI];	/* Source */
-	double scale[MXDI];	/* ccv scale factor */
-	int e, n;
-	ECOUNT(gc, MXDIDO, di, 0, m->g.res, 0);	/* Counter for output points */
-
-	for (e = 0; e < di; e++) {
-		gres1_1[e] = m->g.res[e]-1;
-		gres2_1[e] = s->g.res[e]-1;
-	}
-
-	if (m->q.ccv == NULL) {
-		if ((m->q.ccv = dmatrixz(0, gno-1, 0, di-1)) == NULL) {
-			error("Malloc of ccv[] failed with [%d][%d]",di,gno);
-		}
-	}
-
-	/* Compute the scale factor to compensate for the grid resolution */
-	/* effect on the grid difference values. */
-	for (e = 0; e < di; e++) { 
-		double rsm_s, rsm_d;
-
-		if (s->symdom) {			/* Relative final grid size  */
-			rsm_s = s->g.res[e];
-			rsm_d = m->g.res[e];
-		} else {					/* Relative mean final grid size */
-			rsm_s = s->g.mres;
-			rsm_d = m->g.mres;
-		}
-	
-		rsm_s = pow((rsm_s-1.0), 2.0);	/* Geometric resolution factor for smooth surfaces */
-		rsm_d = pow((rsm_d-1.0), 2.0);	/* (It's ^2 rather than ^4 as it's is before squaring) */
-
-		scale[e] = rsm_s/rsm_d;
-	}
-
-	/* Point sampling is probably not the ideal way of down sampling, */
-	/* but it's easy, and won't be too bad if the s->g.ccv has been */
-	/* low pass filtered. */
-
-	/* For all grid ccv's */
-	EC_INIT(gc);
-	for (n = 0; n < gno; n++) {
-		double we[MXRI];		/* 1.0 - Weight in each dimension */
-		double gw[POW2MXRI];	/* weight for each grid cube corner */
-		int ix;					/* Index of source ccv grid cube base */
-		
-		/* Figure out which grid cell the point falls into */
-		{
-			double t;
-			int mi;
-			ix = 0;
-			for (e = 0; e < di; e++) {
-				t = ((double)gc[e]/(double)gres1_1[e]) * (double)gres2_1[e];
-				mi = (int)floor(t);			/* Grid coordinate */
-				if (mi < 0)					/* Limit to valid cube base index range */
-					mi = 0;
-				else if (mi >= gres2_1[e])
-					mi = gres2_1[e]-1;
-				ix += mi * s->g.ci[e];		/* Add Index offset for grid cube base in dimen */
-				we[e] = t - (double)mi;		/* 1.0 - weight */
-			}
-		}
-
-		/* Compute corner weights needed for interpolation */
-		{
-			int i, g;
-			gw[0] = 1.0;
-			for (e = 0, g = 1; e < di; g *= 2, e++) {
-				for (i = 0; i < g; i++) {
-					gw[g+i] = gw[i] * we[e];
-					gw[i] *= (1.0 - we[e]);
-				}
-			}
-		}
-
-		/* Compute the output values */
-		{
-			int i;
-			for (e = 0; e < di; e++) 
-				m->q.ccv[n][e] = 0.0;			/* Zero output value */
-			for (i = 0; i < (1 << di); i++) {	/* For all corners of cube */
-				int oix = ix + s->g.hi[i];
-				for (e = 0; e < di; e++) 
-					m->q.ccv[n][e] += gw[i] * s->g.ccv[oix][e];
-			}
-			/* Rescale curvature for grid spacing */
-			for (e = 0; e < di; e++) 
-				m->q.ccv[n][e] *= scale[e];
-//printf("~1 downsampling ccv for node %d is %f\n",n,m->q.ccv[n][0]);
-		}
-		EC_INC(gc);
-	}
-}
-
-/* Apply a gaussian filter to the curvature compensation values */
-/* s->g.ccv[gno][di], to apply smoothing. */
-static void filter_ccv(
-	rspl *s,
-	double stdev		/* Standard deviation diameter of filter (in input) */
-						/* 1.0 = grid width */
-) {
-	int k, e, ee, i, j, di = s->di;
-	int gno = s->g.no, *gres = s->g.res, *gci = s->g.ci;
-	double *_fkern[MXDI], *fkern[MXDI];		/* Filter kernels */
-	int kmin[MXDI], kmax[MXDI];				/* Kernel index range (inclusive) */
-	double *_row, *row;				/* Extended copy of each row processed */
-
-//printf("Doing filter stdev %f\n",stdev);
-
-//printf("~1 bres = %d, index %d to %d\n",s->g.bres,-s->g.bres+1,s->g.bres+s->g.bres-1);
-	if ((_row = (double *) malloc(sizeof(double) * (s->g.bres * 3 - 2))) == NULL)
-		error("rspl malloc failed - ccv row copy");
-	row = _row + s->g.bres-1;	/* Allow +/- gres-1 */
-
-	/* Compute the kernel weightings for the given stdev */
-	for (ee = 0; ee < di; ee++) {		/* For each dimension direction */
-		int cres;						/* Current res */
-		double k1, k2, tot;
-
-//printf("Filter along dim %d:\n",ee);
-		if ((_fkern[ee] = (double *) malloc(sizeof(double) * (gres[ee] * 2 - 1))) == NULL)
-			error("rspl malloc failed - ccv filter kernel");
-		fkern[ee] = _fkern[ee] + gres[ee]-1;	/* node of interest at center */
-
-		/* Take gaussian constants out of the loop */
-		k2 = 1.0 / (2.0 * pow(fabs(stdev), TWOPASSORDER));
-		k1 = k2 / 3.1415926;
-
-		/* Comute the range needed */
-		if (s->symdom) {
-			cres = gres[ee];
-		} else {
-			cres = s->g.mres;
-		}
-		kmin[ee] = (int)floor(-5.0 * stdev * (cres-1.0));
-		kmax[ee] = (int)ceil(5.0 * stdev * (cres-1.0));
-
-		if (kmin[ee] < (-gres[ee]+1))
-			kmin[ee] = -gres[ee]+1;
-		else if (kmin[ee] > -1)
-			kmin[ee] = -1;
-		if (kmax[ee] > (gres[ee]-1))
-			kmax[ee] = gres[ee]-1;
-		else if (kmax[ee] < 1)
-			kmax[ee] = 1;
-//printf("kmin = %d, kmax = %d\n",kmin[ee], kmax[ee]);
-
-		for (tot = 0.0, i = kmin[ee]; i <= kmax[ee]; i++) {
-			double fi = (double)i;
-
-			/* Do a discrete integration of the gassian function */
-			/* to compute discrete weightings */
-			fkern[ee][i] = 0.0;
-			for (k = -4; k < 5; k++) {
-				double oset = (fi + k/9.0)/(cres-1.0);
-				double val;
-
-				val = k1 * exp(-k2 * pow(fabs(oset), TWOPASSORDER));
-				fkern[ee][i] += val;
-				tot += val;
-			}
-		}
-		/* Normalize the sum */
-		for (tot = 1.0/tot, i = kmin[ee]; i <= kmax[ee]; i++)
-			fkern[ee][i] *= tot;
-//printf("Filter cooefs:\n");
-//for (i = kmin[ee]; i <= kmax[ee]; i++)
-//printf("%d: %e\n",i,fkern[ee][i]);
-	}
-
-	for (k = 0; k < di; k++) {			/* For each curvature direction */
-		for (ee = 0; ee < di; ee++) {	/* For each dimension direction */
-			int tgres[MXDI-1];
-			
-//printf("~1 Filtering curv dir %d, dim dir %d\n",k,ee);
-			/* Setup counters for scanning through all other dimensions */
-			for (j = e = 0; e < di; e++) {
-				if (e == ee)
-					continue;
-				tgres[j++] = gres[e];
-			}
-			/* For each row of this dimension */
-			{
-				ECOUNT(gc, MXDIDO-1, di-1, 0, tgres, 0);	/* Count other dimensions */
-
-				EC_INIT(gc);
-				for (; di <= 1 || !EC_DONE(gc);) {
-					int ix;
-
-					/* Compute index of start of row */
-					for (ix = j = e = 0; e < di; e++) {
-						if (e == ee)
-							continue;
-						ix += gc[j++] * gci[e]; 
-					}
-
-					/* Copy row to temporary array, and expand */
-					/* edge values by mirroring them. */
-					for (i = 0; i < gres[ee]; i++)
-						row[i] = s->g.ccv[ix + i * gci[ee]][k];
-					for (i = kmin[ee]; i < 0; i++)
-						row[i] = 2.0 * row[0] - row[-i];	/* Mirror the value */
-					for (i = gres[ee]-1 + kmax[ee]; i > (gres[ee]-1); i--)
-						row[i] = 2.0 * row[gres[ee]-1] - row[gres[ee]-1-i];	/* Mirror the value */
-//printf("~1 Row = \n");
-//for (i = kmin[ee]; i <= (gres[ee]-1 + kmax[ee]); i++)
-//printf("%d: %f\n",i,row[i]);
-		
-					/* Apply the 1D convolution to the temporary array */
-					/* to produce the filtered values. */
-					for (i = 0; i < gres[ee]; i++) {
-						double fv;
-						
-						for (fv = 0.0, j = kmin[ee]; j <= kmax[ee]; j++)
-							fv += fkern[ee][j] * row[i + j];
-						s->g.ccv[ix + i * gci[ee]][k] = fv;
-					}
-					if (di <= 1)
-						break;
-					EC_INC(gc);
-				}
-			}
-		}
-	}
-
-	for (ee = 0; ee < di; ee++)
-		free(_fkern[ee] );
-	free(_row);
-}
-
-/* Given that we've done a complete fit at the current resolution, */
-/* compute the error of each data point, and then compute */
-/* a correction factor .cv[] for each point from this. */
-static void comp_extrafit_corr(
+/* compute the error of each data point. */
+/* This is used to compute a smoothness factor map */
+static void comp_fit_errors(
 	mgtmp *m		/* Current resolution mgtmp */
 ) {
 	rspl *s = m->s;
@@ -2037,6 +2327,7 @@ static void comp_extrafit_corr(
 	int di = s->di;
 	double *x = m->q.x;		/* Grid solution values */
 	int f = m->f;			/* Output dimensions being worked on */
+	double fea = 0.0;		/* Average value */
 
 	/* Compute error for each data point */
 	for (n = 0; n < dno; n++) {
@@ -2047,34 +2338,74 @@ static void comp_extrafit_corr(
 		double gain = 1.0;
 
 		/* Compute the interpolated grid value for this data point */
-		for (val = 0.0, j = 0; j < (1 << di); j++) {	/* Binary sequence */
+		for (val = 0.0, j = 0; j < (1 << di); j++) 		/* Binary sequence */
 			val += m->d[n].w[j] * x[bp + m->g.hi[j]];
-		}
 
 		err = s->d.a[n].v[f] - val;
-
-#ifdef NEVER
-		/* Compute gain from previous move */
-		if (fabs(s->d.a[n].pe[f]) > 0.001) {
-			gain = (val - s->d.a[n].pv[f])/s->d.a[n].pe[f];
-			if (gain < 0.2)
-				gain = 0.2;
-			else if (gain > 5.0)
-				gain = 5.0;
-			gain = pow(gain, 0.6);
-		} else {
-			gain = 1.0;
-		}
-#endif
-		/* Correct the target data point value by the error */
-		s->d.a[n].cv[f] += err / gain;
-
-//printf("~1 Data point %d, v = %f, cv = %f, change = %f\n",n,s->d.a[n].v[f],s->d.a[n].cv[f],-val);
-//printf("~1 Data point %d, pe = %f, change = %f, gain = %f\n",n,s->d.a[n].pe[f],val - s->d.a[n].pv[f],gain);
-//printf("~1 Data point %d err = %f, target %f, was %f, now %f\n",n,err,s->d.a[n].v[f],val,s->d.a[n].cv[f]);
-//		s->d.a[n].pe[f] = err / gain;
-//		s->d.a[n].pv[f] = val;
+		err *= 0.8;
+//		s->d.a[n].fe = fabs(err);
+//printf("~1 data %d fe = %f\n",n,s->d.a[n].fe);
+		fea += s->d.a[n].fe;
 	}
+	fea /= (double)dno;
+
+//	s->d.fea = fea;		/* Average fit error */
+}
+
+#endif /* AUTOSM */
+
+/* Return an interpolayed value */
+static double mgtmp_interp(
+	mgtmp  *m,
+	double p[MXDI]		/* Input coord in normalised grid forms */
+) {
+	rspl *s = m->s;
+	int di  = s->di;
+	int e, n;
+	double we[MXRI];		/* 1.0 - Weight in each dimension */
+	double gw[POW2MXRI];	/* weight for each grid cube corner */
+	double *gp;				/* Pointer to x2[] grid cube base */
+	double val;
+		
+	/* Figure out which grid cell the point falls into */
+	{
+		double t;
+		int mi;
+		gp = m->q.x;					/* Base of solution array */
+		for (e = 0; e < di; e++) {
+			t = (double)p[e] * (m->g.res[e] - 1.0);
+			mi = (int)floor(t);			/* Grid coordinate */
+			if (mi < 0)					/* Limit to valid cube base index range */
+				mi = 0;
+			else if (mi >= (m->g.res[e] - 1))
+				mi = m->g.res[e] - 2;
+			gp += mi * m->g.ci[e];		/* Add Index offset for grid cube base in dimen */
+			we[e] = t - (double)mi;		/* 1.0 - weight */
+		}
+	}
+
+	/* Compute corner weights needed for interpolation */
+	{
+		int i, g;
+		gw[0] = 1.0;
+		for (e = 0, g = 1; e < di; g *= 2, e++) {
+			for (i = 0; i < g; i++) {
+				gw[g+i] = gw[i] * we[e];
+				gw[i] *= (1.0 - we[e]);
+			}
+		}
+	}
+
+	/* Compute the output values */
+	{
+		int i;
+		val = 0.0;							/* Zero output value */
+		for (i = 0; i < (1 << di); i++) {	/* For all corners of cube */
+			val += gw[i] * gp[m->g.hi[i]];
+		}
+	}
+
+	return val;
 }
 
 /* Transfer a solution from one mgtmp to another */
@@ -2086,63 +2417,47 @@ static void init_soln(
 	rspl *s = m1->s;
 	int di  = s->di;
 	int gno = m1->g.no;
-	int gres1_1[MXDI];
-	int gres2_1[MXDI];
 	int e, n;
 	ECOUNT(gc, MXDIDO, di, 0, m1->g.res, 0);	/* Counter for output points */
-
-	for (e = 0; e < di; e++) {
-		gres1_1[e] = m1->g.res[e]-1;
-		gres2_1[e] = m2->g.res[e]-1;
-	}
 
 	/* For all output grid points */
 	EC_INIT(gc);
 	for (n = 0; n < gno; n++) {
-		double we[MXRI];		/* 1.0 - Weight in each dimension */
-		double gw[POW2MXRI];	/* weight for each grid cube corner */
-		double *gp;				/* Pointer to x2[] grid cube base */
-		
-		/* Figure out which grid cell the point falls into */
-		{
-			double t;
-			int mi;
-			gp = m2->q.x;					/* Base of solution array */
-			for (e = 0; e < di; e++) {
-				t = ((double)gc[e]/(double)gres1_1[e]) * (double)gres2_1[e];
-				mi = (int)floor(t);			/* Grid coordinate */
-				if (mi < 0)					/* Limit to valid cube base index range */
-					mi = 0;
-				else if (mi >= gres2_1[e])
-					mi = gres2_1[e]-1;
-				gp += mi * m2->g.ci[e];		/* Add Index offset for grid cube base in dimen */
-				we[e] = t - (double)mi;		/* 1.0 - weight */
-			}
-		}
+		double p[MXRI];		/* Grid relative location */
 
-		/* Compute corner weights needed for interpolation */
-		{
-			int i, g;
-			gw[0] = 1.0;
-			for (e = 0, g = 1; e < di; g *= 2, e++) {
-				for (i = 0; i < g; i++) {
-					gw[g+i] = gw[i] * we[e];
-					gw[i] *= (1.0 - we[e]);
-				}
-			}
-		}
+		for (e = 0; e < di; e++)
+			p[e] = (double)gc[e]/(m1->g.res[e] - 1.0);
 
-		/* Compute the output values */
-		{
-			int i;
-			m1->q.x[n] = 0.0;					/* Zero output value */
-			for (i = 0; i < (1 << di); i++) {	/* For all corners of cube */
-				m1->q.x[n] += gw[i] * gp[m2->g.hi[i]];
-			}
-		}
+		m1->q.x[n] = mgtmp_interp(m2, p);
+
 		EC_INC(gc);
 	}
 }
+
+
+#ifdef AUTOSM
+
+#ifndef NEVER		// Debug
+
+/* Plot the 0'th dimension response */
+void plot_mgtmp1(mgtmp *m) {
+	int i;
+	double xx[100];
+	double yy[100];
+	double p[MXDI];
+
+	for (i = 0; i < m->s->di; i++)
+		p[i] = 0.0;
+
+	for (i = 0; i < 100; i++) {
+		xx[i] = p[0] = (double)i/99.0;
+		yy[i] = mgtmp_interp(m, p);
+	}
+	do_plot(xx, yy, NULL, NULL, 100);
+}
+
+#endif /* NEVER */
+#endif /* AUTOSM */
 
 /* - - - - - - - - - - - - - - - - - - - -*/
 
@@ -2234,7 +2549,7 @@ solve_gres(mgtmp *m, cj_arrays *ta, double tol, int final)
 	/* Note that we process the A[][] sparse columns in compact form */
 
 #ifdef DEBUG_PROGRESS
-	printf("Target tol = %f\n",tol);
+	printf("Target tol = %e\n",tol);
 #endif
 	/* If the number of point is small, or it is just one */
 	/* dimensional, solve it more directly. */
@@ -2417,7 +2732,7 @@ one_itter2(
 			sm += A[i][k] * x[k3];
 
 		/* Left of diagonal in 4's */
-		/* (We take advantage of the symetry: what would be in the row */
+		/* (We take advantage of A[][] symetry: what would be in the row */
 		/*  to the left is repeated in the column above.) */
 		for (k = 1, k3 = i-xcol[k+3]; (k+3) < acols && k3 >= 0; k += 4, k3 = i-xcol[k+3]) {
 			k0 = i-xcol[k+0];
@@ -2432,6 +2747,7 @@ one_itter2(
 		for (k3 = i-xcol[k]; k < acols && k3 >= 0; k++, k3 = i-xcol[k])
 			sm += A[k3][k] * x[k3];
 
+		/* Compute x value that solves equation just for this point */
 //		x[i] = (b[i] - sm)/A[i][0];
 		x[i] += ovsh * ((b[i] - sm)/A[i][0] - x[i]);
 
@@ -2627,8 +2943,10 @@ cj_line(
 			sm += A[ii][k] * x[k3];
 
 		/* Left of diagonal in 4's */
-		/* (We take advantage of the symetry: what would be in the row */
-		/*  to the left is repeated in the column above.) */
+		/* (We take advantage of the symetry around the diagonal: what would be in the row */
+		/*  to the left is repeated in the column above, so for an unsparse matrix */
+		/*  we simply swapt the row and column index, for sparse we use the mirror column */
+		/*  offset (ie. to the right side) and subtract the column offset from the row.) */
 		for (k = 1, k3 = ii-xcol[k+3]; (k+3) < acols && k3 >= 0; k += 4, k3 = ii-xcol[k+3]) {
 			k0 = ii-xcol[k+0];
 			k1 = ii-xcol[k+1];
@@ -2682,6 +3000,7 @@ cj_line(
 		max_it = 0;
 	}
 
+	/* Improve the solution */
 	for (it = 1; it <= max_it; it++) {
 
 		/* Aproximately solve for z[] given r[], */

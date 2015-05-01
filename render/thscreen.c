@@ -2,7 +2,7 @@
 /*
  * render2d
  *
- * Threshold screen pixel processing object.
+ * Threshold or Error diffusion screen pixel processing object.
  * (Simplified from DPS code)
  *
  * Author:  Graeme W. Gill
@@ -32,6 +32,8 @@
 /* Configuration: */
 #undef DEBUG
 
+#undef CHECK_EXPECTED_ED_LEVELS		/* Output expected quantized levels for checkking */
+
 /* ----------------------------------------------------------- */
 
 #ifdef DEBUG
@@ -46,29 +48,190 @@
 
 #include "screens.h"	/* Pre-generated screen patterns */
 
-/* Screen a single color plane */
-void screen_thscreens(			/* Pointer to dither function */
+/* Threshold screen lines of multiplane pixels */
+void screen_thscreens(
 	thscreens *t,			/* Screening object pointer */
 	int width, int height,	/* Width and height to screen in pixels */
 	int xoff, int yoff,		/* Offset into screening pattern */
-	unsigned char *in,		/* Input pixel buffer */
-	unsigned long ipitch,	/* Increment between input lines */
 	unsigned char *out,		/* Output pixel buffer */
-	unsigned long opitch	/* Increment between output lines */
+	unsigned long opitch,	/* Increment between output lines in components */
+	unsigned char *in,		/* Input pixel buffer */
+	unsigned long ipitch	/* Increment between input lines in components */
 ) {
 	int i;
 	for (i = 0; i < t->np; i++)
-		t->sc[i]->screen(t->sc[i], width, height, xoff, yoff, in + 2 * i, t->np, ipitch,
-		                                                      out + i, t->np, opitch);
+		t->sc[i]->screen(t->sc[i], width, height, xoff, yoff,
+		                           out + i, t->np, opitch,
+		                           in + 2 * i, t->np, ipitch);
+}
+
+/* Error diffusion screen lines of multiplane pixels */
+void screen_edscreens(
+	thscreens *t,			/* Screening object pointer */
+	int width, int height,	/* Width and height to screen in pixels */
+	int xoff, int yoff,		/* Offset into screening pattern, [xoff + width < mxwidth] */
+	unsigned char *out,		/* Output pixel buffer */
+	unsigned long opitch,	/* Increment between output lines in components */
+	unsigned char *_in,		/* Input pixel buffer */
+	unsigned long ipitch	/* Increment between input lines in components */
+) {
+	unsigned short *in = (unsigned short *)_in;	/* Pointer to input pixel sized values */
+	unsigned short *ein = in + height * ipitch;	/* Vertical end pixel marker */
+	unsigned short *ein1;				/* Horizontal end pixel markers */
+	int xo, yo;				/* Threshold screen offset */
+	int x, j;
+
+	/* Limit width to mxwidth */
+	if ((xoff + width) > t->mxwidth) {
+		width = t->mxwidth - xoff;
+		if (width < 0)
+			return;
+	}
+
+	/* If not sequential, clear error buffer */
+	if (yoff != (t->lastyoff+1)) {
+		for (x = -1; x <= t->mxwidth; x++) {
+			for (j = 0; j < t->np; j++)
+				t->ebuf[j][x] = 0.0;
+		}
+	}
+
+	/* Clear "next to right" error */
+	for (j = 0; j < t->np; j++) {
+		t->ebuf[j][-2] = 0.0;
+	}
+
+	t->lastyoff = yoff;
+
+	/* For each line: */
+	for (; in < ein; in += ipitch, ein1 += ipitch, out += opitch, yoff++) {
+		unsigned short *ip;	/* Horizontal input pointer */
+		unsigned char *op;	/* Horizontal output pointer */
+		int xinc, pinc;
+
+		/* Do in serpentine order */
+		if (yoff & 1) {
+			xinc = -1;
+			x = xoff + width-1;			/* x is index into error buffer */
+			pinc = -t->np;
+			ein1 = in + pinc;
+			ip = in + t->np * (width-1);
+			op = out + t->np * (width-1);
+		} else {
+			xinc = 1;
+			x = xoff;
+			pinc = t->np;
+			ein1 = in + t->np * width;
+			ip = in;
+			op = out;
+		}
+
+		/* For each pixel */
+		for (; ip != ein1; ip += pinc, op += pinc, x += xinc) {
+			double ov[THMXCH2D], tv[THMXCH2D], ev[THMXCH2D];
+
+			/* For each plane */
+			for (j = 0; j < t->np; j++) {
+				tv[j] = t->luts[j][ip[j]] / 65535.0;		/* 0.0 - 1.0 value */
+
+				/* Value + accumulated error */
+				ov[j] = tv[j] = tv[j] + t->ebuf[j][x];
+
+				/* Limit */
+				if (ov[j] > 1.0)
+					ov[j] = 1.0;
+				else if (ov[j] < 0.0)
+					ov[j] = 0.0;
+
+				/* Output encode */
+				op[j] = t->oevalues[(int)(ov[j] * (t->oelev-1.0) + 0.5)];
+			}
+
+#ifdef CHECK_EXPECTED_ED_LEVELS
+#pragma message("######### render/thscreen.c CHECK_EXPECTED_ED_LEVELS defined ! ##")
+			// Put expected values in output to check levels
+			t->quant(t->qcntx, ev, ov);
+			for (j = 0; j < t->np; j++)
+				op[j] = t->oevalues[(int)(ev[j] * (t->oelev-1.0) + 0.5)];
+#endif
+
+			/* Quantize to values that it actually will be */
+			if (t->quant != NULL)
+				t->quant(t->qcntx, ov, ov);
+			else {
+				for (j = 0; j < t->np; j++)
+					ov[j] = floor(ov[j] * (t->oelev-1) + 0.5)/(t->oelev-1.0);
+			}
+
+			/* Compute the error to the target */
+			for (j = 0; j < t->np; j++) {
+
+				/* Error to target */
+				ev[j] = tv[j] - ov[j];
+			}
+
+			/* Distribute the error */
+			for (j = 0; j < t->np; j++) {
+#ifdef NEVER
+				/* Classic error diffusion */
+				t->ebuf[j][x-xinc] += 0.1875 * ev[j];				/* Lower left */
+				t->ebuf[j][x] = t->ebuf[j][-2] + 0.3125 * ev[j];	/* Lower */
+				t->ebuf[j][-2] = 0.0625 * ev[j];					/* Lower right */
+				t->ebuf[j][x+xinc] += 0.4375 * ev[j];				/* Right */
+#else
+				/* Using random placement error distribution */
+				double rav;
+				int ii;
+				t->so->next(t->so, &rav);		/* For some order */
+				rav *= 4.0;
+				rav += d_rand(0.0, 2.5);		/* For some randomness */
+				ii = (int)(rav);
+				if (ii > 3)
+				 	ii -= 4;
+				t->ebuf[j][x] = t->ebuf[j][-2];
+				t->ebuf[j][-2] = 0.0;
+				switch (ii) {
+					case 0:
+						t->ebuf[j][x-xinc] += ev[j];		/* Lower left */
+						break;
+					case 1:
+						t->ebuf[j][x] += ev[j];				/* Lower */
+						break;
+					case 2:
+						t->ebuf[j][-2] += ev[j];			/* Lower right */
+						break;
+					case 3:
+						t->ebuf[j][x+xinc] += ev[j];		/* Right */
+						break;
+				}
+#endif
+			}
+		}
+	}
 }
 
 /* Delete a thscreens */
 void del_thscreens(thscreens *t) {
 	int i;
 
-	for (i = 0; i < t->np; i++)
-		t->sc[i]->del(t->sc[i]);
-	free(t->sc);
+	if (t->sc != NULL) {
+		for (i = 0; i < t->np; i++) {
+			if (t->sc[i] != NULL)
+				t->sc[i]->del(t->sc[i]);
+		}
+		free(t->sc);
+	}
+	if (t->ebuf != NULL) {
+		free_fmatrix(t->ebuf, 0, t->np-1, -2, t->mxwidth);
+	}
+
+	if (t->luts != NULL) {
+		free_imatrix(t->luts, 0, t->np-1, 0, 65535);
+	}
+
+	if (t->so != NULL)
+		t->so->del(t->so);
+
 	free(t);
 }
 
@@ -77,7 +240,7 @@ thscreens *new_thscreens(
 	int exact,				/* Return only exact matches */
 	int nplanes,			/* Number of planes to screen */
 	double asp,				/* Target aspect ratio (== dpiX/dpiY) */
-	int size,				/* Target size */
+	int size,				/* Target screen size */
 	sc_iencoding ie,		/* Input encoding - must be scie_16 */
 	int oebpc,				/* Output encoding bits per component - must be 8 */
 	int oelev,				/* Output encoding levels. Must be <= 2 ^ oebpc */
@@ -85,8 +248,12 @@ thscreens *new_thscreens(
 							/* Must be oelev entries. Default is 0 .. oelev-1 */
 	sc_oorder oo,			/* Output bit ordering */
 	double overlap,			/* Overlap between levels, 0 - 1.0 */
+	int mxwidth,			/* max width in pixels of raster to be screened */ 
 	void   **cntx,			/* List of contexts for lookup table callback */
-	double (**lutfunc)(void *cntx, double in)	/* List of callback function, NULL if none */
+	double (**lutfunc)(void *cntx, double in),	/* List of callback functions, NULL if none */
+	int edif,				/* nz if using error diffusion */
+	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edif */
+	void *qcntx
 ) {
 	thscreens *t;
 	int i, bi = -1;
@@ -115,17 +282,39 @@ thscreens *new_thscreens(
 	}
 
 	t->np = nplanes; 	/* Number of planes */
+	t->edif = edif;		/* Error diffusion */
+	t->quant = quant;	/* Optional quantization function */
+	t->qcntx = qcntx;
+
+	t->mxwidth = mxwidth;
+	t->lastyoff = -1;
+
+	/* Allocate and initialise a next line error buffer. */
+	/* we allow 2 extra locations for pixels to the left and right of the current one: */
+	/* [-1] for the one to the below left when we are at x = 0, */
+	/* [-2] for the one below right, before we use [x] */
+	if (t->edif)
+		t->ebuf = fmatrixz(0, t->np-1, -2, t->mxwidth);
+
+	t->oebpc = oebpc;
+	t->oelev = oelev;
+	if (oevalues != NULL) {
+		for (i = 0; i < t->oelev; i++) {
+			if (oevalues[i] >= (1 << t->oebpc)) {
+				DBG(("new_thscreens() oevalues[%d] value %d can't fit in %d bits\n",i,oevalues[i],t->oebpc));
+				free(t);
+				return NULL;
+			}
+			t->oevalues[i] = oevalues[i];
+		}
+	} else {
+		for (i = 0; i < t->oelev; i++)
+			t->oevalues[i] = i;
+	}
 
 	DBG(("thscreens no planes = %d\n",t->np));
 
-	t->screen = screen_thscreens;
 	t->del = del_thscreens;
-
-	if ((t->sc = malloc(sizeof(thscreen *) * t->np)) == NULL) {
-		free(t);
-		DBG(("thscreens: malloc of thscreens->sc[] failed\n"));
-		return NULL;
-	}
 
 	DBG(("thscreens: searching amongst %d screens, exact = %d\n",NO_SCREENS,exact));
 
@@ -163,57 +352,96 @@ thscreens *new_thscreens(
 	if (bi < 0)			/* Strange */
 		return NULL;
 
-	/* Create each screening object from one defined screen. */
-	/* Use the 0'th plane screen */
-	/* Stagger the screens with a round of 9 offset */
-	for (i = 0; i < t->np; i++) {
-		int xoff = ((i % 3) * screens[bi].width)/3;
-		int yoff = (((i/3) % 3) * screens[bi].height)/3;
-		void   *cx = NULL;
-		double (*lf)(void *cntx, double in) = 0;
-		if (cntx != NULL)
-			cx = cntx[i];
-		if (lutfunc != NULL)
-			lf = lutfunc[i];
+	if (t->edif) {
+		int j;
+		int npix;
 
-		DBG(("thscreens: creating plane %d/%d thscreen, offset %d %d\n",i,t->np,xoff,yoff));
-		if ((t->sc[i] = new_thscreen(screens[bi].width, screens[bi].height, xoff, yoff,
-		                          screens[bi].asp, swap, screens[bi].list[0],
-		                          ie, oebpc, oelev, oevalues, oo, overlap,
-		                          cx, lf)) == NULL) {
-			for (--i; i >= 0; i--)
-				t->sc[i]->del(t->sc[i]);
-			free(t->sc);
-			free(t);
-			DBG(("thscreens: new_thscreen() failed\n"));
+		t->screen = screen_edscreens;
+
+		t->luts = imatrix(0, t->np-1, 0, 65535);
+
+		/* Create a suitable LUT from the given function */
+		/* Input is either 8 or 16 bits, output is always 16 bits */
+		for (j = 0; j < t->np; j++) {
+			for (i = 0; i < 65536; i++) {
+				if (lutfunc != NULL && lutfunc[j] != NULL) {
+					double v = i/65535.0;
+					v = lutfunc[j](cntx[j], v);
+					t->luts[j][i] = (int)(v * 65535.0 + 0.5);
+				} else
+					t->luts[j][i] = i;
+			}
+		}
+
+		if ((t->so = new_sobol(1)) == NULL) {
+			DBG(("thscreens: new_sobol() failed\n"));
 			return NULL;
+		}
+
+
+	} else {
+
+		t->screen = screen_thscreens;
+
+		if ((t->sc = malloc(sizeof(thscreen *) * t->np)) == NULL) {
+			free(t);
+			DBG(("thscreens: malloc of thscreens->sc[] failed\n"));
+			return NULL;
+		}
+
+		/* Create each screening object from one defined screen. */
+		/* Use the 0'th plane screen */
+		/* Stagger the screens with a round of 9 offset */
+		for (i = 0; i < t->np; i++) {
+			int xoff = ((i % 3) * screens[bi].width)/3;
+			int yoff = (((i/3) % 3) * screens[bi].height)/3;
+			void   *cx = NULL;
+			double (*lf)(void *cntx, double in) = 0;
+			if (cntx != NULL)
+				cx = cntx[i];
+			if (lutfunc != NULL)
+				lf = lutfunc[i];
+	
+			DBG(("thscreens: creating plane %d/%d thscreen, offset %d %d\n",i,t->np,xoff,yoff));
+			if ((t->sc[i] = new_thscreen(screens[bi].width, screens[bi].height, xoff, yoff,
+			                          screens[bi].asp, swap, screens[bi].list[0],
+			                          ie, oebpc, oelev, oevalues, oo, overlap,
+			                          cx, lf)) == NULL) {
+				for (--i; i >= 0; i--)
+					t->sc[i]->del(t->sc[i]);
+				free(t->sc);
+				free(t);
+				DBG(("thscreens: new_thscreen() failed\n"));
+				return NULL;
+			}
 		}
 	}
 	DBG(("thscreens: returning nonexact match\n"));
+
 	return t;
 }
 
 /* ----------------------------------------------------------- */
-/* The kernel screening routin */
+/* The kernel stocastic screening routine */
 
 void thscreen16_8(
 	struct _thscreen *t,	/* Screening object pointer */
 	int width, int height,	/* Width and height to screen in pixels */
 	int xoff, int yoff,		/* Offset into screening pattern (must be +ve) */
-	unsigned char *_in,		/* Input pixel buffer */
-	unsigned long ipinc,	/* Increment between input pixels */
-	unsigned long ipitch,	/* Increment between input lines */
 	unsigned char *out,		/* Output pixel buffer */
-	unsigned long opinc,	/* Increment between output pixels */
-	unsigned long opitch	/* Increment between output lines */
+	unsigned long opinc,	/* Increment between output pixels in components */
+	unsigned long opitch,	/* Increment between output lines in components */
+	unsigned char *_in,		/* Input pixel buffer */
+	unsigned long ipinc,	/* Increment between input pixels in components */
+	unsigned long ipitch	/* Increment between input lines in components */
 ) {
 	unsigned short *in = (unsigned short *)_in;	/* Pointer to input pixel sized values */
 	int *lut = t->lut;			/* Copy of 8 or 16 -> 16 bit lookup table */
+	unsigned short *ein = in + height * ipitch;	/* Vertical end pixel marker */
+	unsigned short *ein1;				/* Horizontal end pixel markers */
 	unsigned char **oth, **eth; /* Current lines start, origin and end in screening table. */
 	int thtsize;				/* Overall size of threshold table */
 	unsigned char **eeth;		/* Very end of threshold table */
-	unsigned short *ein = in + height * ipitch;	/* Vertical end pixel marker */
-	unsigned short *ein1;				/* Horizontal end pixel markers */
 
 	{
 		unsigned char **sth;				/* Start point of line intable */

@@ -45,6 +45,12 @@ MainsFromSources mkDispProf.c ;
 
 if $(BUILD_JUNK) {
 
+	HDRS += ../plot ;
+	LINKLIBS += ../plot/libvrml ;
+
+	#Monotonic behaviour checker
+	MainsFromSources mcheck.c ;
+
 #	MainsFromSources tt.c ;
 
 	MainsFromSources mksRGB.c ;
@@ -64,9 +70,6 @@ if $(BUILD_JUNK) {
 
 	# check CIEDE2000
 	MainsFromSources testDE2K.c ;
-
-	#Monotonic behaviour checker
-	MainsFromSources mcheck.c ;
 }
 
 

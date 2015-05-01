@@ -72,6 +72,7 @@ static int re_set_rspl(struct _rspl *s, int flags, void *cbntx,
                         void (*func)(void *cbntx, double *out, double *in));
 static void scan_rspl(struct _rspl *s, int flags, void *cbntx,
                         void (*func)(void *cbntx, double *out, double *in));
+static int tune_value(struct _rspl *s, co *p);
 static void filter_rspl(struct _rspl *s, int flags, void *cbctx,
                         void (*func)(void *cbntx, float **out, double *in, int cvi));
 
@@ -172,6 +173,7 @@ printf("!!!! rspl.c using interp_rspl_nl !!!!");
 	s->set_rspl      = set_rspl;
 	s->scan_rspl     = scan_rspl;
 	s->re_set_rspl   = re_set_rspl;
+	s->tune_value    = tune_value;
 	s->opt_rspl      = opt_rspl_imp;
 	s->filter_rspl   = filter_rspl;
 	s->get_in_range  = get_in_range;
@@ -1240,6 +1242,153 @@ void (*func)(void *cbntx, double *out, double *in) /* Function to get from */
 	scan_set_rspl(s, flags, cbctx, func, 0);
 }
 
+
+/* ============================================ */
+/* Tune a single value for simplex interpolation. */
+/* Return 0 on success, 1 if input clipping occured, 2 if output clipping occured */
+static int tune_value (
+struct _rspl *s,				/* Pointer to Lut object */
+co *p							/* Target value */
+) {
+	int e, di  = s->di;
+	int f, fdi = s->fdi;
+	double we[MXDI];		/* Coordinate offset within the grid cell */
+	int    si[MXDI];		/* we[] Sort index, [0] = smallest */
+	float *gp;				/* Pointer to grid cube base */
+	int rv = 0;				/* Register clip */
+
+	/* We are using a simplex (ie. tetrahedral for 3D input) interpolation. */
+
+	DEBLU(("In %s\n", icmPdv(di, p->p)));
+
+	/* Figure out which grid cell the point falls into */
+	{
+		gp = s->g.a;					/* Base of grid array */
+		for (e = 0; e < di; e++) {
+			int gres_1 = s->g.res[e]-1;
+			double pe, t;
+			int mi;
+			pe = p->p[e];
+			if (pe < s->g.l[e]) {		/* Clip to grid */
+				pe = s->g.l[e];
+				rv = 1;
+			}
+			if (pe > s->g.h[e]) {
+				pe = s->g.h[e];
+				rv = 1;
+			}
+			t = (pe - s->g.l[e])/s->g.w[e];
+			mi = (int)floor(t);			/* Grid coordinate */
+			if (mi < 0)					/* Limit to valid cube base index range */
+				mi = 0;
+			else if (mi >= gres_1)
+				mi = gres_1-1;
+			gp += mi * s->g.fci[e];		/* Add Index offset for grid cube base in dimen */
+			we[e] = t - (double)mi;		/* 1.0 - weight */
+//if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
+		}
+		DEBLU(("ix %d, we %s\n", (gp - s->g.a)/s->g.pss, icmPdv(di, p->p)));
+	}
+
+	/* Do selection sort on coordinates */
+	{
+		for (e = 0; e < di; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+		for (e = 0; e < (di-1); e++) {
+			double cosn;
+			cosn = we[si[e]];				/* Current smallest value */
+			for (f = e+1; f < di; f++) {	/* Check against rest */
+				int tt;
+				tt = si[f];
+				if (cosn > we[tt]) {
+					si[f] = si[e]; 			/* Exchange */
+					si[e] = tt;
+					cosn = we[tt];
+				}
+			}
+		}
+	}
+	DEBLU(("si[] = %s\n", icmPiv(di, si)));
+
+	/* Now compute the weightings, simplex vertices and output values */
+	{
+		double w, ww = 0.0;			/* Current vertex weight, sum of weights squared */
+		double cout[MXDO];			/* Current output value */
+		float *ogp = gp;			/* Pointer to grid cube base */
+
+		w = 1.0 - we[si[di-1]];				/* Vertex at base of cell */
+		ww += w * w;						/* Sum of weights squared */
+		for (f = 0; f < fdi; f++)
+			cout[f] = w * gp[f];
+
+		DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
+
+		for (e = di-1; e > 0; e--) {		/* Middle verticies */
+			w = we[si[e]] - we[si[e-1]];
+			ww += w * w;					/* Sum of weights squared */
+			gp += s->g.fci[si[e]];			/* Move to top of cell in next largest dimension */
+			for (f = 0; f < fdi; f++)
+				cout[f] += w * gp[f];
+			DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
+		}
+
+		w = we[si[0]];
+		ww += w * w;					/* Sum of weights squared */
+		gp += s->g.fci[si[0]];			/* Far corner from base of cell */
+		for (f = 0; f < fdi; f++)
+			cout[f] += w * gp[f];
+		DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
+		DEBLU(("cout  %s\n", icmPdv(fdi, cout)));
+
+		/* We distribute the correction needed in proportion to the */
+		/* interpolation weighting, so the biggest correction is to the */
+		/* closest vertex. */
+		for (f = 0; f < fdi; f++)
+			cout[f] = (p->v[f] - cout[f])/ww;	/* Amount to distribute */
+
+		gp = ogp;
+		w = 1.0 - we[si[di-1]];		/* Vertex at base of cell */
+		for (f = 0; f < fdi; f++) {
+			gp[f] += w * cout[f];				/* Apply correction */
+			if (gp[f] < s->g.fmin[f]) {
+				gp[f] = s->g.fmin[f];
+				rv |= 2;
+			} else if (gp[f] > s->g.fmax[f]) {
+				gp[f] = s->g.fmax[f];
+				rv |= 2;
+			}
+		}
+
+		for (e = di-1; e > 0; e--) {	/* Middle verticies */
+			w = we[si[e]] - we[si[e-1]];
+			gp += s->g.fci[si[e]];				/* Move to top of cell in next largest dimension */
+			for (f = 0; f < fdi; f++) {
+				gp[f] += w * cout[f];			/* Apply correction */
+				if (gp[f] < s->g.fmin[f]) {
+					gp[f] = s->g.fmin[f];
+					rv |= 2;
+				} else if (gp[f] > s->g.fmax[f]) {
+					gp[f] = s->g.fmax[f];
+					rv |= 2;
+				}
+			}
+		}
+
+		w = we[si[0]];
+		gp += s->g.fci[si[0]];					/* Far corner from base of cell */
+		for (f = 0; f < fdi; f++) {
+			gp[f] += w * cout[f];				/* Apply correction */
+			if (gp[f] < s->g.fmin[f]) {
+				gp[f] = s->g.fmin[f];
+				rv |= 2;
+			} else if (gp[f] > s->g.fmax[f]) {
+				gp[f] = s->g.fmax[f];
+				rv |= 2;
+			}
+		}
+	}
+	return rv;
+}
 
 /* ============================================ */
 /* Allow the grid values to be filtered. */

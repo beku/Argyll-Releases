@@ -18,6 +18,10 @@
 
 /* TTBD
  *
+ *  When there is a strip misread, should offer the option
+ *	of skipping the strip.
+ *
+ *
  *	Should an a -X [xl] mode that reads a simple list of readings
  *  from a file.
  *
@@ -71,18 +75,19 @@
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
-#include "ccmx.h"
-#include "ccss.h"
 #include "insttypes.h"
 #include "conv.h"
 #include "icoms.h"
 #include "inst.h"
+#include "ccmx.h"
+#include "ccss.h"
 #include "dispwin.h"
+#include "ui.h"
+#include "ccast.h"
 #include "dispsup.h"
 #include "alphix.h"
 #include "sort.h"
 #include "instappsup.h"
-#include "spyd2setup.h"
 
 #include <stdarg.h>
 
@@ -333,7 +338,7 @@ a1log *log			/* verb, debug & error log */
 						return -1;
 					}
 				} else
-					printf("Display type ignored - instrument doesn't support display type\n");
+					printf("Display type ignored - instrument doesn't support display type selection\n");
 			}
 
 			if (spectral && !IMODETST(cap, inst_mode_spectral)) {
@@ -357,7 +362,7 @@ a1log *log			/* verb, debug & error log */
 						it->del(it);
 						return -1;
 					}
-					if ((rv = it->col_cor_mat(it, cx->matrix)) != inst_ok) {
+					if ((rv = it->col_cor_mat(it, cx->dtech, cx->cc_cbid, cx->matrix)) != inst_ok) {
 						printf("\nSetting Colorimeter Correction Matrix failed with error :'%s' (%s)\n",
 					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 						cx->del(cx);
@@ -395,7 +400,7 @@ a1log *log			/* verb, debug & error log */
 						it->del(it);
 						return -1;
 					}
-					if ((rv = it->col_cal_spec_set(it, cs->samples, cs->no_samp)) != inst_ok) {
+					if ((rv = it->col_cal_spec_set(it, cs->dtech, cs->samples, cs->no_samp)) != inst_ok) {
 						printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
 					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 						cs->del(cs);
@@ -447,7 +452,6 @@ a1log *log			/* verb, debug & error log */
 						it->del(it);
 						return -1;
 					}
-					highres = 1;
 				} else {
 					a1logv(log, 1, "Modified patch consistency tolerance ignored - instrument doesn't support it\n");
 				}
@@ -1072,7 +1076,7 @@ a1log *log			/* verb, debug & error log */
 
 		/* Do any needed calibration before the user places the instrument on a desired spot */
 		if (it->needs_calibration(it) & inst_calt_n_dfrble_mask) {
-			if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL))
+			if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0))
 			                                                                    != inst_ok) {
 				printf("\nCalibration failed with error :'%s' (%s)\n",
 	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1288,7 +1292,7 @@ a1log *log			/* verb, debug & error log */
 						if (cap2 & inst2_no_feedback)
 							bad_beep();
 						printf("\nStrip read failed because instruments needs calibration\n");
-						ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+						ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0);
 						if (ev != inst_ok) {	/* Abort or fatal error */
 							it->del(it);
 							return -1;
@@ -1574,7 +1578,7 @@ a1log *log			/* verb, debug & error log */
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
 			if (it->needs_calibration(it) & inst_calt_n_dfrble_mask) {
-				if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL))
+				if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0))
 				                                                                    != inst_ok) {
 					printf("\nCalibration failed with error :'%s' (%s)\n",
 		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1802,7 +1806,7 @@ a1log *log			/* verb, debug & error log */
 					if (cap2 & inst2_no_feedback)
 						bad_beep();
 					printf("\nSpot read failed because instruments needs calibration\n");
-					ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+					ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0);
 					if (ev != inst_ok) {	/* Abort or fatal error */
 						it->del(it);
 						return -1;
@@ -2126,8 +2130,6 @@ int main(int argc, char *argv[]) {
 
 	set_exe_path(argv[0]);		/* Set global exe_path and error_program */
 	check_if_not_interactive();
-
-	setup_spyd2();				/* Load firware if available */
 
 	if (argc <= 1)
 		usage();

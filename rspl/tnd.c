@@ -22,6 +22,7 @@
 #include "rspl.h"
 #include "numlib.h"
 #include "tiffio.h"
+#include "plot.h"
 
 #ifdef NEVER
 FILE *verbose_out = stdout;
@@ -39,6 +40,10 @@ int verbose_level = 6;			/* Current verbosity level */
 #define TEST_REV_LOOKUP
 #undef TEST_SLICE
 #undef TEST_RANDOM_POINTS
+
+#ifdef TEST_SLICE
+# include "ui.h"
+#endif
 
 #define MAX_ITS 500
 #define IT_TOL 0.0005

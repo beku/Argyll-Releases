@@ -11,7 +11,7 @@
 <h3>Summary</h3>
 Lookup individual color values though an&nbsp;<a
  href="File_Formats.html#MPP">MPP</a> profile. Also
-create MPP gamut files or&nbsp;<a href="File_Formats.html#VRML">VRML</a>
+create MPP gamut files or&nbsp;<a href="File_Formats.html#X3DOM">X3DOM</a>
 views.<br>
 <h3>Usage</h3>
 <small><span style="font-family: monospace;">mpplu [-v level] [-f func]
@@ -63,9 +63,9 @@ data:</span><br style="font-family: monospace;">
 &nbsp; &nbsp; Create gamut output</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Create gamut VRML as well<br>
+&nbsp; &nbsp; Create gamut X3DOM as well<br>
 -n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Don't add VRML axes<br>
+Don't add X3DOM axes<br>
 -a n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Gamut
 transparency level<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">-d
@@ -78,7 +78,7 @@ surface detail level</span><br style="font-family: monospace;">
 &nbsp; &nbsp;&nbsp; 1 - check partial derivative for device
 input</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; 2 - create overlap diagnostic VRML gamut
+&nbsp; &nbsp;&nbsp; 2 - create overlap diagnostic X3DOM gamut
 surface</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">profile.mpp &nbsp; Profile to be
 used</span><br style="font-family: monospace;">
@@ -157,15 +157,15 @@ description from the profile, creating a <a
 the given profile.<br>
 <br>
 The <b>-w</b> flag causes the gamut surface to be generated in <a
- href="File_Formats.html#VRML">VRML</a> format
+ href="File_Formats.html#X3DOM">X3DOM</a> format
 as well as <a href="File_Formats.html#.gam">.gam</a> format.<br>
 <br>
 <small><span style="font-family: monospace;">The <span
- style="font-weight: bold;">-n</span> flag suppresses the VRML axes.<br>
+ style="font-weight: bold;">-n</span> flag suppresses the X3DOM axes.<br>
 <br>
 The <span style="font-weight: bold;">-a</span> <span
  style="font-weight: bold;">n</span> parameter sets a transparency
-level in the VRML surface.</span></small><br>
+level in the X3DOM surface.</span></small><br>
 <br>
 The <b>-d</b> parameter controls the level of detail displayed in the
 gamut surface. The parameter roughly corresponds to a deltaE value, so

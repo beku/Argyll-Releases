@@ -18,6 +18,7 @@
 #include <string.h>
 #ifdef NT
 # include <winsock2.h>
+# include <shlwapi.h>
 #endif
 #ifdef UNIX
 # include <sys/types.h>
@@ -71,13 +72,27 @@
 # define KEY_WOW64_32KEY (0x0200)
 #endif
 
+/* Incase shlwapi.h doesn't declare this */
+#include <pshpack1.h>
+typedef struct _ADLLVERSIONINFO2
+{
+    DLLVERSIONINFO info1;
+    DWORD dwFlags;
+    ULONGLONG ullVersion;
+} ADLLVERSIONINFO2;
+#include <poppack.h>
+
 HMODULE HcNetDll = NULL;
 BOOL (WINAPI *madVR_BlindConnect)(BOOL searchLan, DWORD timeOut) = NULL;
+BOOL (WINAPI *madVR_GetVersion)(DWORD *version);
 BOOL (WINAPI *madVR_SetOsdText)(LPCWSTR text);
 BOOL (WINAPI *madVR_Disable3dlut)() = NULL;
 BOOL (WINAPI *madVR_GetDeviceGammaRamp)(LPVOID ramp) = NULL;
 BOOL (WINAPI *madVR_SetDeviceGammaRamp)(LPVOID ramp) = NULL;
-BOOL (WINAPI *madVR_SetBackground)(int patternAreaInPercent, COLORREF backgroundColor) = NULL;
+BOOL (WINAPI *madVR_GetPatternConfig)(int *patternAreaInPercent, int *backgroundLevelInPercent,
+                                      int *backgroundMode, int *blackBorderWidth) = NULL;
+BOOL (WINAPI *madVR_SetPatternConfig)(int patternAreaInPercent, int backgroundLevelInPercent,
+                                      int backgroundMode, int blackBorderWidth) = NULL;
 BOOL (WINAPI *madVR_ShowRGB)(double r, double g, double b) = NULL;
 BOOL (WINAPI *madVR_SetProgressBarPos)(int currentPos, int maxPos);
 BOOL (WINAPI *madVR_Disconnect)() = NULL;
@@ -86,6 +101,10 @@ BOOL (WINAPI *madVR_Disconnect)() = NULL;
 /* Return NZ on failure */
 static int initMadVR(dispwin *p) {
 	wchar_t *dllname;
+	WCHAR modname[MAX_PATH];
+	DWORD hnd;
+	DWORD len = 0;
+	WORD v1 = 0, v2 = 0, v3 = 0, v4 = 0;		/* MadVR version */
 
 	if (sizeof(dllname) > 4)		/* Compiled as 64 bit */
 		dllname = L"madHcNet64.dll";
@@ -120,28 +139,59 @@ static int initMadVR(dispwin *p) {
 		}
 	}
 	if (HcNetDll != NULL) {
+		HRESULT (WINAPI *dllgetver)(ADLLVERSIONINFO2 *) = NULL;
+
+		*(FARPROC*)&dllgetver = GetProcAddress(HcNetDll, "DllGetVersion");
+
+		if (dllgetver != NULL) {
+			ADLLVERSIONINFO2 ver;
+
+			ver.info1.cbSize = sizeof(ADLLVERSIONINFO2);
+			dllgetver(&ver);
+
+			v1 = 0xffff & (ver.ullVersion >> 48);
+			v2 = 0xffff & (ver.ullVersion >> 32);
+			v3 = 0xffff & (ver.ullVersion >> 16);
+			v4 = 0xffff & ver.ullVersion;
+
+		} else  {
+			debugr2((errout,"MadVR DllGetVersion failed - can't determine DLL version\n"));
+		}
+	}
+
+	if (HcNetDll != NULL) {
 		*(FARPROC*)&madVR_BlindConnect       = GetProcAddress(HcNetDll, "madVR_BlindConnect");
+		*(FARPROC*)&madVR_GetVersion         = GetProcAddress(HcNetDll, "madVR_GetVersion");
 		*(FARPROC*)&madVR_SetOsdText         = GetProcAddress(HcNetDll, "madVR_SetOsdText");
 		*(FARPROC*)&madVR_Disable3dlut       = GetProcAddress(HcNetDll, "madVR_Disable3dlut");
 		*(FARPROC*)&madVR_GetDeviceGammaRamp = GetProcAddress(HcNetDll, "madVR_GetDeviceGammaRamp");
 		*(FARPROC*)&madVR_SetDeviceGammaRamp = GetProcAddress(HcNetDll, "madVR_SetDeviceGammaRamp");
-		*(FARPROC*)&madVR_SetBackground      = GetProcAddress(HcNetDll, "madVR_SetBackground");
+		*(FARPROC*)&madVR_GetPatternConfig   = GetProcAddress(HcNetDll, "madVR_GetPatternConfig");
+		*(FARPROC*)&madVR_SetPatternConfig   = GetProcAddress(HcNetDll, "madVR_SetPatternConfig");
 		*(FARPROC*)&madVR_ShowRGB            = GetProcAddress(HcNetDll, "madVR_ShowRGB");
 		*(FARPROC*)&madVR_SetProgressBarPos  = GetProcAddress(HcNetDll, "madVR_SetProgressBarPos");
 		*(FARPROC*)&madVR_Disconnect         = GetProcAddress(HcNetDll, "madVR_Disconnect");
 	
 		if (madVR_BlindConnect
+		 && madVR_GetVersion
 		 && madVR_SetOsdText
 		 && madVR_Disable3dlut
 		 && madVR_GetDeviceGammaRamp
 		 && madVR_SetDeviceGammaRamp
-		 && madVR_SetBackground
+		 && madVR_GetPatternConfig
+		 && madVR_SetPatternConfig
 		 && madVR_ShowRGB
 		 && madVR_SetProgressBarPos
 		 && madVR_Disconnect) {
+			DWORD ver = 0;
+			/* Return value is unclear */
+			if (!madVR_GetVersion(&ver))
+				debugr2((errout,"MadVR_GetVersion failed - can't determine MadVR version\n"));
+
+			debugr2((errout,"Found all required functions in %ls V%d.%d.%d.%d MadVR V%x.%x.%x.%x functions\n",dllname,v1,v2,v3,v4, 0xff & (ver >> 24), 0xff & (ver >> 16), 0xff & (ver >> 8), 0xff & ver));
 			return 0;
 		}
-		debugr2((errout,"Failed to locate function in %ls\n",dllname));
+		debugr2((errout,"Failed to locate MadVR function in %ls %d.%d.%d.%d\n",dllname,v1,v2,v3,v4));
 		FreeLibrary(HcNetDll);
 	} else {
 		debugr2((errout,"Failed to load %ls\n",dllname));
@@ -198,7 +248,7 @@ static ramdac *madvrwin_get_ramdac(dispwin *p) {
 		return NULL;
 	}
 
-	if (madVR_GetDeviceGammaRamp(vals) == 0) {
+	if (!madVR_GetDeviceGammaRamp(vals)) {
 		free(r);
 		debugr2((errout,"madvrwin_get_ramdac failed on madVR_GetDeviceGammaRamp()\n"));
 		return NULL;
@@ -237,7 +287,7 @@ static int madvrwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		}
 	}
 
-	if (madVR_SetDeviceGammaRamp(vals) == 0) {
+	if (!madVR_SetDeviceGammaRamp(vals)) {
 		debugr2((errout,"madvrwin_set_ramdac failed on madVR_SetDeviceGammaRamp()\n"));
 		rv = 1;
 	} else {
@@ -282,8 +332,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	int j;
 	double orgb[3];		/* Previous RGB value */
 	double kr, kf;
-	int update_delay = p->update_delay; 
-	double xdelay = 0.0;		/* Extra delay for response time */
+	int update_delay = 0;
 
 	debugr("madvrwin_set_color called\n");
 
@@ -299,44 +348,40 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		return 1;
 	}
 
-	/* Don't want extra delay if we're measuring update delay */
-	if (update_delay != 0 && p->do_resp_time_del) {
-		/* Compute am expected response time for the change in level */
-		kr = DISPLAY_RISE_TIME/log(1 - 0.9);	/* Exponent constant */
-		kf = DISPLAY_FALL_TIME/log(1 - 0.9);	/* Exponent constant */
-//printf("~1 k2 = %f\n",k2);
-		for (j = 0; j < 3; j++) {
-			double el, dl, n, t;
-	
-			el = pow(p->rgb[j], 2.2);
-			dl = el - pow(orgb[j], 2.2);	/* Change in level */
-			if (fabs(dl) > 0.01) {		/* More than 1% change in level */
-				n = DISPLAY_SETTLE_AIM * el;
-				if (n < DISPLAY_ABS_AIM)
-					n = DISPLAY_ABS_AIM;
-//printf("~1 sl %f, el %f, log (%f / %f)\n",sl,el,n,fabs(sl - el));
-				if (dl > 0.0)
-					t = kr * log(n/dl);
-				else
-					t = kf * log(n/-dl);
-	
-				if (t > xdelay)
-					xdelay = t;
-			}
-		}
-//printf("~1 xdelay = %f secs\n",xdelay);
-		xdelay *= 1000.0;		/* To msec */
-		/* This is kind of a fudge since update delay is after latency, */
-		/* but displays with long delay (ie. CRT) have short latency, and visa versa */
-		if ((int)xdelay > update_delay)
-			update_delay = (int)xdelay;
-	}
-
-	/* Allow some time for the display to update before */
-	/* a measurement can take place. This allows for CRT */
-	/* refresh, or LCD processing/update time, + */
-	/* display settling time (quite long for smaller LCD changes). */
+	/* Allow for display update & instrument delays */
+	update_delay = dispwin_compute_delay(p, orgb);
+	debugr2((errout, "madvrwin_set_color delaying %d msec\n",update_delay));
 	msec_sleep(update_delay);
+
+	return 0;
+}
+
+/* Set/unset the blackground color flag */
+/* Return nz on error */
+static int madvrwin_set_bg(dispwin *p, int blackbg) {
+	int perc, bgperc, bgmode, border;
+
+	p->blackbg = blackbg;
+
+	/* Parameters that shouldn't change can be set to -1, but this doesn't seem */
+	/* to work for background level, so get current background level */
+	if (!madVR_GetPatternConfig(&perc, &bgperc, &bgmode, &border)) {
+		debugr2((errout,"madVR_GetPatternConfig failed\n"));
+		return 1;
+	}
+	debugr2((errout,"madvrwin_set_bg: got pattern config %i, %i, %i, %i\n",
+	                 perc, bgperc, bgmode, border));
+
+	/* Default test window is 10% of the width/height = 1% of the area*/
+	perc = (int)((p->width/100.0 * 0.1 * p->height/100.0 * 0.1) * 100.0 + 0.5);
+
+	/* Background level is 1..100 in percent */
+	debugr2((errout,"madvrwin_set_bg: setting pattern config %i, %i\n",
+	                                       perc, blackbg ? 0 : bgperc));
+	if (!madVR_SetPatternConfig(perc, blackbg ? 0 : bgperc, -1, -1)) {
+		debugr2((errout,"madVR_SetPatternConfig failed\n"));
+		return 1;
+	}
 
 	return 0;
 }
@@ -350,20 +395,6 @@ static int madvrwin_set_pinfo(dispwin *p, int pno, int tno) {
 		return 1;
 
 	return 0;
-}
-
-/* ----------------------------------------------- */
-/* Set an update delay, and return the previous value */
-/* Value can be set to zero, but othewise will be forced */
-/* to be >= min_update_delay */
-static int madvrwin_set_update_delay(
-dispwin *p,
-int update_delay) {
-	int cval = p->update_delay;
-	p->update_delay = update_delay;
-	if (update_delay != 0 && p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
-	return cval;
 }
 
 /* ----------------------------------------------- */
@@ -434,14 +465,15 @@ int ddebug						/* >0 to print debug statements to stderr */
 ) {
 	dispwin *p = NULL;
 	char *cp;
-	struct mg_context *mg;
 	const char *options[3];
 	char port[50];
 
 	debug("new_madvrwin called with native = %d\n");
 
-	if (out_tvenc)
+	if (out_tvenc) {
+		if (ddebug) fprintf(stderr,"new_madvrwin failed because out_tvenc set\n");
 		return NULL;
+	}
 
 	if ((p = (dispwin *)calloc(sizeof(dispwin), 1)) == NULL) {
 		if (ddebug) fprintf(stderr,"new_madvrwin failed because malloc failed\n");
@@ -450,21 +482,26 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 	/* !!!! Make changes in dispwin.c & webwin.c as well !!!! */
 	p->name = strdup("Web Window");
+	p->width = width;
+	p->height = height;
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = 0;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
-	p->get_ramdac        = madvrwin_get_ramdac;
-	p->set_ramdac        = madvrwin_set_ramdac;
-	p->install_profile   = madvrwin_install_profile;
-	p->uninstall_profile = madvrwin_uninstall_profile;
-	p->get_profile       = madvrwin_get_profile;
-	p->set_color         = madvrwin_set_color;
-	p->set_pinfo         = madvrwin_set_pinfo;
-	p->set_update_delay  = madvrwin_set_update_delay;
-	p->set_callout       = madvrwin_set_callout;
-	p->del               = madvrwin_del;
+	p->get_ramdac          = madvrwin_get_ramdac;
+	p->set_ramdac          = madvrwin_set_ramdac;
+	p->install_profile     = madvrwin_install_profile;
+	p->uninstall_profile   = madvrwin_uninstall_profile;
+	p->get_profile         = madvrwin_get_profile;
+	p->set_color           = madvrwin_set_color;
+	p->set_bg              = madvrwin_set_bg;
+	p->set_pinfo           = madvrwin_set_pinfo;
+	p->set_update_delay    = dispwin_set_update_delay;
+	p->set_settling_delay  = dispwin_set_settling_delay;
+	p->enable_update_delay = dispwin_enable_update_delay;
+	p->set_callout         = madvrwin_set_callout;
+	p->del                 = madvrwin_del;
 
 	debugr2((errout, "new_madvrwin got native = %d\n",native));
 
@@ -476,31 +513,19 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
 
-	p->min_update_delay = 20;
-
-	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
-		p->min_update_delay = atoi(cp);
-		if (p->min_update_delay < 20)
-			p->min_update_delay = 20;
-		if (p->min_update_delay > 60000)
-			p->min_update_delay = 60000;
-		debugr2((errout, "new_madvrwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
-	}
-
-	p->update_delay = DISPLAY_UPDATE_DELAY;		/* Default update delay */
-	if (p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
+	dispwin_set_default_delays(p);
 
 	p->pdepth = 8;		/* Assume this */
 	p->edepth = 16;
 
 	if (initMadVR(p)) {
+		debugr2((errout,"Failed to locate MadVR .dll or functions\n"));
 		free(p);
 		return NULL;
 	}
 
 	if (!madVR_BlindConnect(0, 1000)) {
-		debugr2((errout,"Failed to locate MadVR\n"));
+		debugr2((errout,"Failed to connect to MadVR\n"));
 		free(p);
 		return NULL;
 	}
@@ -510,12 +535,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		madVR_Disable3dlut();
 	}
 
-	if (blackbg) {
-		int perc;
-
-		perc = (int)(width * height * 100 + 0.5);
-		madVR_SetBackground(perc, 0x0000);
-	}
+	p->set_bg(p, blackbg);
 
 	/* Create a suitable description */
 	{

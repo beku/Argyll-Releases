@@ -15,7 +15,8 @@ Executables = collink ;
 InstallBin $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
 
 HDRS = ../h ../icc ../rspl ../plot ../numlib $(TIFFINC) ;
-LINKLIBS = $(TIFFLIB) $(JPEGLIB) ../icc/libicc ../plot/libplot ../numlib/libnum $(LibWin) ;
+LINKLIBS = $(TIFFLIB) $(JPEGLIB) ../icc/libicc ../plot/libplot
+../numlib/libnum ../numlib/libui $(LibWin) ;
 
 # K only reprocessor
 #Main icc2ko : icc2ko.c ;

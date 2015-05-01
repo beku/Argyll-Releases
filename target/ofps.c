@@ -23,9 +23,13 @@
 	when ofps is used to evaluate the point distribution of other
 	distribution algorithms.
 
-	There is a bug when the ink limit == dimensions-1 (200% for CMYY), and
+	There is a bug when the ink limit == dimensions-1 (200% for CMY), and
 	the number of bit mask then exceeds > 32. This is not so +/- 0.2% either side
 	of 200%.
+	(see "Hack to workaround pathalogical")
+
+	There is a bug for CMYK when the ink limit == 100%
+	(see "Hack to workaround pathalogical")
 
 	One way of addressing the performance issues would be to use multiple
 	threads to call dnsq. A pool could be setup, one for each CPU.
@@ -68,10 +72,17 @@
 /*
 	Failings:
 
+	The distribution near the gamut surfaces has a characteristic
+	"buffer zone" layer that is not very nice. This is because
+	the surface concentrate the sufrace points forming a "force field".
+	It would be good to add a tweak factor to reduce this surface "gang effect".
+
+
 	The initial allocation of points to lower dimension surfaces
 	is a bit haphazard. It would be nice to have some mechanism
 	to add or subtract points to/from lower dimensional surfaces
 	if they were over or under sampled compared to everything else.
+
 
 	While the current algorithm meets many goals, such as minimizing the	
 	maximum estimated error from any point in the space to the nearest
@@ -120,7 +131,6 @@
 #include "numlib.h"
 #include "sort.h"
 #include "counters.h"
-#include "plot.h"
 #include "icc.h"
 #include "xicc.h"
 #include "xcolorants.h"
@@ -146,6 +156,9 @@
 # define INDEP_SURFACE		/* Make surface point distribution and optimization independent */
 # undef MAXINDEP_2D			/* Limit independent surfaces to 2D */
 							/* Seems to be best for ink limited devices to #undef ? */
+//# define GAMUT_EDGE_FUDGE 1.5		/* Fudge factor to counteract gamut suface barrier effect */
+							// This increases edge point density as a side effect ??
+
 # define KEEP_SURFACE		/* Keep surface points on the surface during opt. */
 # define INITIAL_SURFACE_PREF 1.50	/* Extra weighting for surface points at start of seeding */
 # define FINAL_SURFACE_PREF 0.80	/* Extra weighting for surface points by end of seeding */
@@ -190,6 +203,9 @@
 # define DOOPT			/* Do optimization */
 # define INDEP_SURFACE		/* Make surface point distribution and optimization independent */
 # define MAXINDEP_2D		/* Limit independent surfaces to 2D */
+
+//# define GAMUT_EDGE_FUDGE 1.5		/* Fudge factor to counteract gamut suface barrier effect */
+
 # define KEEP_SURFACE		/* Keep surface points on the surface during opt. */
 # define INITIAL_SURFACE_PREF 1.60	/* Extra weighting for surface points at start of seeding */
 # define FINAL_SURFACE_PREF 0.80	/* Extra weighting for surface points by end of seeding */
@@ -250,7 +266,7 @@
 #define TNPAGRIDMINRES 7	/* Perceptual cache grid min resolution */
 #define TNPAGRIDMAXRES 33	/* Perceptual cache grid max resolution */
 #undef FORCE_INCREMENTAL	/* Force incremental update after itteration */
-#undef FORCE_RESEED		/* Force reseed after itteration */
+#define FORCE_RESEED		/* Force reseed after itteration */
 #define MAXTRIES 41		/* Maximum dnsq tries before giving up */
 #define CACHE_PERCEPTUAL		/* Cache the perceptual lookup function */
 #define USE_DISJOINT_SETMASKS		/* Reduce INDEP_SURFACE setmask size */ 
@@ -274,6 +290,11 @@
 
 #ifdef STATS
 # include "conv.h"		/* System dependent convenience functions */
+#endif
+
+#if defined(DEBUG) || defined(DUMP_PLOT_SEED) || defined(DUMP_PLOT)
+# include "plot.h"
+# include "ui.h"
 #endif
 
 #if defined(DUMP_EPERR) || defined(DUMP_FERR)
@@ -1797,25 +1818,25 @@ static int checkon_gsurf(ofps *s, double *p, pleq **psp, int nsp) {
 /*   followed by add_node2voronoi() 5%, others <= 1% ] */
 
 #ifdef NEVER	/* Allow performance trace on eperr usage */
-static double ofps_comp_eperr(ofps *s, double *pddist, double *v, double *p, double *nv, double *np);
-static double ofps_comp_eperr1(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr2(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr3(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr4(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr5(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr6(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr7(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
-static double ofps_comp_eperr8(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); } 
-static double ofps_comp_eperr9(ofps *s, double *pddist, double *v, double *p, double *nv, double *np) {
-	return ofps_comp_eperr(s, pddist, v, p, nv, np); }
+static double ofps_comp_eperr(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp);
+static double ofps_comp_eperr1(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr2(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr3(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr4(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr5(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr6(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr7(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
+static double ofps_comp_eperr8(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); } 
+static double ofps_comp_eperr9(ofps *s, double *pddist, double *v, double *p, double *nv, double *np, int nsp) {
+	return ofps_comp_eperr(s, pddist, v, p, nv, np, nsp); }
 #else	/* Production code */
 #define ofps_comp_eperr1 ofps_comp_eperr
 #define ofps_comp_eperr2 ofps_comp_eperr
@@ -1834,7 +1855,8 @@ static double ofps_comp_eperr(
 	double *v,		/* Device perceptual value */ 
 	double *p,		/* Device sample location to be evaluated */
 	double *nv,		/* Other perceptual value */
-	double *np		/* Other perceptual value */
+	double *np,		/* Other sample location value */
+	int nsp			/* Number of surface planes */
 ) {
 	int ii, e, f, di = s->di;
 	int isc;
@@ -1895,7 +1917,17 @@ static double ofps_comp_eperr(
 
 	ddist = sqrt(ddist);
 	pdist = sqrt(pdist);
+
 	eperr = s->devd_wght * ddist + s->perc_wght * pdist;
+
+#ifdef GAMUT_EDGE_FUDGE
+	/* Fudge factor to prevent gap at gamut boundaries */
+	if (nsp > 0) {
+//		int nn;
+//		for (nn = 0; nn < nsp; nn++)
+			eperr *= GAMUT_EDGE_FUDGE;
+	}
+#endif /* GAMUT_EDGE_FUDGE */
 
 //printf("~1 Percept distance = %f, perc error = %f\n",pdist,s->perc_wght * pdist);
 	return eperr;
@@ -1924,9 +1956,8 @@ static void ofps_pn_eperr(
 	}
 
 	/* Uncertaintly error computed from device and perceptual distance */
-	for (ii = 0; ii < nnds; ii++) {
-		ee[ii] = ofps_comp_eperr1(s, NULL, sv, sp, nds[ii]->v, nds[ii]->p);
-	}
+	for (ii = 0; ii < nnds; ii++)
+		ee[ii] = ofps_comp_eperr1(s, NULL, sv, sp, nds[ii]->v, nds[ii]->p, nds[ii]->nsp);
 
 	if (ce == NULL)
 		return;
@@ -1959,6 +1990,15 @@ static void ofps_pn_eperr(
 				ce[ii] += tt * tt;
 			}
 			ce[ii] = s->curv_wght * sqrt(ce[ii]);
+#ifdef GAMUT_EDGE_FUDGE
+			/* Fudge factor to prevent gap at gamut boundaries */
+			if (nds[ii]->nsp > 0) {
+//				int nn;
+//				for (nn = 0; nn < nds[ii]->nsp; nn++)
+					ce[ii] *= GAMUT_EDGE_FUDGE;
+			}
+#endif /* GAMUT_EDGE_FUDGE */
+
 		}
 	} else {
 		for (ii = 0; ii < nnds; ii++)
@@ -2093,8 +2133,10 @@ int dnsq_solver(	/* Return < 0 on abort */
 
 	/* Get eperr at each real node */
 	ofps_cc_percept(s, sv, x);	/* We have to compute it */
-	for (k = 0; k < cx->nn; k++)
-		cee[k] = ofps_comp_eperr2(s, NULL, sv, x, cx->nds[k]->v, cx->nds[k]->p);
+	for (k = 0; k < cx->nn; k++) {
+
+		cee[k] = ofps_comp_eperr2(s, NULL, sv, x, cx->nds[k]->v, cx->nds[k]->p, cx->nds[k]->nsp);
+	}
 
 //fprintf(stderr,"~1 maxeperr = %f\n",cmax);
 
@@ -2270,7 +2312,7 @@ static int position_vtx(
 		for (i = 0; i < (ii-1); i++) {
 			for (j = i+1; j < ii; j++) {
 				double dist;
-				dist = ofps_comp_eperr3(s, NULL, cx.nds[i]->v, cx.nds[i]->p, cx.nds[j]->v, cx.nds[j]->p);
+				dist = ofps_comp_eperr3(s, NULL, cx.nds[i]->v, cx.nds[i]->p, cx.nds[j]->v, cx.nds[j]->p, cx.nds[i]->nsp) ;
 				if (dist < ceperr) {
 					ceperr = dist;
 					bi = i;
@@ -2599,7 +2641,7 @@ double powell_solver(	/* Return < 0 on abort */
 	/* Get eperr at each real node */
 	ofps_cc_percept(s, sv, x);	/* We have to compute it */
 	for (k = 0; k < cx->nn; k++)
-		cee[k] = ofps_comp_eperr2(s, NULL, sv, x, cx->nds[k]->v, cx->nds[k]->p);
+		cee[k] = ofps_comp_eperr2(s, NULL, sv, x, cx->nds[k]->v, cx->nds[k]->p, cx->nds[k]->nsp);
 
 //fprintf(stderr,"~1 maxeperr = %f\n",cmax);
 
@@ -3644,7 +3686,7 @@ ofps_quick_check_hits(ofps *s) {
 						nvxhits++;
 					}
 				} else {
-					double eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					double eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 
 					/* See if the vertex eperr will be improved */
 					if (eperr < (vx->eperr + 0.0)) {
@@ -3779,7 +3821,7 @@ ofps_check_vtx(ofps *s, node *nn, vtx *vx, int dorec, int beyhit) {
 				} else {	/* Node rather than boundary plane */
 
 					/* nba_eperr is assumed to be valid if vx->cflag == s->flag */
-					vx->nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					vx->nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 #ifdef DEBUG
 					printf("%d: Computing nba_eperr of %f for vtx no %d\n",dist, vx->nba_eperr, vx->no);
 #endif
@@ -3968,7 +4010,7 @@ ofps_check_vtx_sanity(ofps *s, node *nn, vtx *vx, int fixit) {
 	} else {	/* Node rather than boundary plane */
 		double nba_eperr;
 
-		nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p);
+		nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 
 		/* See if the vertex eperr will be improved */
 		if (!par && (vx->eperr - nba_eperr) > tol) {
@@ -5120,7 +5162,7 @@ ofps_init_acc2(ofps *s) {
 				np = &s->_grid[i + j];
 	
 				/* eperr from that corner to center of this cell */
-				eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, np->v, np->p);
+				eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, np->v, np->p, 0);
 				eperr_avg += eperr;
 				if (eperr > eperr_max)
 					eperr_max = eperr;
@@ -5166,7 +5208,7 @@ ofps_init_acc2(ofps *s) {
 		
 					/* Compose new center point from weighted corner points. */
 					/* Weighting is proportional to eperr value */
-					eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, np->v, np->p);
+					eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, np->v, np->p, 0);
 
 					if (eperr < eperr_avg) {
 						/* Move away from corner */
@@ -5272,7 +5314,7 @@ ofps_add_nacc(ofps *s, node *n) {
 		double eperr;
 		/* Check that the eperr to the center of the cell */
 		/* is less than the worst case for that cell */
-		eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, n->v, n->p);
+		eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, n->v, n->p, n->nsp);
 		if (eperr > cp->eperr) {
 			warning("Sanity check ofps_add_nacc() node ix %d eperr %f > cell eperr %f",n->ix,eperr,cp->eperr);
 			printf("Sanity check ofps_add_nacc() node ix %d eperr %f > cell eperr %f\n",n->ix,eperr,cp->eperr);
@@ -5337,7 +5379,7 @@ ofps_add_vacc(ofps *s, vtx *vx) {
 				p[e] = 1.0;
 		}
 		ofps_cc_percept(s, v, p);
-		eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, v, p);
+		eperr = ofps_comp_eperr(s, NULL, cp->cv, cp->cp, v, p, 0);
 
 		if (eperr > cp->eperr) {
 
@@ -5914,9 +5956,10 @@ ofps_seed(ofps *s) {
 		}
 
 		/* Suceeded in adding the point */
-		if (p->fx) {	/* Fixed point */
+		if (p->fx) {	/* Fixed point was added */
 			fc++;
-			dofixed--;
+			if (dofixed > 0)		/* May not have been triggered by dofixed */
+				dofixed--;
 			if ((s->fnp - fc) >= (s->tinp - i - 1))	{	/* No room for moveable points */
 				dofixed = s->fnp - fc;					/* Do all the fixed */
 			}
@@ -6168,7 +6211,7 @@ static int ofps_findhit_vtxs(ofps *s, node *nn) {
 			/* Compute the smallest eperr possible in this cell, by computing the */
 			/* eperr of the cell center to the node minus the estimated */ 
 			/* largest eperr of any point within the cell to the center. */
-			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, nn->v, nn->p);
+			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, nn->v, nn->p, nn->nsp);
 			eperr = ceperr - cp->eperr;
 			
 //printf("~1 ceperr %f, cp->eperr %f, eperr %f, beperr %f\n",ceperr,cp->eperr,eperr,beperr);
@@ -6196,7 +6239,7 @@ static int ofps_findhit_vtxs(ofps *s, node *nn) {
 							par = 1;
 					}
 
-					eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 
 					if (!par && (vx->eperr - eperr) > 0.0) {
 //printf("~1 Node ix %d at %s (%s)\n   Cell ix %d co %s center %s (%s),\n   vtx no %d at %s (%s)\n",nn->ix, ppos(di,nn->p),ppos(di,nn->v),cp - s->grid,pco(s->di,cp->co),ppos(di,cp->cp),ppos(di,cp->cv),vx->no, ppos(di,vx->p),ppos(di,vx->v));
@@ -6262,7 +6305,7 @@ static int ofps_findhit_vtxs(ofps *s, node *nn) {
 				}
 
 				/* nba_eperr is assumed to be valid if vx->cflag == s->flag */
-				vx->nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p);
+				vx->nba_eperr = ofps_comp_eperr7(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 #ifdef DEBUG
 				printf("Computing nba_eperr of %f for vtx no %d\n",vx->nba_eperr, vx->no);
 #endif
@@ -6401,7 +6444,7 @@ static node *ofps_findclosest_node(ofps *s, double *ceperr, vtx *vx) {
 
 			/* Compute the eperr of the cell center to the vtx minus the estimated */ 
 			/* largest eperr of any point within the cell to the center. */
-			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, vx->v, vx->p);
+			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, vx->v, vx->p, vx->nsp);
 			eperr = ceperr - cp->eperr;
 			
 			/* If the cell is worth searching */
@@ -6421,7 +6464,7 @@ static node *ofps_findclosest_node(ofps *s, double *ceperr, vtx *vx) {
 #endif	/* INDEP_SURFACE */
 
 					/* Compute the eperr between the node to the new vtx */
-					eperr = ofps_comp_eperr(s, NULL, no->v, no->p, vx->v, vx->p);
+					eperr = ofps_comp_eperr(s, NULL, no->v, no->p, vx->v, vx->p, vx->nsp);
 					if (eperr < beperr) {
 						bno = no;
 						beperr = eperr;
@@ -6475,7 +6518,7 @@ static node *ofps_findclosest_node(ofps *s, double *ceperr, vtx *vx) {
 #endif	/* INDEP_SURFACE */
 
 					/* Compute the eperr between the node to the new vtx */
-					teperr = ofps_comp_eperr(s, NULL, no->v, no->p, vx->v, vx->p);
+					teperr = ofps_comp_eperr(s, NULL, no->v, no->p, vx->v, vx->p, vx->nsp);
 					if (teperr < beperr) {
 						warning("Sanity check ofps_findclosest_node() cell skip failed, estimated %f from cellc eperr %f - cell eperr %f, found %f from node ix %d",eperr,ceperr,cp->eperr,teperr,no->ix);
 						printf("Sanity check ofps_findclosest_node() cell skip failed, estimated %f from cellc eperr %f - cell eperr %f, found %f from node ix %d\n",eperr,ceperr,cp->eperr,teperr,no->ix);
@@ -6520,7 +6563,7 @@ static node *ofps_findclosest_node(ofps *s, double *ceperr, vtx *vx) {
 #endif	/* INDEP_SURFACE */
 
 			/* Compute the eperr between the node and the vertex */
-			eperr = ofps_comp_eperr(s, NULL, nn->v, nn->p, vx->v, vx->p);
+			eperr = ofps_comp_eperr(s, NULL, nn->v, nn->p, vx->v, vx->p, vx->nsp);
 			if (eperr < ch_beperr) {
 				ch_bno = nn;
 				ch_beperr = eperr;
@@ -6614,7 +6657,7 @@ static vtx *ofps_findclosest_vtx(ofps *s, double *ceperr, node *nn) {
 
 			/* Compute the eperr of the cell center to the node minus the estimated */ 
 			/* largest eperr of any point within the cell to the center. */
-			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, nn->v, nn->p);
+			ceperr = ofps_comp_eperr(s, NULL, cp->v, cp->p, nn->v, nn->p, nn->nsp);
 			eperr = ceperr - cp->eperr;
 			
 			/* If the cell is worth searching */
@@ -6634,7 +6677,7 @@ static vtx *ofps_findclosest_vtx(ofps *s, double *ceperr, node *nn) {
 #endif	/* INDEP_SURFACE */
 
 					/* Compute the eperr between the vertex to the new node */
-					eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 					if (eperr < beperr) {
 						bvx = vx;
 						beperr = eperr;
@@ -6683,7 +6726,7 @@ static vtx *ofps_findclosest_vtx(ofps *s, double *ceperr, node *nn) {
 #endif	/* INDEP_SURFACE */
 
 					/* Compute the eperr between the vertex to the new node */
-					teperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					teperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 					if (teperr < beperr) {
 						warning("Sanity check ofps_findclosest_vtx() cell skip failed, estimated %f from cellc eperr %f - cell eperr %f, found %f from vtx no %d",eperr,ceperr,cp->eperr,teperr,vx->no);
 						printf("Sanity check ofps_findclosest_vtx() cell skip failed, estimated %f from cellc eperr %f - cell eperr %f, found %f from vtx no %d\n",eperr,ceperr,cp->eperr,teperr,vx->no);
@@ -6727,7 +6770,7 @@ static vtx *ofps_findclosest_vtx(ofps *s, double *ceperr, node *nn) {
 #endif	/* INDEP_SURFACE */
 
 			/* Compute the eperr between the vertex to the new node */
-			eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p);
+			eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 			if (eperr < ch_beperr) {
 				ch_bvx = vx;
 				ch_beperr = eperr;
@@ -6833,7 +6876,7 @@ static vtx *ofps_findhit_vtx(ofps *s, double *ceperr, node *nn) {
 #endif	/* INDEP_SURFACE */
 
 					/* Compute the eperr between the vertex to the new node */
-					eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p);
+					eperr = ofps_comp_eperr(s, NULL, vx->v, vx->p, nn->v, nn->p, nn->nsp);
 					if (eperr < vx->eperr) {
 						bvx = vx;
 						beperr = eperr;
@@ -7297,8 +7340,8 @@ int dnsq_mid_solver(	/* Return < 0 on abort */
 	ofps_cc_percept(s, sv, pos);
 
 	/* Get eperr */
-	cee[0] = ofps_comp_eperr8(s, NULL, sv, pos, cx->nds[0]->v, cx->nds[0]->p);
-	cee[1] = ofps_comp_eperr8(s, NULL, sv, pos, cx->nds[1]->v, cx->nds[1]->p);
+	cee[0] = ofps_comp_eperr8(s, NULL, sv, pos, cx->nds[0]->v, cx->nds[0]->p, cx->nds[0]->nsp);
+	cee[1] = ofps_comp_eperr8(s, NULL, sv, pos, cx->nds[1]->v, cx->nds[1]->p, cx->nds[1]->nsp);
 
 //printf("~1 error = %f, %f", cee[0], cee[1]);
 
@@ -8063,6 +8106,11 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 	 && ilimit <= (di-2.0 + 2 * ILIMITEPS))
 		ilimit = di-2.0 - 2 * ILIMITEPS;
 
+	/* Hack to workaround pathalogical case. At ilimit == 100% we get a failure */
+	/* to add any variable steps */
+	if (ilimit > 0.9999 && ilimit < 1.0001)
+		ilimit = 0.9999;
+
 	s->ilimit = ilimit;
 
 	for (e = 0; e < di; e++) {
@@ -8697,7 +8745,7 @@ dump_image(
 			mcols[n3].rgb[1] = 0.85;
 			mcols[n3].rgb[2] = 0.85;
 
-			sprintf(mtext[n3],"");
+			sprintf(mtext[n3],"%s","");
 			sprintf(mtext[n3],"%d",mp->no);
 //			sprintf(mtext[n3],"%d",(int)(mp->eserr + 0.5));
 		}
@@ -8781,7 +8829,7 @@ dump_image(
 					mcols[n3].rgb[1] = 0.59;
 					mcols[n3].rgb[2] = 0.0;
 	
-					sprintf(mtext[n3],"");
+					sprintf(mtext[n3],"%s","");
 				}
 			}
 		}
@@ -8851,7 +8899,7 @@ dump_image(
 					for (i = 0; i < s->np; i++) {
 						node *np = s->n[i];
 					
-						eserr = ofps_comp_eperr9(s, NULL, vpos, pos, np->v, np->p);
+						eserr = ofps_comp_eperr9(s, NULL, vpos, pos, np->v, np->p, np->nsp);
 						if (eserr < beserr)
 							beserr = eserr;
 					}
@@ -9201,7 +9249,7 @@ static void check_for_missing_vertexes(ofps *s) {
 					continue;	/* Is a parent */
 
 				nn = s->n[ix];
-				eperr = ofps_comp_eperr(s, NULL, nn->v, nn->p, vv.v, vv.p);
+				eperr = ofps_comp_eperr(s, NULL, nn->v, nn->p, vv.v, vv.p, 0);
 
 				printf(" eperr to ix %d is %f\n",nn->ix,eperr);
 				if (eperr < vv.eperr) {

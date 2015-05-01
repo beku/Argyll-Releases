@@ -2,6 +2,213 @@
 Argyll CMS change log
 =====================
 
+Version 1.7.0  (1st May 2015)
+-------------
+
+*	Improved gamut mapping to reduce unnecessary changes to less saturated colors
+	such as skin tones.
+	
+*	Add support for DataColor Spyder 5.
+
+*	Ignore any patches that have zero values for creating Display profiles,
+	unless they are for device zero. This is to avoid measurements below
+	and instruments measurement capability causing shadow response to be raised.
+
+*	Add better cross compatibility with non-Argyll ICC profiles:
+	+ Use "wrong Von Kries" media white point adapation for non-Argyll non-display profiles
+	+ Optionally create "wrong Von Kries" media white point adapation profiles
+	  using the "ARGYLL_CREATE_WRONG_VON_KRIES_OUTPUT_CLASS_REL_WP" env. variable,
+	  while maintaining ArgyllCMS compatibility using the 'arts' tag.
+	+ Implement proper absolute colorimetric intent for ICCV2 Display profiles
+	  that use the ICCV4 style of have a media white of D50 and storing the
+	  media chromatic trasnform in the 'chad' tag.
+	+ Optionally create such ICCV4 style V2 Display profiles by using the
+	  "ARGYLL_CREATE_DISPLAY_PROFILE_WITH_CHAD" env. variable.
+
+*	Reverted to handling collink Video encoding overrage input (WTW) with
+	extrapolation that preserves hues, and added an input encoding option
+	"Video with clipping" to cope with TV's that don't preserver hue
+	for WTW..
+ 
+*	Add X3D and X3DOM support as an alternative to VRML, and make X3DOM the default.
+
+*	Update to use latest MadVR background setting code (v0.87.11)
+
+*   Fix problem with JETI communication overrun and 1201 timeout.
+
+*	Improve JETI specbos 1201 and 1211 compatibility with older firmware.
+
+*   Improve KLEIN robustness by automatically retrying range errors.
+
+*	Fix bug in recognizing Klein K-10 (non A) instrument.
+
+*	Fixed bug in working with newer firmware Klein K10A.
+
+*	Fix gestaltSystemVersion warning on OS X 10.10.
+
+*	Fix crash in targen with -l 100.
+
+*	Fix crash in colprof when -s/S and -p are used together.
+
+*	Fix very major bug in illumread. It wasn't actually working
+	at all since V1.4.0.
+
+*	Fix poor handling of corrupted .ccmx and .ccss files.
+
+*	Fix endless loop bug in dispcal verify.
+
+*	Fix bug in collink -iaw when the destination profile
+	is a matrix + gamma type.
+
+*	Add -z option to ccxxmake to allow setting separate display type
+	for reference instrument.
+
+*	Fix XDG_CONFIG_HOME and XDG_CONFIG_DIRS environment variable names.
+
+*	Fix occasional timout in specbos on reading spectral.
+
+*	Added preliminary support for ColorHug2
+
+*	Fixed bug in colverify -L if one of the Normalise options isn't used.
+
+*	Added capability of using the Google ChromeCast as a test
+	patch generator for Video displays. If you are running on
+	Linux, you might have to check that your firewall is configured
+	to allow TCP ports 8081 for this to work, if it
+	falls back to the Default receiver.	 Accuracy is OK, but
+	not as good as main display or MadTPG, due to ChromeCast
+	using YCbCr video encoding and upsizing of rasters sent to it.
+
+*	Fixed problem with certain .ccmx files note
+	being recognisd for -y option.
+
+*	Added profcheck -s flag to output delta E orderd patch
+	list with -v2.
+
+*	Fix bug in chartread for DTP20 - it was timing out when
+	a off-line chart was being loaded, or an on-line chart was being read.
+
+*	Fix bug in xicc/xicc.c & xicc/xlut.c that sometimes causes bad B2A
+	tables due to the black point being a NaN.
+	(This was noticed on code compiled on Ubuntu 14.)
+
+*	Changed Linux udev/hotplug files to be more compatible
+	with colord, so that colord 69-cd-sensors.rules file
+	can be upgraded by replacing with 55-Argyll.rules.
+
+*	Fixed bug in tiffgamut when handling .jpg files. Some
+	pixels were being computed with the wrong values.
+
+*	Added collink -I[gG][:p.p]:x.x options that allows an output offset
+	gamma curve be targetted instead of BT1886. Like dispcal, this
+	also allows a hybrid between input black offset (BT.1886-like) and
+	pure output black offset curves. The -I[bB] option also accepts
+	an option output proportion value (:p.p), and that
+	-I[bB]:p.p:x.x has exactly the same effect as -I[gG]:p.p:x.x.
+	Note using output black offset tends to loose shadow
+	detail compared to input black offset (BT.1886-like).
+
+	The -I[bBgG] flags now substitute a BT.1886-like EOTF
+	for the native EOTF of the matrix input profile, rather than
+	applying an Rec709 to BT.1886 transform. This change has no
+	impact on source colorspaces that use the Rec709 encoding curve.
+
+*	Added dispcal -b black point hack. This forces the
+	input zero to map to the output zero, which can be useful
+	with displays that are well behaved and have a very dark
+	black point, which an instrument is unable to measure precisely.
+
+*	Added collink -b black point hack. This forces the
+	input zero to map to the output zero for RGB->RGB links,
+	which can be useful with displays that are well behaved
+	and have a very dark black point, which an instrument is
+	unable to measure precisely.
+
+*	Added nonadaptive mode to i1d3. This allows fast measurement
+	with much lower accuracy for dark colors.
+
+*	Changes to inst API to accomodate display technology
+	setting and retrival from instrument.
+	Also fixed setting custom matrix or ccss so that
+	other required details (display type & cbid) can
+	be provided. This now means that the instrument will
+	automatically configured when a ccmx is loaded.
+
+*	Changed dispwin/dispsup patch delay calculations
+	(including matching code in targen) to adopt a more
+	sophisticated display settling model using the display
+	techology type.
+
+*	Changed dispwin/dispsup patch delay calculations to allow
+	for a separate instrument reaction time parameter.
+
+*	Added preset list of display techologies to select from
+	in ccxxmake. The -T option is deprecated, and the required
+	-t option replaces it. Used "ccxxmake -?? or -t?" to list
+	display technology types to choose from.
+
+*	Added Klein K10-A instrument support.
+
+*	Fixed bug in hcfr driver which prevented operation.
+
+*	Fixed bug in chartread which caused high res mode to
+	be used when the -T flag is used.
+
+*	Switched dispcal -R Video LUT entry bit depth algorithm.
+
+*	Added IRIDAS .cube 3DLut format support to collink.
+
+*	Added -O option to spotread that makes it do calibration
+	or one measurement and then exit.
+
+*	Added better support for installing the Spyder1 firmware.
+	Simplified the Spyder PLD loading for applications
+	by modifying setup_spyd2();
+
+*	Added a -P prune option to profcheck, that creates a
+	.ti3 file pruned of any patches that have a delta E fit error
+	greater than a threshold. This may be of use in eliminating
+	bad reading values from a measurement set.
+
+*	Added histogram plot option -h to both profcheck and verify.
+
+*	Added ls2ti3 tool to convert LightSpace .bcs files to .ti3.
+
+*	Fixed some time measurement bugs in OS X and Linux
+	USB drivers that mainly affect the DTP92 & DTP94.
+
+*	Simplified the OS X USB drivers.
+
+*	Fixed bug in DTP20 driver where it fails to wait for
+	a calibration to complete.
+
+*	Fixed collink to more accuratly encode values
+	for the eeColor 3DLut, as well as change the
+	BT1886 black point mapping to be more accurate.
+
+*	Added a dispread & fakeread -Z option to set the number of bits
+	to quantize the test values to. This defaults
+	to 8 for TV encoded ouput, and using the -Z option may improve
+	profiling accuracy on systems with limited bit depth
+	control over their displays.
+
+*	Add support for other OEM versions of the i1d2 and i1d3 colorimeter.
+
+*	Fixed bug in targen - the -V dark emphasis wasn't being
+	applied to OFPS generated points.
+
+*	Added ColorCheckerSG.ti2 file to ref/, so that a reference file
+	can be created using chartread.
+
+*	Make sure that if an instrument display reading is interrupted by a
+	forced calibration, that the user is asked to place it back on the
+	display before resuming the measurements.
+
+*	Make sure that checking whether an instrument wants calibration
+	(ie. needs_calibration() or get_n_a_cals()) does not change its
+	state, requiring calibration due to calibrations being
+	too old.
+
 Version 1.6.3 (26 January 2014)
 -------------
 
@@ -101,6 +308,12 @@ Version 1.6.2 - (19th November 2013)
 
 *	Fix bug in -H flag in ccxxmake, chartread, dispcal, dispread,
 	illumread & spotread so that it works once again. 
+
+*	Changed OS X VideoLut access code to issue a warning if the
+	frame buffer bit depth does not match the gamma table depth,
+	rather than erroring out due to a bug in OS X. The gamma table
+	depth is the number actually used, and reports are that this
+	works.
 
 Version 1.6.1 (30th September 2013)
 -------------

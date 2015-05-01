@@ -769,6 +769,10 @@ cgats_read(cgats *p, cgatsFile *fp) {
 	}
 
 	pp->del(pp);		/* Clean up the parse file */
+
+	if (p->ntables == 0)
+		return -1;		/* Failed to load any table */
+
 	return 0;
 }
 

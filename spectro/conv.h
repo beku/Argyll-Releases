@@ -43,62 +43,6 @@
 #endif
 
 /* - - - - - - - - - - - - - - - - - - -- */
-/* System compatibility #defines */
-#if defined (NT)
-
-#ifndef sys_stat
-# define sys_stat _stat
-#endif
-#ifndef sys_mkdir
-# define sys_mkdir _mkdir
-#endif
-#ifndef sys_read
-# define sys_read _read
-#endif
-#ifndef sys_utime
-# define sys_utime _utime
-# define sys_utimbuf _utimbuf
-#endif
-#ifndef sys_access
-# define sys_access _access
-#endif
-
-#ifndef snprintf
-# define snprintf _snprintf
-# define vsnprintf _vsnprintf
-#endif
-#ifndef stricmp
-# define stricmp _stricmp
-#endif
-
-#endif	/* NT */
-
-#if defined (UNIX)
-
-#ifndef sys_stat
-# define sys_stat stat
-#endif
-#ifndef sys_mkdir
-# define sys_mkdir mkdir
-#endif
-#ifndef sys_read
-# define sys_read read
-#endif
-#ifndef sys_utime
-# define sys_utime utime
-# define sys_utimbuf utimbuf
-#endif
-#ifndef sys_access
-# define sys_access access
-#endif
-
-#ifndef stricmp
-# define stricmp strcasecmp
-#endif
-
-#endif	/* UNIX */
-
-/* - - - - - - - - - - - - - - - - - - -- */
 /* System dependent convenience functions */
 
 /* wait for and then return the next character from the keyboard */
@@ -145,21 +89,37 @@ int set_normal_priority();
 #endif /* NEVER */
 
 /* - - - - - - - - - - - - - - - - - - -- */
-/* An Argyll mutex */
+/* An Argyll mutex and condition */
 
 /* amutex_trylock() returns nz if it can't lock the mutex */
+/* acond_timedwait() returns nz if it times out */
 
 #ifdef NT
 # define amutex CRITICAL_SECTION 
-# define amutex_static(lock) CRITICAL_SECTION lock = { NULL, -1 } 
+# define amutex_static(lock) CRITICAL_SECTION lock = {(void*)-1,-1 }
 # define amutex_init(lock) InitializeCriticalSection(&(lock))
 # define amutex_del(lock) DeleteCriticalSection(&(lock))
 # define amutex_lock(lock) EnterCriticalSection(&(lock))
 # define amutex_trylock(lock) (!TryEnterCriticalSection(&(lock)))
 # define amutex_unlock(lock) LeaveCriticalSection(&(lock))
+
+# define acond HANDLE
+# define acond_static(cond) pthread_cond_t (cond) = PTHREAD_COND_INITIALIZER
+# define acond_init(cond) (cond = CreateEvent(NULL, 0, 0, NULL))
+# define acond_del(cond) CloseHandle(cond)
+# define acond_wait(cond, lock) (LeaveCriticalSection(&(lock)),	\
+                          WaitForSingleObject(cond, INFINITE),	\
+                          EnterCriticalSection(&(lock)))
+# define acond_signal(cond) SetEvent(cond)
+# define acond_timedwait(cond, lock, msec) \
+         acond_timedwait_imp(cond, &(lock), msec)
+
+int acond_timedwait_imp(HANDLE cond, CRITICAL_SECTION *lock, int msec);
+
 #endif
 
 #ifdef UNIX
+
 # define amutex pthread_mutex_t
 # define amutex_static(lock) pthread_mutex_t (lock) = PTHREAD_MUTEX_INITIALIZER
 # define amutex_init(lock) pthread_mutex_init(&(lock), NULL)
@@ -167,7 +127,20 @@ int set_normal_priority();
 # define amutex_lock(lock) pthread_mutex_lock(&(lock))
 # define amutex_trylock(lock) pthread_mutex_trylock(&(lock))
 # define amutex_unlock(lock) pthread_mutex_unlock(&(lock))
+
+# define acond pthread_cond_t
+# define acond_static(cond) pthread_cond_t (cond) = PTHREAD_COND_INITIALIZER
+# define acond_init(cond) pthread_cond_init(&(cond), NULL)
+# define acond_del(cond) pthread_cond_destroy(&(cond))
+# define acond_wait(cond, lock) pthread_cond_wait(&(cond), &(lock))
+# define acond_signal(cond) pthread_cond_signal(&(cond))
+# define acond_timedwait(cond, lock, msec) \
+         acond_timedwait_imp(&(cond), &(lock), msec)
+
+int acond_timedwait_imp(pthread_cond_t *cond, pthread_mutex_t *lock, int msec);
+
 #endif
+
 
 /* - - - - - - - - - - - - - - - - - - -- */
 
@@ -198,7 +171,7 @@ struct _athread {
 
 }; typedef struct _athread athread;
 
-/* Create and start a thread */
+/* Create and start a thread. Return NULL on error. */
 /* Thread function should only return on completion or error. */
 /* It should return 0 on completion or exit, nz on error. */
 athread *new_athread(int (*function)(void *context), void *context);
@@ -256,6 +229,7 @@ typedef enum {
 } sa_ColorSpaceSignature;
 
 extern sa_XYZNumber sa_D50;
+extern sa_XYZNumber sa_D65;
 void sa_SetUnity3x3(double mat[3][3]);
 void sa_Cpy3x3(double out[3][3], double mat[3][3]);
 void sa_MulBy3x3(double out[3], double mat[3][3], double in[3]);
@@ -271,6 +245,7 @@ double sa_LabDE(double *in0, double *in1);
 #define icSigXYZData sa_SigXYZData
 #define icSigLabData sa_SigLabData
 #define icmD50 sa_D50
+#define icmD65 sa_D65
 #define icmSetUnity3x3 sa_SetUnity3x3
 #define icmCpy3x3 sa_Cpy3x3
 #define icmMulBy3x3 sa_MulBy3x3
@@ -280,6 +255,7 @@ double sa_LabDE(double *in0, double *in1);
 #define icmScale3 sa_Scale3
 #define icmClamp3 sa_Clamp3
 #define icmLabDE sa_LabDE
+#define icmXYZ2Lab sa_XYZ2Lab
 
 /* A subset of numlib */
 
@@ -290,7 +266,10 @@ int sa_lu_psinvert(double **out, double **in, int m, int n);
 #endif /* SALONEINSTLIB */
 
 /* - - - - - - - - - - - - - - - - - - -- */
+/* Diagnostic aids */
 
+// Print bytes as hex to debug log */
+void adump_bytes(a1log *log, char *pfx, unsigned char *buf, int base, int len);
 
 /* - - - - - - - - - - - - - - - - - - -- */
 

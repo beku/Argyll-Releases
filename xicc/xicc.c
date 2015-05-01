@@ -6,7 +6,7 @@
  * Date:    2/7/00
  * Version: 1.00
  *
- * Copyright 2000, 2001 Graeme W. Gill
+ * Copyright 2000, 2001, 2014 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -60,7 +60,9 @@ icxLuBase * xicc_get_luobj(xicc *p, int flags, icmLookupFunc func, icRenderingIn
 static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent intent,
                             icmLookupOrder order, int flags, int no, int nobw, cow *points,
 							icxMatrixModel *skm,
-                            double dispLuminance, double wpscale, double smooth, double avgdev,
+                            double dispLuminance, double wpscale,
+//							double *bpo,
+                            double smooth, double avgdev,
 							double demph, icxViewCond *vc, icxInk *ink, xcal *cal, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
                          icColorSpaceSignature *outs, int *outn,
@@ -680,12 +682,6 @@ double *kblack			/* XYZ Output. Looked up if possible or set to black[] otherwis
 #ifdef DEBUG
 		printf("~1 Lab pivot %f %f %f, Lab K direction %f %f %f\n",bfs.p1[0],bfs.p1[1],bfs.p1[2],bfs.p2[0],bfs.p2[1],bfs.p2[2]);
 #endif
-		/* Start with the K only as the current best value */
-		brv = bpfindfunc((void *)&bfs, dblack);
-#ifdef DEBUG
-		printf("~1 initial brv for K only = %f\n",brv);
-#endif
-
 		/* Set the random start 0 location as 000K */
 		/* and the random start 1 location as CMY0 */
 		{
@@ -706,6 +702,12 @@ double *kblack			/* XYZ Output. Looked up if possible or set to black[] otherwis
 				rs1[e] = tt;
 			rs1[kch] = 0.0;		/* K value */
 		}
+
+		/* Start with the K only as the current best value */
+		brv = bpfindfunc((void *)&bfs, dblack);
+#ifdef DEBUG
+		printf("~1 initial brv for K only = %f\n",brv);
+#endif
 
 		/* Find the device black point using optimization */
 		/* Do several trials to avoid local minima. */
@@ -1056,6 +1058,7 @@ cow *points,				/* Array of input points in target PCS space */
 icxMatrixModel *skm,   		/* Optional skeleton model (used for input profiles) */
 double dispLuminance,		/* > 0.0 if display luminance value and is known */
 double wpscale,				/* > 0.0 if input white point is to be scaled */
+//double *bpo,				/* != NULL for black point override XYZ */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
 double avgdev,				/* reading Average Deviation as a proportion of the input range */
 double demph,				/* dark emphasis factor for cLUT grid res. */
@@ -1104,12 +1107,17 @@ int quality					/* Quality metric, 0..3 */
     	case icmMatrixFwdType:
 			if (smooth < 0.0)
 				smooth = -smooth;
-			xplu = set_icxLuMatrix(p, plu, flags, no, nobw, points, skm, dispLuminance, wpscale, quality, smooth);
+			xplu = set_icxLuMatrix(p, plu, flags, no, nobw, points, skm, dispLuminance, wpscale,
+//			                       bpo,
+			                       quality, smooth);
 			break;
 
     	case icmLutType:
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
-			xplu = set_icxLuLut(p, plu, func, intent, flags, no, nobw, points, skm, dispLuminance, wpscale, smooth, avgdev, demph, vc, ink, quality);
+			xplu = set_icxLuLut(p, plu, func, intent, flags, no, nobw, points, skm, dispLuminance,
+			                    wpscale,
+//			                    bpo,
+			                    smooth, avgdev, demph, vc, ink, quality);
 			break;
 
 		default:
@@ -1213,14 +1221,14 @@ icxViewCond *vc		/* Viewing parameters to return */
 	/* Numbers we're trying to find */
 	ViewingCondition Ev = vc_none;
 	double Wxyz[3] = {-1.0, -1.0, -1.0};	/* Adapting white color */
-	double La = -1.0;		/* Adapting luminance */
+	double La = -1.0;						/* Adapting/Surround luminance */
 	double Ixyz[3] = {-1.0, -1.0, -1.0};	/* Illuminant color */
 	double Li = -1.0;						/* Illuminant luminance */
 	double Lb = -1.0;		/* Backgrount luminance */
 	double Yb = -1.0;		/* Background relative luminance to Lv */
 	double Lve = -1.0;		/* Emissive device image luminance */
 	double Lvr = -1.0;		/* Reflective device image luminance */
-	double Lv = -1.0;		/* device image luminance */
+	double Lv = -1.0;		/* Device image luminance */
 	double Yf = -1.0;		/* Flare relative luminance to Lv */
 	double Yg = -1.0;		/* Glare relative luminance to La */
 	double Gxyz[3] = {-1.0, -1.0, -1.0};	/* Glare color */
@@ -1909,7 +1917,7 @@ icxViewCond *vc
 	if (vc->Ev == vc_none)
 		printf("  Image luminance = %f cd/m^2\n",vc->Lv);
 	printf("  Flare to image ratio = %f\n",vc->Yf);
-	printf("  Glare to ambient ratio = %f\n",vc->Yg);
+	printf("  Glare to adapting/surround ratio = %f\n",vc->Yg);
 	printf("  Flare color = %f %f %f\n",vc->Gxyz[0], vc->Gxyz[1], vc->Gxyz[2]);
 }
 
@@ -2150,7 +2158,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
+		gmi->gamcknf  = 0.9;		/* 0.9 High Sigma knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
@@ -2176,7 +2184,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
+		gmi->gamcknf  = 0.9;		/* 0.9 High Sigma knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
@@ -3616,8 +3624,7 @@ double *in			/* Input di values */
 /* Including partial derivative for input and parameters. */
 
 
-/* 3x3 matrix multiplication, with the matrix in a 1D array */
-/* with respect to the input and parameters. */
+/* 3x3 matrix in 1D array multiplication */
 void icxMulBy3x3Parm(
 	double out[3],			/* Return input multiplied by matrix */
 	double mat[9],			/* Matrix organised in [slow][fast] order */
@@ -3639,7 +3646,39 @@ void icxMulBy3x3Parm(
 }
 
 
-/* 3x3 matrix multiplication, with partial derivatives */
+/* 3x3 matrix in 1D array multiplication, with partial derivatives */
+/* with respect to just the input. */
+void icxdpdiiMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double din[3][3],		/* Return deriv for each [output] with respect to [input] */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
+) {
+	double *v, ov[3];
+	int e, f;
+
+	/* Compute the output values */
+	v = mat;
+	for (f = 0; f < 3; f++) {
+		ov[f] = 0.0;						/* For each output value */
+		for (e = 0; e < 3; e++) {
+			ov[f] += *v++ * in[e];
+		}
+	}
+
+	/* Compute deriv. with respect to the input values */
+	/* This is pretty simple for a matrix ... */
+	v = mat;
+	for (f = 0; f < 3; f++)
+		for (e = 0; e < 3; e++)
+			din[f][e] = *v++;
+
+	out[0] = ov[0];
+	out[1] = ov[1];
+	out[2] = ov[2];
+}
+
+/* 3x3 matrix in 1D array multiplication, with partial derivatives */
 /* with respect to the input and parameters. */
 void icxdpdiMulBy3x3Parm(
 	double out[3],			/* Return input multiplied by matrix */
@@ -3683,167 +3722,8 @@ void icxdpdiMulBy3x3Parm(
 	out[2] = ov[2];
 }
 
-/* ------------------------------------------- */
-/* BT.1886 support */
-
-/* Compute technical gamma from effective gamma in BT.1886 style */
-
-/* Info for optimization */
-typedef struct {
-	double thyr;		/* 50% input target */
-	double roo;			/* 0% input target */
-} gam_fits;
-
-/* gamma + input offset function handed to powell() */
-static double gam_fit(void *dd, double *v) {
-	gam_fits *gf = (gam_fits *)dd;
-	double gamma = v[0];
-	double a, b;
-	double rv = 0.0;
-	double tt;
-
-	if (gamma < 0.0) {
-		rv += 100.0 * -gamma;
-		gamma = 1e-4;
-	}
-
-	tt = pow(gf->roo, 1.0/gamma);
-	b = tt/(1.0 - tt);						/* Offset */
-	a = pow(1.0 - tt, gamma);				/* Gain */
-
-	tt = a * pow((0.5 + b), gamma);
-	tt = tt - gf->thyr;
-	rv += tt * tt;
-	
-	return rv;
-}
-
-/* Given the effective gamma and the output offset Y, */
-/* return the technical gamma needed for the correct 50% response. */
-double xicc_tech_gamma(
-	double egamma,			/* effective gamma needed */
-	double off				/* Output offset required */
-) {
-	gam_fits gf;
-	double op[1], sa[1], rv;
-
-	if (off <= 0.0) {
-		return egamma;
-	}
-
-	gf.thyr = pow(0.5, egamma);					/* Advetised 50% target */
-	gf.roo = off;
-
-	op[0] = egamma;
-	sa[0] = 0.1;
-
-	if (powell(&rv, 1, op, sa, 1e-6, 500, gam_fit, (void *)&gf, NULL, NULL) != 0)
-		warning("Computing effective gamma and input offset is inaccurate");
-
-	return op[0];
-}
-
-
-/* Set the bt1886_info to a default do nothing state */
-void bt1886_setnop(bt1886_info *p) {
-	p->ingo = 0.0;
-	p->outsc = 1.0;
-	p->outL = 0.0;
-	p->tab[0] = 0.0;
-	p->tab[1] = 0.0;
-}
-
-/* Setup the bt1886_info for the given target */
-void bt1886_setup(bt1886_info *p, double *XYZbp, double gamma) {
-	double Lab[3], bkipow;
-	p->gamma = gamma;
-
-	icmXYZ2Lab(&icmD50, Lab, XYZbp);
-
-	p->outL = Lab[0];		/* For bp blend */
-	p->tab[0] = Lab[1];		/* a* b* correction needed */
-	p->tab[1] = Lab[2];
-
-	bkipow = pow(XYZbp[1], 1.0/p->gamma);
-	p->ingo = bkipow/(1.0 - bkipow);		/* non-linear Y that makes out black point */
-	p->outsc = pow(1.0 - bkipow, p->gamma);	/* Scale to restore 1 -> 1 */
-}
-
-/* Apply BT.1886 black offset and gamma curve to the XYZ out of the input profile. */
-/* Do this in the colorspace defined by the input profile matrix lookup, */
-/* so it will be relative XYZ. We assume that BT.1886 does a Rec709 to gamma */
-/* viewing adjustment, irrespective of the source profile transfer curve. */
-void bt1886_apply(bt1886_info *p, icmLuMatrix *lu, double *out, double *in) {
-	int j;
-	double vv;
-
-#ifdef DEBUG
-	printf("bt1886 XYZ in %f %f %f\n", in[0],in[1],in[2]);
-#endif
-
-	lu->bwd_matrix(lu, out, in);
-
-#ifdef DEBUG
-	printf("bt1886 RGB in %f %f %f\n", out[0],out[1],out[2]);
-#endif
-
-	for (j = 0; j < 3; j++) {
-		vv = out[j];
-	
-		/* Convert linear light to Rec709 transfer curve */
-		if (vv < 0.018)
-			vv = 4.5 * vv;
-		else
-			vv = 1.099 * pow(vv, 0.45) - 0.099;
-		
-		/* Apply input offset & re-scale, and then gamma of 2.4/custom gamma */
-		vv = vv + p->ingo;
-		
-		if (vv > 0.0)
-			vv = p->outsc * pow(vv, p->gamma);
-
-		out[j] = vv;
-	}
-
-	lu->fwd_matrix(lu, out, out);
-
-#ifdef DEBUG
-	printf("bt1886 RGB bt.1886 %f %f %f\n", out[0],out[1],out[2]);
-#endif
-
-	icmXYZ2Lab(&icmD50, out, out);
-
-#ifdef DEBUG
-	printf("bt1886 Lab after Y adj. %f %f %f\n", out[0],out[1],out[2]);
-#endif
-
-	/* Blend ab to required black point offset p->tab[] as L approaches black. */
-	vv = (out[0] - p->outL)/(100.0 - p->outL);	/* 0 at bp, 1 at wp */
-	vv = 1.0 - vv;
-
-	if (vv < 0.0)
-		vv = 0.0;
-	else if (vv > 1.0)
-		vv = 1.0;
-	vv = pow(vv, 40.0);
-	out[1] += vv * p->tab[0];
-	out[2] += vv * p->tab[1];
-
-#ifdef DEBUG
-	printf("bt1886 Lab after wp adj. %f %f %f\n", out[0],out[1],out[2]);
-#endif
-
-	icmLab2XYZ(&icmD50, out, out);
-
-#ifdef DEBUG
-	printf("bt1886 XYZ out %f %f %f\n", out[0],out[1],out[2]);
-#endif
-}
-
 /* - - - - - - - - - - */
 #undef stricmp
-
-
 
 
 

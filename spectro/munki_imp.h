@@ -164,6 +164,8 @@ struct _munkiimp {
 	volatile int th_termed;		/* Thread has terminated */
 	inst_opt_type trig;			/* Reading trigger mode */
 	int noinitcalib;			/* Disable initial calibration if not essential */
+	int nocalibask;				/* Disable asking user to proceed with calibration */
+								/* even when the instrument is in correct configuration */
 	int nosposcheck;			/* Disable checking the sensor position */
 	int highres;				/* High resolution mode */
 	int hr_inited;				/* High resolution has been initialized */
@@ -290,6 +292,9 @@ struct _munkiimp {
 	volatile int spos_th_termed;	/* nz when terminated */
 	volatile int spos_change;		/* counter that increments on an spos event change */
 	unsigned int spos_msec;			/* Time when spos last changes */
+
+	volatile double whitestamp;		/* meas_delay() white timestamp */
+	volatile double trigstamp;		/* meas_delay() trigger timestamp */
 
 }; typedef struct _munkiimp munkiimp;
 
@@ -432,9 +437,12 @@ munki_code munki_imp_meas_refrate(
 
 /* Measure the display update delay */
 munki_code munki_imp_meas_delay(
-	munki *p,
-	int *msecdelay
-);
+munki *p,
+int *pdispmsec,
+int *pinstmsec);
+
+/* Timestamp the white patch change during meas_delay() */
+inst_code munki_imp_white_change(munki *p, int init);
 
 /* return nz if high res is supported */
 int munki_imp_highres(munki *p);
@@ -622,7 +630,7 @@ munki_code munki_trialmeasure(
 /* level "calibrate" and "take reading" functions. */
 /* The setup for the operation is in the current mode state. */
 /* The called then needs to call munki_readmeasurement() */
-munki_code
+static munki_code
 munki_trigger_one_measure(
 	munki *p,
 	int nummeas,			/* Number of measurements to make */
@@ -813,6 +821,9 @@ munki_code munki_create_hr(munki *p, int ref);
 /* Set the noinitcalib mode */
 void munki_set_noinitcalib(munki *p, int v, int losecs);
 
+/* Set the nocalibask mode */
+void munki_set_nocalibask(munki *p, int v);
+
 /* Set the trigger config */
 void munki_set_trig(munki *p, inst_opt_type trig);
 
@@ -933,7 +944,7 @@ munki_triggermeasure(
 );
 
 /* Read a measurements results */
-munki_code
+static munki_code
 munki_readmeasurement(
 	munki *p,
 	int inummeas,			/* Initial number of measurements to expect */

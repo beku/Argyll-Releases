@@ -14,18 +14,31 @@
  * see the License.txt file for licencing details.
  */
 
+/*
+ * TTBD: Should make this much more self contained in how
+ * it deals with errors - return an error code & string,
+ * and clean up resourcse.
+ */
+
 #undef DEBUG
+#undef CCTEST_PATTERN		/* Create ccast upsampling test pattern if */
+							/* "ARGYLL_CCAST_TEST_PATTERN" env variable is set */
+#undef TEST_SCREENING		/* For testing by making screen visible */
+
+#define OVERLAP 0.1			/* Stocastic screening overlap between levels */
 
 #define verbo stdout
 
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include "copyright.h"
 #include "aconfig.h"
 #include "sort.h"
 #include "numlib.h"
 #include "tiffio.h"
+#include "png.h"
 #include "render.h"
 #include "thscreen.h"
 
@@ -83,6 +96,131 @@ static void cvt_Lab_to_CIELAB16(double *out, double *in) {
 	if (out[2] < 0.0)
 		out[2] = 65536.0 + out[2];
 }
+
+/* ------------------------------------------------------------- */
+/* PNG memory write support */
+typedef struct {
+	unsigned char *buf;
+	png_size_t len;			/* Current length of the buffer */
+	png_size_t off;			/* Current offset of the buffer */
+} png_mem_info;
+
+static void mem_write_data(png_structp png_ptr, png_bytep data, png_size_t length) {
+	png_mem_info *s = (png_mem_info *)png_get_io_ptr(png_ptr);
+
+	if ((s->off + length) > s->len) {			/* Need more space */
+		png_size_t more = (s->off + length) - s->len;
+
+		if (more < (1024 * 80))
+			more = 1024 * 50 - 32;		/* Increase 50K at a time */
+		s->len += more;
+
+		if ((s->buf = realloc(s->buf, s->len)) == NULL) {
+			png_error(png_ptr, "malloc failed in mem_write_data");
+		}
+	}
+	memcpy(s->buf + s->off, data, length);
+	s->off += length;
+}
+
+static void mem_flush_data(png_structp png_ptr) {
+	return;
+}
+
+/* ------------------------------------------------------------- */
+#ifdef CCTEST_PATTERN
+
+#define SG 9		// Spacing is 9 pixels
+//#define SG 64		// 10 lines per half screen
+
+static void test_value(render2d *s, tdata_t *outbuf, int xx, int yy) {
+	int x = xx, y = yy;
+	int i, j, v;
+	int oval[3];	/* 8 bit value */
+
+	if (x < s->pw/2) {
+		if (y < s->ph/2) {
+			/* Generate vertical white stripes */
+			/* Stripes are 5 pixels apart in groups of 2 of the same level, */
+			/* declining by 1 each group */
+			if ((x % SG) == 0) {
+				i = x / (2 * SG);
+				v = 255 - i;
+				if (v < 0)
+					v = 0;
+				oval[0] = oval[1] = oval[2] = v;
+			} else {
+				oval[0] = oval[1] = oval[2] = 0;
+			}
+		} else {
+			y -= s->ph/2;
+			/* Generate white dots */
+			if ((x % SG) == 0 && (y % SG) == 0) {
+				i = x / (2 * SG);
+				j = y / (2 * SG);
+
+				i += j * s->pw/2/(2 * SG);
+				oval[0] = oval[1] = oval[2] = 0;
+
+				for (j = 5; j >= 0; j--) {
+					oval[0] = (oval[0] << 1) | ((i >> (j * 3 + 0)) & 1);
+					oval[1] = (oval[1] << 1) | ((i >> (j * 3 + 1)) & 1);
+					oval[2] = (oval[2] << 1) | ((i >> (j * 3 + 2)) & 1);
+				}
+				oval[0] = 255 - oval[0];
+				oval[1] = 255 - oval[1];
+				oval[2] = 255 - oval[2];
+			} else {
+				oval[0] = oval[1] = oval[2] = 0;
+			}
+		}
+	} else {
+		x -= s->pw/2;
+		if (y < s->ph/2) {
+			/* Generate horizontal white stripes */
+			/* Stripes are 5 pixels apart in groups of 2 of the same level, */
+			/* declining by 1 each group */
+			if ((y % SG) == 0) {
+				j = y / (2 * SG);
+				v = 255 - j;
+				oval[0] = oval[1] = oval[2] = v;
+			} else {
+				oval[0] = oval[1] = oval[2] = 0;
+			}
+		} else {
+			y -= s->ph/2;
+			/* Generate black dots */
+			if ((x % SG) == 0 && (y % SG) == 0) {
+				i = x / (2 * SG);
+				j = y / (2 * SG);
+				i += j * s->pw/2/(2 * SG);
+				oval[0] = oval[1] = oval[2] = 0;
+
+				for (j = 5; j >= 0; j--) {
+					oval[0] = (oval[0] << 1) | ((i >> (j * 3 + 0)) & 1);
+					oval[1] = (oval[1] << 1) | ((i >> (j * 3 + 1)) & 1);
+					oval[2] = (oval[2] << 1) | ((i >> (j * 3 + 2)) & 1);
+				}
+			} else {
+				oval[0] = oval[1] = oval[2] = 255;
+			}
+		}
+	}
+
+	if (s->dpth == bpc8_2d) {
+		unsigned char *p = ((unsigned char *)outbuf) + xx * s->ncc;
+		p[0] = oval[0];
+		p[1] = oval[1];
+		p[2] = oval[2];
+	} else {
+		unsigned short *p = ((unsigned short *)outbuf) + xx * s->ncc;
+		p[0] = oval[0] * 256;
+		p[1] = oval[1] * 256;
+		p[2] = oval[2] * 256;
+	}
+}
+#undef SG
+#endif
 
 /* ------------------------------------------------------------- */
 /* Main class implementation */
@@ -156,9 +294,16 @@ static int colordiff(render2d *s, color2d c1, color2d c2) {
 #define MIXPOW 1.3
 #define OSAMLS 16
 
-/* Render and write to a TIFF file */
+/* Render and write to a TIFF or PNG file or memory buffer */
 /* Return NZ on error */
-static int render2d_write(render2d *s, char *filename, int comprn) {
+static int render2d_write(
+	render2d *s,
+	char *filename,			/* Name of file for file output */
+	int comprn,				/* nz to use compression */
+	unsigned char **obuf,	/* pointer to returned buffer for mem output. Free after use */
+	size_t *olen,			/* pointer to returned length of data in buffer */
+	rend_format fmt			/* Output format, tiff/png, file/memory */
+) {
 	TIFF *wh = NULL;
 	uint16 samplesperpixel = 0, bitspersample = 0;
 	uint16 extrasamples = 0;	/* Extra "alpha" samples */
@@ -166,9 +311,19 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	uint16 photometric = 0;
 	uint16 inkset = 0xffff;
 	char *inknames = NULL;
-	tdata_t *outbuf;
-	unsigned char *tempbuf = NULL;		/* 16 bit buffer for dithering */
+	tdata_t *outbuf = NULL;
+
+	FILE *png_fp = NULL;
+	png_mem_info png_minfo = { NULL, 0, 0 };
+	png_structp png_ptr = NULL;
+	png_infop png_info = NULL;
+	png_uint_32 png_width = 0, png_height = 0;
+	int png_bit_depth = 0, png_color_type = 0;
+	int png_samplesperpixel = 0;
+
+	unsigned char *dithbuf16 = NULL;	/* 16 bit buffer for dithering */
 	thscreens *screen = NULL;			/* dithering object */
+	int foundfg;						/* Found a forground object in this line */
 	prim2d *th, **pthp;
 	prim2d **xlist, **ylist;	/* X, Y sorted start lists */
 	int xli, yli;				/* Indexes into X, Y list */
@@ -181,96 +336,232 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	double rx0, rx1, ry0, ry1;	/* Box being processed, newest sample is rx1, ry1 */
 	int x, y;					/* Pixel x & y index */
 
+#ifdef CCTEST_PATTERN		// For testing by making screen visible
+#pragma message("######### render.c TEST_PATTERN defined ! ##")
+	int do_test_pattern = 0;
+
+	if (getenv("ARGYLL_CCAST_TEST_PATTERN") != NULL) {
+		verbose(0, "Substituting ChromeCast test pattern\n");
+		do_test_pattern = 1;
+	} else { 
+		static int verbed = 0;
+		if (!verbed) {
+			verbose(0, "Set ARGYLL_CCAST_TEST_PATTERN to enable test pattern\n");
+			verbed = 1;
+		}
+	}
+#endif
+
 	if ((so = new_sobol(2)) == NULL)
 		return 1;
 
-	switch (s->csp) {
-		case w_2d:			/* Video style grey */
-			samplesperpixel = 1;
-			photometric = PHOTOMETRIC_MINISBLACK;
-			break;
-		case k_2d:			/* Printing style grey */
-			samplesperpixel = 1;
-			photometric = PHOTOMETRIC_MINISWHITE;
-			break;
-		case lab_2d:		/* TIFF CIE L*a*b* */
-			samplesperpixel = 3;
-			photometric = PHOTOMETRIC_CIELAB;
-			break;
-		case rgb_2d:		/* RGB */
-			samplesperpixel = 3;
-			photometric = PHOTOMETRIC_RGB;
-			break;
-		case cmyk_2d:		/* CMYK */
-			samplesperpixel = 4;
-			photometric = PHOTOMETRIC_SEPARATED;
-			inkset = INKSET_CMYK;
-			inknames = "cyan\000magenta\000yellow\000\000";
-			break;
-		case ncol_2d:		/* N color */
-			samplesperpixel = s->ncc;
-			extrasamples = 0;
-			photometric = PHOTOMETRIC_SEPARATED;
-			inkset = 0;			// ~~99 should fix this
-			inknames = NULL;	// ~~99 should fix this
-			break;
-		case ncol_a_2d:		/* N color with extras in alpha */
-			samplesperpixel = s->ncc;
-			extrasamples = 0;
-			if (samplesperpixel > 4) {
-				extrasamples = samplesperpixel - 4;	/* Call samples > 4 "alpha" samples */
-				for (j = 0; j < extrasamples; j++)
-					extrainfo[j] = EXTRASAMPLE_UNASSALPHA;
+	if (fmt == tiff_file) {
+		switch (s->csp) {
+			case w_2d:			/* Video style grey */
+				samplesperpixel = 1;
+				photometric = PHOTOMETRIC_MINISBLACK;
+				break;
+			case k_2d:			/* Printing style grey */
+				samplesperpixel = 1;
+				photometric = PHOTOMETRIC_MINISWHITE;
+				break;
+			case lab_2d:		/* TIFF CIE L*a*b* */
+				samplesperpixel = 3;
+				photometric = PHOTOMETRIC_CIELAB;
+				break;
+			case rgb_2d:		/* RGB */
+				samplesperpixel = 3;
+				photometric = PHOTOMETRIC_RGB;
+				break;
+			case cmyk_2d:		/* CMYK */
+				samplesperpixel = 4;
+				photometric = PHOTOMETRIC_SEPARATED;
+				inkset = INKSET_CMYK;
+				inknames = "cyan\000magenta\000yellow\000\000";
+				break;
+			case ncol_2d:		/* N color */
+				samplesperpixel = s->ncc;
+				extrasamples = 0;
+				photometric = PHOTOMETRIC_SEPARATED;
+				inkset = 0;			// ~~99 should fix this
+				inknames = NULL;	// ~~99 should fix this
+				break;
+			case ncol_a_2d:		/* N color with extras in alpha */
+				samplesperpixel = s->ncc;
+				extrasamples = 0;
+				if (samplesperpixel > 4) {
+					extrasamples = samplesperpixel - 4;	/* Call samples > 4 "alpha" samples */
+					for (j = 0; j < extrasamples; j++)
+						extrainfo[j] = EXTRASAMPLE_UNASSALPHA;
+				}
+				photometric = PHOTOMETRIC_SEPARATED;
+				inkset = 0;			// ~~99 should fix this
+				inknames = NULL;	// ~~99 should fix this
+				break;
+			default:
+				error("render2d: Illegal colorspace for TIFF file '%s'",filename);
+		}
+		if (samplesperpixel != s->ncc)
+			error("render2d: mismatched number of color components");
+
+		switch (s->dpth) {
+			case bpc8_2d:		/* 8 bits per component */
+				bitspersample = 8;
+				break;
+			case bpc16_2d:		/* 16 bits per component */
+				bitspersample = 16;
+				break;
+			default:
+				error("render2d: Illegal bits per component for TIFF file '%s'",filename);
+		}
+
+		if ((wh = TIFFOpen(filename, "w")) == NULL)
+			error("render2d: Can\'t create TIFF file '%s'!",filename);
+		
+		TIFFSetField(wh, TIFFTAG_IMAGEWIDTH,  s->pw);
+		TIFFSetField(wh, TIFFTAG_IMAGELENGTH, s->ph);
+		TIFFSetField(wh, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+		TIFFSetField(wh, TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);
+		TIFFSetField(wh, TIFFTAG_BITSPERSAMPLE, bitspersample);
+		TIFFSetField(wh, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+		TIFFSetField(wh, TIFFTAG_PHOTOMETRIC, photometric);
+		if (extrasamples > 0)
+			TIFFSetField(wh, TIFFTAG_EXTRASAMPLES, extrasamples, extrainfo);
+
+		if (inknames != NULL) {
+			int inlen = zzstrlen(inknames);
+			TIFFSetField(wh, TIFFTAG_INKSET, inkset);
+			TIFFSetField(wh, TIFFTAG_INKNAMES, inlen, inknames);
+		}
+		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+		TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
+		TIFFSetField(wh, TIFFTAG_XRESOLUTION, 10.0 * s->hres);	/* Cvt. to pixels/cm */
+		TIFFSetField(wh, TIFFTAG_YRESOLUTION, 10.0 * s->vres);
+		TIFFSetField(wh, TIFFTAG_XPOSITION, 0.1 * s->lm);		/* Cvt. to cm */
+		TIFFSetField(wh, TIFFTAG_YPOSITION, 0.1 * s->tm);
+		if (comprn) {
+			TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+		}
+		TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, "Test chart created with Argyll");
+
+		/* Allocate one TIFF line buffer */
+		outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
+
+	} else if (fmt == png_file
+	        || fmt == png_mem) {
+		char *nmode = "w";
+
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
+#if defined(O_BINARY) || defined(_O_BINARY)
+		nmode = "wb";
+#endif
+		png_width = s->pw;
+		png_height = s->ph;
+
+		switch (s->dpth) {
+			case bpc8_2d:		/* 8 bits per component */
+				png_bit_depth = 8;
+				break;
+			case bpc16_2d:		/* 16 bits per component */
+				png_bit_depth = 16;
+				break;
+			default:
+				error("render2d: Illegal bits per component for PNG file '%s'",filename);
+		}
+
+		switch (s->csp) {
+			case w_2d:			/* Video style grey */
+				png_color_type = PNG_COLOR_TYPE_GRAY;
+				png_samplesperpixel = 1;
+				break;
+			case rgb_2d:		/* RGB */
+				png_color_type = PNG_COLOR_TYPE_RGB;
+				png_samplesperpixel = 3;
+				break;
+			default:
+				error("render2d: Illegal colorspace for PNG file '%s'",filename);
+		}
+
+		if (fmt == png_file) {
+			if ((png_fp = fopen(filename, nmode)) == NULL)
+				error("render2d: Can\'t create PNG file '%s'!",filename);
+		}
+
+		if ((png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING,
+		                                    NULL, NULL, NULL)) == NULL)
+			error("render2d: png_create_write_struct failed");
+
+		if (fmt == png_file) {
+			png_init_io(png_ptr, png_fp);
+		}
+
+		if ((png_info = png_create_info_struct(png_ptr)) == NULL) {
+			png_destroy_write_struct(&png_ptr, &png_info);
+			error("render2d: png_create_info_struct failed");
+		}
+
+	   if (setjmp(png_jmpbuf(png_ptr))) {
+			a1loge(g_log, 1, "%s -> %s: render2d libpng write error\n", filename);
+			png_destroy_info_struct(png_ptr, &png_info);
+			png_destroy_write_struct(&png_ptr, &png_info);
+			if (png_fp != NULL)
+				fclose(png_fp);
+			else {
+				free(png_minfo.buf);
 			}
-			photometric = PHOTOMETRIC_SEPARATED;
-			inkset = 0;			// ~~99 should fix this
-			inknames = NULL;	// ~~99 should fix this
-			break;
-		default:
-			error("render2d: Illegal colorspace for file '%s'",filename);
-	}
-	if (samplesperpixel != s->ncc)
-		error("render2d: mismatched number of color components");
+			return (1);
+		}
 
-	switch (s->dpth) {
-		case bpc8_2d:		/* 8 bits per component */
-			bitspersample = 8;
-			break;
-		case bpc16_2d:		/* 16 bits per component */
-			bitspersample = 16;
-			break;
-		default:
-			error("render2d: Illegal bits per component for file '%s'",filename);
-	}
+		if (fmt == png_mem) {
+			png_set_write_fn(png_ptr, &png_minfo, mem_write_data, mem_flush_data);  
+		}
 
-	if ((wh = TIFFOpen(filename, "w")) == NULL)
-		error("render2d: Can\'t create TIFF file '%s'!",filename);
-	
-	TIFFSetField(wh, TIFFTAG_IMAGEWIDTH,  s->pw);
-	TIFFSetField(wh, TIFFTAG_IMAGELENGTH, s->ph);
-	TIFFSetField(wh, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
-	TIFFSetField(wh, TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);
-	TIFFSetField(wh, TIFFTAG_BITSPERSAMPLE, bitspersample);
-	TIFFSetField(wh, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-	TIFFSetField(wh, TIFFTAG_PHOTOMETRIC, photometric);
-	if (extrasamples > 0)
-		TIFFSetField(wh, TIFFTAG_EXTRASAMPLES, extrasamples, extrainfo);
+		png_set_IHDR(png_ptr, png_info, png_width, png_height, png_bit_depth,
+			png_color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-	if (inknames != NULL) {
-		int inlen = zzstrlen(inknames);
-		TIFFSetField(wh, TIFFTAG_INKSET, inkset);
-		TIFFSetField(wh, TIFFTAG_INKNAMES, inlen, inknames);
+
+		/* pix/mm to pix/meter */
+		png_set_pHYs(png_ptr, png_info, (png_uint_32)(1000.0 * s->hres + 0.5),
+		                                (png_uint_32)(1000.0 * s->vres + 0.5),
+		                                PNG_RESOLUTION_METER);
+		
+		/* mm to um */
+		png_set_oFFs(png_ptr, png_info, (png_uint_32)(1000.0 * 0.1 * s->lm),  
+		            (png_uint_32)(1000.0 * s->tm), PNG_OFFSET_MICROMETER);
+
+		{
+			png_text txt;
+			txt.compression = PNG_TEXT_COMPRESSION_NONE;
+			txt.key = "Description";
+			txt.text = "Test chart created with Argyll";
+			txt.text_length = strlen(txt.text);
+#ifdef PNG_iTXt_SUPPORTED
+			txt.itxt_length = 0;
+			txt.lang = NULL;
+			txt.lang_key = NULL;
+#endif
+			png_set_text(png_ptr, png_info, &txt, 1);
+		}
+
+		/* Write the header */
+		png_write_info(png_ptr, png_info);
+
+		/* PNG expects network (BE) 16 bit values */
+		if (png_bit_depth == 16) {
+			png_uint_16 tt = 0x0001;
+			if (*((unsigned char *)&tt) == 0x01) 	/* Little endian */
+				png_set_swap(png_ptr);
+		}
+
+		/* Allocate one PNG line buffer */
+		if ((outbuf = malloc((png_bit_depth >> 3) * png_samplesperpixel * s->pw) ) == NULL)
+			error("malloc of PNG line buffer failed");
+
+	} else {
+		error("render2d: Illegal output format %d",fmt);
 	}
-	TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
-	TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
-	TIFFSetField(wh, TIFFTAG_XRESOLUTION, 10.0 * s->hres);	/* Cvt. to pixels/cm */
-	TIFFSetField(wh, TIFFTAG_YRESOLUTION, 10.0 * s->vres);
-	TIFFSetField(wh, TIFFTAG_XPOSITION, 0.1 * s->lm);		/* Cvt. to cm */
-	TIFFSetField(wh, TIFFTAG_YPOSITION, 0.1 * s->tm);
-	if (comprn) {
-		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
-	}
-	TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, "Test chart created with Argyll");
 
 	/* Allocate pixel value storage for aliasing detection */
 	if ((_pixv0 = malloc(sizeof(color2d) * (s->pw+2))) == NULL)
@@ -280,23 +571,24 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 		return 1;
 	pixv1 = _pixv1+1;
 
-	/* Allocate one TIFF line buffer */
-	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
-
 	if (s->dpth == bpc8_2d && s->dither) {
-#ifdef NEVER		// For testing by making screen visible
-# define LEVELS 16
+#ifdef TEST_SCREENING		// For testing by making screen visible
+#pragma message("######### render TEST_SCREENING defined! ##")
+# define LEVELS 4
 		int i, olevs[LEVELS];
-		for (i = 0; i < LEVELS; i++)
+		for (i = 0; i < LEVELS; i++) {
 			olevs[i] = (int)(i/(LEVELS-1.0) * 255.0 + 0.5);
+		}
 		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, LEVELS, olevs,
-		                           scoo_l, 0.1, NULL, NULL)) == NULL)
+		                           scoo_l, OVERLAP, s->pw, NULL, NULL,
+		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx)) == NULL)
 #else
 		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, 256, NULL,
-		                           scoo_l, 0.1, NULL, NULL)) == NULL)
+		                           scoo_l, OVERLAP, s->pw, NULL, NULL,
+		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx)) == NULL)
 #endif
 			return 1;
-		if ((tempbuf = malloc(s->pw * s->ncc * 2)) == NULL)
+		if ((dithbuf16 = malloc(s->pw * s->ncc * 2)) == NULL)
 			return 1;
 	}
 
@@ -323,12 +615,14 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	yli = 0;
 	s->yl = NULL;
 
-	/* Render each line and write it. */
+	/* Render each line and write it, in raster order. */
 	/* We sample +- half a pixel around the pixel we want. */
 	/* We make the active element list encompass this region, */
 	/* so that we can super sample it for anti-aliasing. */
 	for (y = -1; y < s->ph; y++) {
+		foundfg = 0;
 
+		/* Convert to coordinate order */
 		ry0 = (((s->ph-1) - y) - 0.5) / s->vres;
 		ry1 = (((s->ph-1) - y) + 0.5) / s->vres;
 
@@ -389,6 +683,8 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 					*pthp = th->xl;
 					th = th->xl;
 				} else {
+//printf("x %d y %d, rx1 %f, ry0 %f\n",x,y,rx1, ry0);
+
 					if (th->rend(th, rv, rx1, ry0) && th->ix > pixv1[x][PRIX2D]) {
 						/* Overwrite the current color */
 						/* (This is where we should handle depth and opacity */
@@ -400,7 +696,7 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 					th = th->xl;
 				}
 			}
-			/* Check if anti-aliasing is neded for previous lines previous pixel */
+			/* Check if anti-aliasing is needed for previous lines previous pixel */
 			if (y >= 0 && x >= 0) {
 				color2d cc;
 
@@ -409,15 +705,17 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 				cc[PRIX2D] = pixv1[x][PRIX2D];
 
 				/* See if anti aliasing is needed */
-				if ((pixv0[x+0][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x+0], cc))
-				 || (pixv0[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x-1], cc))
-				 || (pixv1[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv1[x-1], cc))) {
+				if (!s->noavg
+				 && ((pixv0[x+0][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x+0], cc))
+				  || (pixv0[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x-1], cc))
+				  || (pixv1[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv1[x-1], cc)))) {
 					double nn = 0;
 
 					so->reset(so);
 
 					for (j = 0; j < s->ncc; j++)
 						cc[j] = 0.0;
+					cc[PRIX2D] = -1;
 
 					/* Compute the sample value by re-sampling the region */
 					/* around the pixel. */
@@ -447,6 +745,8 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 						}
 						for (j = 0; j < s->ncc; j++)
 							cc[j] += pow(ccc[j], MIXPOW);
+						if (ccc[PRIX2D] > cc[PRIX2D])
+							cc[PRIX2D] = ccc[PRIX2D];	/* Note if not BG */
 					}
 					for (j = 0; j < s->ncc; j++)
 						cc[j] = pow(cc[j]/nn, 1.0/MIXPOW);
@@ -456,6 +756,12 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 					cc[1] = 0.0;
 					cc[2] = 1.0;
 #endif
+				} else if (s->noavg) {
+					/* Compute output value directly from primitive */
+
+					for (j = 0; j < s->ncc; j++)
+						cc[j] = cc[j];
+
 				} else {
 
 					/* Compute output value as mean of surrounding samples */
@@ -465,14 +771,24 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 						      + pixv0[x][j]
 						      + pixv1[x-1][j];
 						cc[j] = cc[j] * 0.25;
-							
 					}
+					/* Note if not BG */
+					if (pixv0[x-1][PRIX2D] > cc[PRIX2D])
+						cc[PRIX2D] = pixv0[x-1][PRIX2D];
+					if (pixv0[x][PRIX2D] > cc[PRIX2D])
+						cc[PRIX2D] = pixv0[x][PRIX2D];
+					if (pixv1[x-1][PRIX2D] > cc[PRIX2D])
+						cc[PRIX2D] = pixv1[x-1][PRIX2D];
 				}
+				if (cc[PRIX2D] != -1)		/* Line is no longer background */
+					foundfg = 1;
 
 				/* Translate from render value to output pixel value */
 				if (s->dpth == bpc8_2d) {
+					/* if dithering and dithering all or found FG in line */
 					if (s->dither) {
-						unsigned short *p = ((unsigned short *)tempbuf) + x * s->ncc;
+						unsigned short *p = ((unsigned short *)dithbuf16) + x * s->ncc;
+
 						if (s->csp == lab_2d) {
 							cvt_Lab_to_CIELAB16(cc, cc);
 							for (j = 0; j < s->ncc; j++)
@@ -507,12 +823,81 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 		}
 
 		if (y >= 0) {
-			if (s->dpth == bpc8_2d && s->dither)
-				screen->screen(screen, s->pw, 1, 0, y, tempbuf, s->pw * s->ncc * 2,
-				                       (unsigned char *)outbuf, s->pw * s->ncc);
+			/* if dithering and dithering all or found FG in line */
+			if (s->dpth == bpc8_2d && s->dither) {
+				// If we need to screen this line
+				if (!s->dithfgo || foundfg) {
+					/* If we are dithering only the foreground colors, */
+					/* Subsitute the quantized un-dithered color for any */
+					/* pixels soley from the background */
+					if (s->dithfgo) {
+						int st, ed;
+						unsigned short *ip = ((unsigned short *)dithbuf16);
+						unsigned char *op = ((unsigned char *)outbuf);
 
-			if (TIFFWriteScanline(wh, outbuf, y, 0) < 0)
-				error ("Failed to write TIFF file '%s' line %d",filename,y);
+						/* Copy pixels up to first non-BG */
+						for (x = 0; x < s->pw; x++, ip += s->ncc, op += s->ncc) {
+							if (pixv1[x][PRIX2D] == -1) {
+								for (j = 0; j < s->ncc; j++)
+									op[j] = (ip[j] * 255 + 128)/65535;
+							} else {
+								st = x;
+								break;
+							}
+						}
+						if (x < s->pw) {	/* If there are FG pixels */
+
+							/* Copy down to first non-BG */
+							ip = ((unsigned short *)dithbuf16) + (s->pw-1) * s->ncc;
+							op = ((unsigned char *)outbuf) + (s->pw-1) * s->ncc;
+							for (x = s->pw-1; x > st; x--, ip -= s->ncc, op -= s->ncc) {
+								if (pixv1[x][PRIX2D] == -1) {
+									for (j = 0; j < s->ncc; j++)
+										op[j] = (ip[j] * 255 + 128)/65535;
+								} else {
+									ed = x;
+									break;
+								}
+							}
+							/* Screen just the FG pixels */
+							ip = ((unsigned short *)dithbuf16) + st * s->ncc;
+							op = ((unsigned char *)outbuf) + st * s->ncc;
+							screen->screen(screen, ed-st+1, 1, st, y,
+						                       op, s->pw * s->ncc,
+						                       (unsigned char*)ip, s->pw * s->ncc);
+						}
+
+					/* Dither/screen the whole lot */
+					} else {
+						screen->screen(screen, s->pw, 1, 0, y,
+						                       (unsigned char *)outbuf, s->pw * s->ncc,
+						                       dithbuf16, s->pw * s->ncc);
+					}
+				// Don't need to screen this line - quantize from 16 bit
+				} else {
+					unsigned short *ip = ((unsigned short *)dithbuf16);
+					unsigned char *op = ((unsigned char *)outbuf);
+					for (x = 0; x < s->pw; x++, ip += s->ncc, op += s->ncc) {
+						for (j = 0; j < s->ncc; j++)
+							op[j] = (ip[j] * 255 + 128)/65535;
+					}
+				}
+			}
+
+#ifdef CCTEST_PATTERN		// Substitute the testing pattern
+			if (do_test_pattern) {
+				for (x = 0; x < s->pw; x++)
+					test_value(s, outbuf, x, y);
+			}
+#endif
+			if (fmt == tiff_file) {
+				if (TIFFWriteScanline(wh, outbuf, y, 0) < 0)
+					error ("Failed to write TIFF file '%s' line %d",filename,y);
+			} else if (fmt == png_file
+			        || fmt == png_mem) {
+				png_bytep pixdata = (png_bytep)outbuf;
+				png_write_rows(png_ptr, &pixdata, 1);
+			}
 		}
 
 		/* Shuffle the pointers */
@@ -529,12 +914,29 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	free(_pixv0);
 	free(_pixv1);
 
-	if (tempbuf != NULL)
-		free(tempbuf);
+	if (dithbuf16 != NULL)
+		free(dithbuf16);
 	if (screen != NULL)
 		screen->del(screen);
-	_TIFFfree(outbuf);
-	TIFFClose(wh);		/* Close Output file */
+
+	if (fmt == tiff_file) {
+		_TIFFfree(outbuf);
+		TIFFClose(wh);		/* Close Output file */
+
+	} else if (fmt == png_file
+	        || fmt == png_mem) {
+
+		free(outbuf);
+		png_write_end(png_ptr, NULL);
+//		png_destroy_info_struct(png_ptr, &png_info);
+		png_destroy_write_struct(&png_ptr, &png_info);
+		if (fmt == png_file) {
+			fclose(png_fp);
+		} else if (fmt == png_mem) {
+			*obuf = png_minfo.buf;
+			*olen = png_minfo.off;
+		}
+	}
 
 	so->del(so);
 
@@ -551,7 +953,9 @@ double vres,	/* horizontal resolution in pixels/mm */
 colort2d csp,	/* Color type */
 int nd,			/* Number of channels if c = ncol */
 depth2d dpth,	/* Pixel depth */
-int dither		/* Dither flag */
+int dither,		/* Dither flag, 1 = ordered, 2 = error diffusion, | 0x8000 to dither FG only  */
+void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edith */
+void *qcntx
 ) {
 	render2d *s;
 
@@ -577,7 +981,11 @@ int dither		/* Dither flag */
 	s->vres = vres;
 	s->csp = csp;
 	s->dpth = dpth;
-	s->dither = dither;
+	s->dither  = 0x0fff & dither;
+	s->noavg   = 0x4000 & dither;
+	s->dithfgo = 0x8000 & dither;
+	s->quant = quant;
+	s->qcntx = qcntx;
 
 	s->del = render2d_del;
 	s->set_defc = render2d_set_defc;
@@ -637,11 +1045,29 @@ static int rect2d_rend(prim2d *ss, color2d rv, double x, double y) {
 	 || x < s->rx0 || x > s->rx1)
 		return 0;
 
-	for (j = 0; j < s->ncc; j++)
-		rv[j] = s->c[j];
+	if (s->dpat == NULL) {
+		for (j = 0; j < s->ncc; j++)
+			rv[j] = s->c[j];
+
+	/* We have a dither pattern */
+	} else {
+		int xi = ((int)floor(x)) % s->dp_w;
+		int yi = ((int)floor(y)) % s->dp_h;
+		double *val = (*s->dpat)[xi][yi];
+		for (j = 0; j < s->ncc; j++)
+			rv[j] = val[j];
+	}
+
 	rv[PRIX2D] = s->ix;
 
 	return 1;
+}
+
+static void rect2d_del(prim2d *ss) {
+	rect2d *s = (rect2d *)ss;
+	if (s->dpat != NULL)
+		free(s->dpat);
+	prim2d_del(ss);
 }
 
 prim2d *new_rect2d(
@@ -664,7 +1090,7 @@ color2d c
 	y -= ss->bm;
 
 	s->ncc = ss->ncc;
-	s->del = prim2d_del; 
+	s->del = rect2d_del; 
 	s->rend = rect2d_rend; 
 
 	/* Set bounding box */
@@ -683,6 +1109,13 @@ color2d c
 		s->c[j] = c[j];
 
 	return (prim2d *)s;
+}
+
+/* Allocate pat using malloc(sizeof(double) * MXPATSIZE * MXPATSIZE * TOTC2D) */
+void set_rect2d_dpat(rect2d *s, double (*pat)[MXPATSIZE][MXPATSIZE][TOTC2D], int w, int h) {
+	s->dpat = pat;
+	s->dp_w = w;
+	s->dp_h = h;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1039,7 +1472,8 @@ color2d c
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Primitive Macros. */
+/* Primitive Macros. These shapes are composed of */
+/* underlying primitives */
 
 /* add a dashed line */
 void add_dashed_line2d(

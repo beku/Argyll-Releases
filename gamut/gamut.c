@@ -50,22 +50,22 @@
 
 #define COLORED_VRML
 
-#define DO_TWOPASS			/* Second pass with adjustment based on first pass */
+#define DO_TWOPASS			/* [def] Second pass with adjustment based on first pass */
 
-#define FAKE_SEED_SIZE 0.1	/* Usually 0.1 */
-#define TRIANG_TOL 1e-10	/* Triangulation tollerance, usually 1e-10 */
+#define FAKE_SEED_SIZE 0.1	/* [0.1] */
+#define TRIANG_TOL 1e-10	/* [1e-10] Triangulation tollerance */
 
-#define NORM_LOG_POW 0.25	/* Normal, colorspace lopow value */
-#define RAST_LOG_POW 0.05	/* Raster lopow value */
+#define NORM_LOG_POW 0.25	/* [0.25] Normal, colorspace lopow value */
+#define RAST_LOG_POW 0.05	/* [0.05] Raster lopow value */
 
 #undef TEST_CONVEX_HULL		/* Use pure convex hull, not log hull */
 
-#undef DEBUG_TRIANG			/* Enable detailed triangulation debugging */
-#undef DEBUG_TRIANG_VRML	/* Create debug.wrl for each step of triangulation */
-							/* (Only on second pass if #define DO_TWOPASS) */
+#undef DEBUG_TRIANG			/* Enable detailed triangulation debugging & diag2 */
+#undef DEBUG_TRIANG_VRML	/* Create diag1 vis & diag2 vis for each step */
+							/* of triangulation (Only on second pass if #define DO_TWOPASS) */
 #undef DEBUG_TRIANG_VRML_STEP	/* Wait for return after each step */
 
-#undef DEBUG_SPLIT_VRML	/* Create debug.wrl for each step of triangle plane split */
+#undef DEBUG_SPLIT_VRML		/* Create diag3 vis for each step of triangle plane split */
 
 #undef TEST_LOOKUP
 #undef TEST_NEAREST
@@ -77,7 +77,8 @@
 
 #undef ASSERTS				/* Do internal checking */
 
-#undef INTERSECT_DEBUG		/* Turn on compute_vector_isect debugging, inc isect.wrl plot */
+#undef INTERSECT_DEBUG		/* Turn on compute_vector_isect debugging, */
+							/* and isect & isect2 vis plot if deb_insect set to 1 */
 #undef INTERSECT_VERIFY		/* Verify compute_vector_isect against brute force search */
 
 /* These routines support:
@@ -2327,7 +2328,7 @@ gtri *tp		/* Triangle faces to be added */
 	add_to_hit_list(s, hlp, t2);	/* Add edge 2 to hit list */
 }
 
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 	typedef struct {
 		int tix[3];		/* Triangle indexes */
 		int type;		/* 0 = hit, 1 = added */
@@ -2343,7 +2344,7 @@ gvert *v		/* Vertex to insert */
 	gtri *hl;			/* Triangle face hit list (polygon faces) */
 	double tol = TRIANG_TOL;
 	int hit = 0;		/* Vertex expands hull flag */
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 	int intri = 0;		/* Vertex landed in a triangle */
 	XLIST(tidxs, hittris)
 	tidxs xxs;
@@ -2379,7 +2380,7 @@ gvert *v		/* Vertex to insert */
 
 		/* If vertex is above the log hull surface, add triangle to the hit list. */
 		if (c < -tol) {
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 			int j;
 			double bds = -1e10;
 #endif
@@ -2390,7 +2391,7 @@ gvert *v		/* Vertex to insert */
 			           tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n,c);
 #endif
 
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 			for (j = 0; j < 3; j++) {
 				double ds;
 				ds = tp->ee[j][0] * v->ch[0]
@@ -2398,14 +2399,18 @@ gvert *v		/* Vertex to insert */
 		   	    + tp->ee[j][2] * v->ch[2]
 				   + tp->ee[j][3];
 				if (ds > tol) {
+#ifdef DEBUG_TRIANG
 					printf("Vertex is not in triangle by %e\n",ds);
+#endif
 					break;
 				}
 				if (ds > bds)
 					bds = ds; 
 			}
 			if (j >= 3) {
+#ifdef DEBUG_TRIANG
 				printf("Vertex is in triangle by %e\n",bds);
+#endif
 				intri = 1;		/* Landed in this triangle */
 			}
 
@@ -2458,7 +2463,7 @@ if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 						xtp = tp->e[0]->t[1];
 //printf("Got a hit on triangle %d: %d %d %d\n", xtp->n, xtp->v[0]->n, xtp->v[1]->n, xtp->v[2]->n);
 
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 					xxs.tix[0] = xtp->v[0]->n, xxs.tix[1] = xtp->v[1]->n, xxs.tix[2] = xtp->v[2]->n;
 					xxs.type = 1;
 					XLIST_ADD(&hittris, xxs)
@@ -2472,8 +2477,13 @@ if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 		}
 
 #ifdef DEBUG_TRIANG_VRML
-		write_diag_vrml(s, v->ch, hittris.no, hittris.list, hl);
-#endif
+#ifdef DO_TWOPASS
+		if (s->pass > 0)
+#endif	/* DO_TWOPASS */
+		{
+		write_diag_vrml(s, v->ch, hittris.no, hittris.list, hl); 	/* diag1 triang hit */ 
+		}
+#endif	/* DEBUG_TRIANG_VRML */
 
 //printf("About to turn polygon faces into triangles\n");
 		/* Turn all the faces that made it to the */
@@ -2509,7 +2519,11 @@ if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 //printf("~1 Creating new triangle %d: %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
 		} END_FOR_ALL_ITEMS(tp);
 		
-#ifdef DEBUG_TRIANG_VRML
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
+#ifdef DO_TWOPASS
+		if (s->pass > 0)
+#endif	/* DO_TWOPASS */
+		{
 		tp = hl; 
 		hittris.no = 0;
 		FOR_ALL_ITEMS(gtri, tp) {
@@ -2517,14 +2531,13 @@ if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 			xxs.type = 2;
 			XLIST_ADD(&hittris, xxs)
 		} END_FOR_ALL_ITEMS(tp);
-		write_diag_vrml(s, v->ch, hittris.no, hittris.list, NULL);
+		write_diag_vrml(s, v->ch, hittris.no, hittris.list, NULL);	/* diag2 */
 #ifdef DEBUG_TRIANG_VRML_STEP
-#ifdef DO_TWOPASS
-		if (s->pass > 0)
-#endif	/* DO_TWOPASS */
+		printf("Waiting for return key after diag1%s and diag1%s\n",vrml_ext(),vrml_ext());
 		getchar();
 #endif
-#endif
+		}
+#endif /* DEBUG_TRIANG_VRML || DEBUG_TRIANG_VRML */
 
 		/* Move them to the triangulation. */
 		tp = hl; 
@@ -2542,8 +2555,13 @@ if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 		v->f &= ~GVERT_INSIDE;	/* and it's not inside */
 	}
 
-#ifdef DEBUG_TRIANG
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
+#ifdef DO_TWOPASS
+	if (s->pass > 0)
+#endif	/* DO_TWOPASS */
+	{
 	XLIST_FREE(&hittris);
+	}
 #endif
 }
 
@@ -3498,7 +3516,7 @@ double *in		/* input point (absolute)*/
 	rv = radial_point(s, s->lutree, nin);
 
 	if (rv < 0.0) {
-		error("gamut: radial internal error - failed to find triangle\n");
+		error("gamut: radial internal error - failed to find triangle (rv %f)\n",rv);
 	}
 
 	if (out != NULL) {
@@ -3753,7 +3771,8 @@ int llen		/* Number of triangles in the list */
 	}
 
 #ifdef DEBUG_SPLIT_VRML
-	write_split_diag_vrml(s, list, llen);
+	write_split_diag_vrml(s, list, llen);	/* diag3.wrl/xdom/x3dom */
+	printf("Waiting for return key after diag3%s:\n",vrml_ext());
 	getchar();
 #endif /* DEBUG_SPLIT_VRML */
 
@@ -3904,14 +3923,14 @@ double *nin		/* Normalised center relative point */
 /* Return the location on the surface of the triangle */
 /* that is intersected by the radial direction */
 /* of the given relative point.  Return the distance to */
-/* the gamut surface. */
+/* the gamut surface. Return < 0.0 on fail. */
 static double radial_point(
 gamut *s,
 gbsp *np,		/* BSP node pointer we're at */
 double *nin		/* Normalised center relative point */
 ) {
 	gtri *t;
-	double rv;
+	double rv, num, denom;
 
 //if (trace) printf("~1 radial_point: BSP 0x%x tag = %d, point %f %f %f\n", np,np->tag,nin[0],nin[1],nin[2]);
 
@@ -3925,8 +3944,14 @@ double *nin		/* Normalised center relative point */
 
 	/* Compute the intersection of the input vector with the triangle plane */
 	/* (Since nin[] is already relative, we don't need to subtract cent[] from it) */
-	rv = -(t->pe[0] * s->cent[0] + t->pe[1] * s->cent[1] + t->pe[2] * s->cent[2] + t->pe[3])/
-			      (t->pe[0] * nin[0] + t->pe[1] * nin[1] + t->pe[2] * nin[2]);
+	num = -(t->pe[0] * s->cent[0] + t->pe[1] * s->cent[1] + t->pe[2] * s->cent[2] + t->pe[3]);
+	denom = (t->pe[0] * nin[0] + t->pe[1] * nin[1] + t->pe[2] * nin[2]);
+
+	if (fabs(denom) < 1e-9) {
+		/* Hmm. The ray is paralell to the triangle ? */
+		error("radial_point: failed to intersect radial triangle\n");
+	}
+	rv = num/denom;
 
 #ifdef ASSERTS
 	/* check the result */
@@ -4809,7 +4834,7 @@ gtri **omxtri
 
 #define ISDBG(xxx) if (deb_insect) printf xxx
 
-int deb_insect = 0;		/* Do vrml plot */
+int deb_insect = 1;		/* Do vrml plot */
 
 /* Debug - given a BSP node, add all the triangles vertexes indexes */
 /* below this node to the diagnosti wrl */
@@ -4886,6 +4911,8 @@ int   *lu		/* Number used in list */
 #endif
 #ifdef INTERSECT_DEBUG
 	if (deb_insect) {
+		char isect[20] = "isect";
+		char isect2[20] = "isect2";
 		vrml *wrl = NULL;
 		double cc[3] = { 1.0, 1.0, 0.0 };
 		double red[3] = { 1.0, 0.0, 0.0 };
@@ -4894,10 +4921,13 @@ int   *lu		/* Number used in list */
 		double p1[3], p2[3];
 		int i;
 
-	    unlink("isect2.wrl");
-    	rename("isect.wrl", "isect2.wrl");
+		strcat(isect2, vrml_ext());
+		strcat(isect, vrml_ext());
 
-		if ((wrl = new_vrml("isect.wrl", 0)) == NULL)
+	    unlink(isect2);
+    	rename(isect, isect2);
+
+		if ((wrl = new_vrml("isect", 0, vrml_lab)) == NULL)
 			error("New vrml failed");
 
 		/* The triangles below the BSP */
@@ -4946,9 +4976,8 @@ int   *lu		/* Number used in list */
 		wrl->add_marker(wrl, p2, blue, 0.5);
 
 		wrl->del(wrl);
-		printf("Waiting for input after writing 'isect.wrl':\n");
+		printf("Waiting for input after writing '%s':\n", isect);
 		getchar();
-
 	}
 #endif
 
@@ -5772,22 +5801,22 @@ int     ll 		/* Size of list. */
 #endif /* INTERSECT_DEBUG */
 
 /* ===================================================== */
-/* Write to a VRML .wrl file */
+/* Write to a VRML/X3d file */
 /* Return non-zero on error */
 static int write_vrml(
 gamut *s,
-char *filename,
+char *filename,		/* Extension will be set automatically */
 int doaxes,			/* Non-zero if axes are to be written */
 int docusps			/* Non-zero if cusp points are to be marked */
 ) {
 	return write_trans_vrml(s, filename, doaxes, docusps, NULL, NULL);
 }
 
-/* Write to a VRML .wrl file */
+/* Write to a VRML/X3d file */
 /* Return non-zero on error */
 static int write_trans_vrml(
 gamut *s,
-char *filename,
+char *filename,		/* Extension will be set automatically */
 int doaxes,			/* Non-zero if axes are to be written */
 int docusps,		/* Non-zero if cusp points are to be marked */
 void (*transform)(void *cntx, double out[3], double in[3]),	/* Optional transformation callback */
@@ -5795,123 +5824,19 @@ void *cntx
 ) {
 	int i;
 	gtri *tp;		/* Triangle pointer */
-	FILE *wrl;
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0 - s->cent[1], 0 - s->cent[2],  50 - s->cent[0], 2, 2, 100, .7, .7, .7 },
-																			/* L axis */
-		{ 50 - s->cent[1], 0 - s->cent[2],  0 - s->cent[0], 100, 2, 2,  1,  0,  0 },
-																			/* +a (red) axis */
-		{ 0 - s->cent[1], -50 - s->cent[2], 0 - s->cent[0], 2, 100, 2,  0,  0,  1 },
-																			/* -b (blue) axis */
-		{ -50 - s->cent[1], 0 - s->cent[2], 0 - s->cent[0], 100, 2, 2,  0,  1,  0 },
-																			/* -a (green) axis */
-		{ 0 - s->cent[1],  50 - s->cent[2], 0 - s->cent[0], 2, 100, 2,  1,  1,  0 },
-																			/* +b (yellow) axis */
-	};
-
-	/* Define the labels */
-	struct {
-		double x, y, z;
-		double size;
-		char *string;
-		double r, g, b;
-	} labels[6] = {
-		{ -2 - s->cent[1], 2 - s->cent[2],  - s->cent[0] + 100 + 10, 10, "+L*",  .7, .7, .7 },
-																			/* Top of L axis */
-		{ -2 - s->cent[1], 2 - s->cent[2],  - s->cent[0] - 10,      10, "0",    .7, .7, .7 },
-																			/* Bottom of L axis */
-		{ 100 + 5 - s->cent[1], -3 - s->cent[2],  0 - s->cent[0],  10, "+a*",  1,  0,  0 },
-																			/* +a (red) axis */
-		{ -5 - s->cent[1], -100 - 10 - s->cent[2], 0 - s->cent[0],  10, "-b*",  0,  0,  1 },
-																			/* -b (blue) axis */
-		{ -100 - 15 - s->cent[1], -3 - s->cent[2], 0 - s->cent[0],  10, "-a*",  0,  0,  1 },
-																			/* -a (green) axis */
-		{ -5 - s->cent[1],  100 + 5 - s->cent[2], 0 - s->cent[0],  10, "+b*",  1,  1,  0 },
-																			/* +b (yellow) axis */
-	};
+	vrml *wrl;
 
 	if IS_LIST_EMPTY(s->tris)
 		triangulate(s);
 		
-	if ((wrl = fopen(filename,"w")) == NULL) {
-		fprintf(stderr,"Error opening output file '%s'\n",filename);
+	if ((wrl = new_vrml(filename, doaxes, vrml_lab)) == NULL) {
+		fprintf(stderr,"Error creating %s output '%s%s'\n",vrml_format(),filename,vrml_ext());
 		return 2;
 	}
 
-	/* Spit out a VRML 2 Object surface of gamut */
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-  	fprintf(wrl,"children [\n");
-    fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        intensity 0.2\n");
-	fprintf(wrl,"        ambientIntensity 0.1\n");
-	fprintf(wrl,"        direction -1 -1 -1\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        intensity 0.6\n");
-	fprintf(wrl,"        ambientIntensity 0.2\n");
-	fprintf(wrl,"        direction 1 1 1\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 250      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape {\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
-		}
-		fprintf(wrl,"# Axes identification:\n");
-		for (i = 0; i < 6; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", labels[i].x, labels[i].y, labels[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape {\n");
-			fprintf(wrl,"\t\t\tgeometry Text { string [\"%s\"]\n",labels[i].string);
-			fprintf(wrl,"\t\t\t\tfontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
-			                                            labels[i].size);
-			fprintf(wrl,"\t\t\t\t}\n");
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[i].r, labels[i].g, labels[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
-		}
-		fprintf(wrl,"\n");
-	}
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation 0 0 0\n");
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
-	fprintf(wrl,"				ccw FALSE\n");
-	fprintf(wrl,"				convex TRUE\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coord Coordinate { \n");
-	fprintf(wrl,"		            point [			# Verticy coordinates\n");
+	wrl->start_line_set(wrl, 0);
 
 	/* Spit out the point values, in order. */
-	/* Note that a->x, b->y, L->z */
 	for (i = 0; i < s->nv; i++) {
 		double out[3];
 
@@ -5934,34 +5859,35 @@ void *cntx
 			rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
 			gamut_radial2rect(s, cc, rr);
-			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
+			wrl->add_vertex(wrl, 0, cc);
 	
 			rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
 			gamut_radial2rect(s, cc, rr);
-			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
+			wrl->add_vertex(wrl, 0, cc);
 	
 			rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
 			gamut_radial2rect(s, cc, rr);
-			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
+			wrl->add_vertex(wrl, 0, cc);
 	
 			rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
 			gamut_radial2rect(s, cc, rr);
-			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
+			wrl->add_vertex(wrl, 0, cc);
 		}
 
 #else	/* Show point data */
 
 # ifdef SHOW_SPHERE			/* Show surface on sphere */
-		fprintf(wrl,"%f %f %f,\n",s->verts[i]->sp[1], s->verts[i]->sp[2],
-		                           s->verts[i]->sp[0]);
+		wrl->add_vertex(wrl, 0, s->verts[i]->sp);
 # else
-# ifdef SHOW_HULL_PNTS
-		fprintf(wrl,"%f %f %f,\n",s->verts[i]->ch[1], s->verts[i]->ch[2],
-		                           s->verts[i]->ch[0]);
-# else
+#  ifdef SHOW_HULL_PNTS
+		out[0] = s->verts[i]->ch[0] + s->cent[0];
+		out[1] = s->verts[i]->ch[1] + s->cent[1];
+		out[2] = s->verts[i]->ch[2] + s->cent[2];
+		wrl->add_vertex(wrl, 0, out);
+#  else
 		/* Show normal gamut surface */
 		out[0] = s->verts[i]->p[0];
 		out[1] = s->verts[i]->p[1];
@@ -5970,99 +5896,61 @@ void *cntx
 		if (transform)
 			transform(cntx, out, out);		/* Do transform */
 
-		fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
+		wrl->add_vertex(wrl, 0, out);
 
-# endif /* SHOW_HULL_PNTS */
+#  endif /* SHOW_HULL_PNTS */
 # endif /* SHOW_SPHERE */
 
 #endif /* SHOW_BUCKETS */
 
 	}
-	fprintf(wrl,"					]\n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
 
 #ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
 	for (i = 0; i < s->nv; i++) {
 		int j = s->verts[i]->sn;
+		int ix[4];
 		if (!(s->verts[i]->f & GVERT_SET))
 			continue;
-		fprintf(wrl,"%d, %d, %d, %d, -1\n", j * 4, j * 4 + 1, j * 4 + 2, j * 4 + 3);
+		ix[0] = j * 4;
+		ix[1] = j * 4 + 1;
+		ix[2] = j * 4 + 2;
+		ix[3] = j * 4 + 3;
+		wrl->add_quad(wrl, 0, ix); 
 	}
 #else	/* Show gamut triangular surface */
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		fprintf(wrl,"%d, %d, %d, -1\n", tp->v[0]->tn, tp->v[1]->tn, tp->v[2]->tn);
+		int ix[3];
+		ix[0] = tp->v[0]->tn;
+		ix[1] = tp->v[1]->tn;
+		ix[2] = tp->v[2]->tn;
+		wrl->add_triangle(wrl, 0, ix); 
 	} END_FOR_ALL_ITEMS(tp);
 #endif /* SHOW_BUCKETS */
 
-	fprintf(wrl,"				]\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"				colorPerVertex TRUE\n");
-	fprintf(wrl,"		        color Color {\n");
-	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
-
-	/* Spit out the colors for each vertex */
-	for (i = 0; i < s->nv; i++) {
+	{
 		double rgb[3];
-#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
-		if (!(s->verts[i]->f & GVERT_SET))
-#else
-		if (!(s->verts[i]->f & GVERT_TRI))
-#endif
-			continue;
 
 #ifdef COLORED_VRML
-		gamut_Lab2RGB(rgb, s->verts[i]->p);
+		rgb[0] = -1.0;
 #else
 		rgb[0] = rgb[1] = rgb[2] = 1.0;
 #endif
-		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+
 #ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
-		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+		wrl->make_quads(wrl, 0, 0.0, rgb);
+#else  /* !SHOW_BUCKETS */
+		wrl->make_triangles(wrl, 0, 0.0, rgb);
 #endif /* SHOW_BUCKETS */
 	}
-	fprintf(wrl,"					] \n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		    appearance Appearance { \n");
-	fprintf(wrl,"		        material Material {\n");
-	fprintf(wrl,"					transparency 0.0\n");
-	fprintf(wrl,"					ambientIntensity 0.3\n");
-	fprintf(wrl,"					shininess 0.5\n");
-	fprintf(wrl,"				}\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		}	# end Shape\n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
 
 
 	if (s->gawbset && doaxes) {
+		double rgb[3] = { 0.9, 0.9, 0.9 };
 
 		/* Show the gamut white and black points */
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    Transform {\n");
-		fprintf(wrl,"      translation %f %f %f\n",s->ga_wp[1]-s->cent[1], s->ga_wp[2]-s->cent[2], s->ga_wp[0]-s->cent[0]);
-		fprintf(wrl,"      children [\n");
-		fprintf(wrl,"		Shape { \n");
-		fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
-		fprintf(wrl,"        appearance Appearance { material Material { diffuseColor 0.9 0.9 0.9 } }\n");
-		fprintf(wrl,"		} \n");
-		fprintf(wrl,"      ]\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"\n");
-		fprintf(wrl,"    Transform {\n");
-		fprintf(wrl,"      translation %f %f %f\n",s->ga_bp[1]-s->cent[1], s->ga_bp[2]-s->cent[2], s->ga_bp[0]-s->cent[0]);
-		fprintf(wrl,"      children [\n");
-		fprintf(wrl,"		Shape { \n");
-		fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
-		fprintf(wrl,"        appearance Appearance { material Material { diffuseColor 0.9 0.9 0.9 } }\n");
-		fprintf(wrl,"		} \n");
-		fprintf(wrl,"      ]\n");
-		fprintf(wrl,"    }\n");
+		wrl->add_marker(wrl, s->ga_wp, rgb, 2.0);
+		wrl->add_marker(wrl, s->ga_bp, rgb, 2.0);
 	}
 
 	if (docusps && s->cu_inited != 0) {
@@ -6075,30 +5963,17 @@ void *cntx
 			{ 1.0, 0.1, 1.0 }		/* Magenta */
 		};
 
-		for (i = 0; i < 6; i++) {
-			fprintf(wrl,"\n");
-			fprintf(wrl,"    Transform {\n");
-			fprintf(wrl,"      translation %f %f %f\n",s->cusps[i][1]-s->cent[1], s->cusps[i][2]-s->cent[2], s->cusps[i][0]-s->cent[0]);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"		Shape { \n");
-			fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
-			fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", ccolors[i][0],ccolors[i][1],ccolors[i][2]);
-			fprintf(wrl,"		} \n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-		}
+		for (i = 0; i < 6; i++)
+			wrl->add_marker(wrl, s->cusps[i], ccolors[i], 2.0);
 	}
 
 #ifdef TEST_LOOKUP
 	{
 		int i, j;
 		double in[3], out[3];
+		double rgb[3] = { 1.0, 1.0, 1.0 };
 
-		fprintf(wrl,"\n");
-		fprintf(wrl,"Shape {\n");
-		fprintf(wrl,"  geometry PointSet { \n");
-		fprintf(wrl,"    coord Coordinate { \n");
-		fprintf(wrl,"	   point [\n");
+		wrl->start_line_set(wrl, 0);
 
 		for (i = 0; i < 10; i++) {
 			double ss;
@@ -6112,13 +5987,12 @@ void *cntx
 			out[0] = (out[0] - s->cent[0]) * 1.01 + s->cent[0];
 			out[1] = (out[1] - s->cent[1]) * 1.01 + s->cent[1];
 			out[2] = (out[2] - s->cent[2]) * 1.01 + s->cent[2];
-			fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
-		}
-		fprintf(wrl,"      ]\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"  }\n");
-		fprintf(wrl,"} # end shape\n");
 
+			wrl->add_col_vertex(wrl, 0, out, rgb);
+		}
+
+		/* Convert them to a point set */
+		wrl->make_points(wrl, 0);
 	}
 #endif	/* TEST_LOOKUP */
 
@@ -6128,11 +6002,7 @@ void *cntx
 		int i, j;
 		double in[3], out[3];
 
-		fprintf(wrl,"\n");
-		fprintf(wrl,"Shape {\n");
-		fprintf(wrl,"  geometry IndexedLineSet { \n");
-		fprintf(wrl,"    coord Coordinate { \n");
-		fprintf(wrl,"	   point [\n");
+		wrl->start_line_set(wrl, 0);
 
 		for (i = 0; i < NTPTS; i++) {
 			double ss;
@@ -6161,36 +6031,22 @@ void *cntx
 
 			s->nearest(s, out, in);	/* Nearest point on gamut surface */
 
-			fprintf(wrl,"%f %f %f,\n",in[1]-s->cent[1], in[2]-s->cent[2], in[0]-s->cent[0]);
-			fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
+			wrl->add_vertex(wrl, 0, in);
+			wrl->add_vertex(wrl, 0, out);
 		}
 
-		fprintf(wrl,"      ]\n");
-		fprintf(wrl,"    }\n");
-		fprintf(wrl,"  coordIndex [\n");
-
-		for (i = 0; i < NTPTS; i++) {
-			fprintf(wrl,"%d, %d, -1,\n", i * 2, i * 2 + 1);
-		}
-		fprintf(wrl,"    ]\n");
-		fprintf(wrl,"  }\n");
-		fprintf(wrl,"} # end shape\n");
-
+		wrl->make_lines(wrl, 0, 2);
 	}
 #endif	/* TEST_NEAREST */
 
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0) {
-		fprintf(stderr,"Error closing output file '%s'\n",filename);
+	if (wrl->flush(wrl)) {
+		fprintf(stderr,"Error closing output file '%s%s'\n",filename,vrml_ext());
 		return 2;
 	}
+	wrl->del(wrl);
 
 	return 0;
 }
-
 
 /* ----------------------------------- */
 /* Write to a CGATS .gam file */
@@ -6277,7 +6133,7 @@ char *filename
 		if (!(s->verts[i]->f & GVERT_TRI))
 			continue;
 		gam->add_set(gam, 0, s->verts[i]->tn,
-		             s->verts[i]->p[0], s->verts[i]->p[1], s->verts[i]->p[2]);
+					 s->verts[i]->p[0], s->verts[i]->p[1], s->verts[i]->p[2]);
 	}
 
 	gam->add_table(gam, tt_other, 0);	/* Start the second table */
@@ -6370,12 +6226,12 @@ char *filename
 	if (cw >= 0 && cb >= 0) {
 		int ok = 1;
 		if (sscanf(gam->t[0].kdata[cw], "%lf %lf %lf",
-		           &s->cs_wp[0], &s->cs_wp[1], &s->cs_wp[2]) != 3) {
+				   &s->cs_wp[0], &s->cs_wp[1], &s->cs_wp[2]) != 3) {
 			ok = 0;
 		}
 
 		if (sscanf(gam->t[0].kdata[cb], "%lf %lf %lf",
-		           &s->cs_bp[0], &s->cs_bp[1], &s->cs_bp[2]) != 3) {
+				   &s->cs_bp[0], &s->cs_bp[1], &s->cs_bp[2]) != 3) {
 			ok = 0;
 		}
 
@@ -6390,12 +6246,12 @@ char *filename
 	if (gw >= 0 && gb >= 0) {
 		int ok = 1;
 		if (sscanf(gam->t[0].kdata[gw], "%lf %lf %lf",
-		           &s->ga_wp[0], &s->ga_wp[1], &s->ga_wp[2]) != 3) {
+				   &s->ga_wp[0], &s->ga_wp[1], &s->ga_wp[2]) != 3) {
 			ok = 0;
 		}
 
 		if (sscanf(gam->t[0].kdata[gb], "%lf %lf %lf",
-		           &s->ga_bp[0], &s->ga_bp[1], &s->ga_bp[2]) != 3) {
+				   &s->ga_bp[0], &s->ga_bp[1], &s->ga_bp[2]) != 3) {
 			ok = 0;
 		}
 
@@ -6416,7 +6272,7 @@ char *filename
 				break;
 
 			if (sscanf(gam->t[0].kdata[kk], "%lf %lf %lf",
-		           &s->cusps[i][0], &s->cusps[i][1], &s->cusps[i][2]) != 3) {
+				   &s->cusps[i][0], &s->cusps[i][1], &s->cusps[i][2]) != 3) {
 				break;
 			}
 		}
@@ -6577,7 +6433,7 @@ char *filename
 			 || tp2->e[em] != NULL) {
 				fprintf(stderr,".gam file triangle data is not consistent\n");
 				fprintf(stderr,"tp1->e[%d] = 0x%p, tp2->e[%d]= 0x%p\n",en,
-				        (void *)tp->e[en],em,(void *)tp2->e[em]);
+						(void *)tp->e[en],em,(void *)tp2->e[em]);
 				return 1;
 			}
 
@@ -6621,7 +6477,6 @@ double in[3]			/* Lab in */
 	double L, a, b;	/* Lab values */
 	double R, g, t;	/* Radial value */
 	double c;	/* Chromatic length */
-	
 
 	L = in[0] - s->cent[0];	/* Offset value */
 	a = in[1] - s->cent[1];
@@ -6685,76 +6540,9 @@ double in[3]			/* Radius, longitude, lattitude in */
 
 /* -------------------------------------------------- */
 
-/* Convert a gamut Lab value to an RGB value for display purposes */
-void
-gamut_Lab2RGB(double *out, double *in) {
-	double L = in[0], a = in[1], b = in[2];
-	double x,y,z,fx,fy,fz;
-	double R, G, B;
+#if defined(DEBUG_TRIANG) || defined(DEBUG_TRIANG_VRML)
 
-	/* Scale so that black is visible */
-	L = L * (100 - 40.0)/100.0 + 40.0;
-
-	/* First convert to XYZ using D50 white point */
-	if (L > 8.0) {
-		fy = (L + 16.0)/116.0;
-		y = pow(fy,3.0);
-	} else {
-		y = L/903.2963058;
-		fy = 7.787036979 * y + 16.0/116.0;
-	}
-
-	fx = a/500.0 + fy;
-	if (fx > 24.0/116.0)
-		x = pow(fx,3.0);
-	else
-		x = (fx - 16.0/116.0)/7.787036979;
-
-	fz = fy - b/200.0;
-	if (fz > 24.0/116.0)
-		z = pow(fz,3.0);
-	else
-		z = (fz - 16.0/116.0)/7.787036979;
-
-	x *= 0.9642;	/* Multiply by white point, D50 */
-	y *= 1.0;
-	z *= 0.8249;
-
-	/* Now convert to sRGB values */
-	R = x * 3.2410  + y * -1.5374 + z * -0.4986;
-	G = x * -0.9692 + y * 1.8760  + z * 0.0416;
-	B = x * 0.0556  + y * -0.2040 + z * 1.0570;
-
-	if (R < 0.0)
-		R = 0.0;
-	else if (R > 1.0)
-		R = 1.0;
-
-	if (G < 0.0)
-		G = 0.0;
-	else if (G > 1.0)
-		G = 1.0;
-
-	if (B < 0.0)
-		B = 0.0;
-	else if (B > 1.0)
-		B = 1.0;
-
-	R = pow(R, 1.0/2.2);
-	G = pow(G, 1.0/2.2);
-	B = pow(B, 1.0/2.2);
-
-	out[0] = R;
-	out[1] = G;
-	out[2] = B;
-}
-
-
-/* -------------------------------------------------- */
-
-#ifdef DEBUG_TRIANG
-
-/* Write a surface contrsuction diagnostic VRML .wrl file */
+/* Write a surface construction diagnostic .wrl/.x3d/.x3dom file */
 static int write_diag_vrml(
 gamut *s,
 double vv[3],		/* Vertex being added */
@@ -6763,54 +6551,24 @@ tidxs *hixs,		/* verticy indexes of hit triangles */
 gtri *hl			/* Edge hit list (may be NULL) */
 ) {
 	char *filename;
+	int doaxes = 0;
 	int i, j;
 	gtri *tp;		/* Triangle pointer */
-	FILE *wrl;
+	vrml *wrl;
 
 	if (hl)
-		filename = "diag1.wrl";		/* Triangles hit */
+		filename = "diag1");		/* Triangles hit */
 	else
-		filename = "diag2.wrl";		/* Triangles formed */
+		filename = "diag2");		/* Triangles formed */
 
-	if ((wrl = fopen(filename,"w")) == NULL) {
-		fprintf(stderr,"Error opening output file '%s'\n",filename);
+	if ((wrl = new_vrml_vdist(filename, doaxes, vrml_lab, 200.0)) == NULL) {
+		fprintf(stderr,"Error creating vrml object '%s%s'\n",filename,vrml_ext());
 		return 2;
 	}
 
-	/* Spit out a VRML 2 Object surface of gamut */
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-  	fprintf(wrl,"children [\n");
-    fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 200      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation 0 0 0\n");
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
-	fprintf(wrl,"				ccw FALSE\n");
-	fprintf(wrl,"				convex TRUE\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coord Coordinate { \n");
-	fprintf(wrl,"		            point [			# Verticy coordinates\n");
+	wrl->start_line_set(wrl, 0);
 
 	/* Spit out the vertex values, in order. */
-	/* Note that a->x, b->y, L->z */
 	for (i = 0; i < s->nv; i++) {
 		double out[3];
 
@@ -6819,284 +6577,140 @@ gtri *hl			/* Edge hit list (may be NULL) */
 		out[1] = s->verts[i]->ch[1];
 		out[2] = s->verts[i]->ch[2];
 
-		fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]);
+		wrl->add_vertex(wrl, 0, out);
 	}
-	fprintf(wrl,"					]\n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
 
+	/* Create triangles from verticies and set tri color */
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		fprintf(wrl,"%d, %d, %d, -1\n", tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+		int ix[3];
+		double rgb[3] = { 0.7, 0.7, 0.7 };
+
+		ix[0] = tp->v[0]->n;
+		ix[1] = tp->v[1]->n;
+		ix[2] = tp->v[2]->n;
+
+		wrl->add_col_triangle(wrl, 0, ix, rgb);
 	} END_FOR_ALL_ITEMS(tp);
 
 	for (i = 0; i < nh; i++) { 
-		fprintf(wrl,"%d, %d, %d, -1\n", hixs[i].tix[0], hixs[i].tix[1], hixs[i].tix[2]);
+		double rgb[3] = { 0.7, 0.7, 0.7 };
+
+		if (hixs[i].type == 0) {
+			rgb[0] = 0.4; rgb[1] = 1.0; rgb[2] = 0.4;	/* Green for hit */
+		} else if (hixs[i].type == 1) {
+			rgb[0] = 0.4; rgb[1] = 0.4; rgb[2] = 1.0;	/* Blue for extra */
+		} else {
+			rgb[0] = 0.8; rgb[1] = 0.8; rgb[2] = 0.2;	/* Yellow for new */
+		}
+
+		wrl->add_col_triangle(wrl, 0, hixs[i].tix, rgb);
 	}
 
-	fprintf(wrl,"				]\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"				colorPerVertex FALSE\n");
-	fprintf(wrl,"		        color Color {\n");
-	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
+	wrl->make_triangles_vc(wrl, 0, 0.0);
 
-	/* Spit out the colors for each face */
-	tp = s->tris; 
-	FOR_ALL_ITEMS(gtri, tp) {
-		fprintf(wrl,"%f %f %f,\n", 0.7, 0.7, 0.7);
-	} END_FOR_ALL_ITEMS(tp);
-	for (i = 0; i < nh; i++) { 
-		if (hixs[i].type == 0)
-			fprintf(wrl,"%f %f %f,\n", 0.4, 1.0, 0.4);	/* Green for hit */
-		else if (hixs[i].type == 1)
-			fprintf(wrl,"%f %f %f,\n", 0.4, 0.4, 1.0);	/* Blue for extra */
-		else
-			fprintf(wrl,"%f %f %f,\n", 0.8, 0.8, 0.2);	/* Yellow for new */
+	{
+		double pos[3], rgb[3];
+
+		/* center of gamut */
+		pos[0] = 0.0; pos[1] = 0.0, pos[2] = 0.0;
+		rgb[0] = 1.0; rgb[1] = 1.0, rgb[2] = 0.0;	/* Yellow */
+		wrl->add_marker(wrl, pos, rgb, 1.5);
+
+		/* vertex being added */
+		rgb[0] = 1.0; rgb[1] = 0.0, rgb[2] = 0.0;	/* Red */
+		wrl->add_marker(wrl, vv, rgb, 1.5);
 	}
-	fprintf(wrl,"					] \n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"		    }	# end IndexedFaceSet\n");
-
-	fprintf(wrl,"		    appearance Appearance { \n");
-	fprintf(wrl,"		        material Material {\n");
-	fprintf(wrl,"					transparency 0.0\n");
-	fprintf(wrl,"					ambientIntensity 0.3\n");
-	fprintf(wrl,"					shininess 0.5\n");
-	fprintf(wrl,"				}\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		}	# end Shape\n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    } # end of transform\n");
-
-	/* center of gamut */
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation %f %f %f\n",0.0, 0.0, 0.0);
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		 geometry Sphere { radius 1.5 }\n");
-	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 1.0, 0.0);
-	fprintf(wrl,"		} \n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-
-	/* vertex being added */
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation %f %f %f\n",vv[1], vv[2], vv[0]);
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		 geometry Sphere { radius 1.5 }\n");
-	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 0.0, 0.0);
-	fprintf(wrl,"		} \n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-
 
 	/* Verticies for Polygon edges, marked by directional cones */
 	if (hl != NULL) {
-		double base[3] = { 0.0, 0.0, 1.0 };		/* Default orientation of cone is b axis */
 		tp = hl; 
 		FOR_ALL_ITEMS(gtri, tp) {
-			double len;
-			double loc[3];
-			double vec[3];
-			double axis[3];		/* Axis to rotate around */
-			double rot;			/* In radians */
-
-//printf("~1 edge vert %d to %d\n",tp->v[0]->n, tp->v[1]->n);
-//printf("~1 edge %f %f %f to %f %f %f\n",
-//tp->v[0]->ch[0], tp->v[0]->ch[1], tp->v[0]->ch[2],
-//tp->v[1]->ch[0], tp->v[1]->ch[1], tp->v[1]->ch[2]);
-
-			icmAdd3(loc, tp->v[1]->ch, tp->v[0]->ch);
-			icmScale3(loc, loc, 0.5);
-			icmSub3(vec, tp->v[1]->ch, tp->v[0]->ch);
-			len = icmNorm3(vec);
-
-			if (len < 1.0)
-				len = 1.0;
-
-			icmNormalize3(base, base, 1.0);
-			icmNormalize3(vec, vec, 1.0);
-			icmCross3(axis, base, vec);
-			rot = icmDot3(base, vec);
-//printf("~1 Axis = %f %f %f\n",axis[0],axis[1],axis[2]);
-			if (icmNorm3sq(axis) < 1e-10) {		/* 0 or 180 degrees */
-				double base2[3];
-				int mxi = 0;
-				base2[0] = vec[1];		/* Comute vector in a different direction */
-				base2[1] = vec[2];
-				base2[2] = vec[0];
-				for (j = 1; j < 3; j++) {
-					if (fabs(base2[j]) > fabs(base2[mxi])) 
-						mxi = j;
-				}
-				base2[mxi] = -base2[mxi];
-					
-				icmCross3(axis, base2, vec);
-				if (icmNorm3sq(axis) < 1e-10) {		/* 0 or 180 degrees */
-					error("VRML rotate axis still too small");
-				}
-				if (rot < 0.0)
-					rot = 3.1415926;
-				else
-					rot = 0.0;			
-			} else {
-				rot = acos(rot);
-//printf("~1 rotation %f\n",rot);
-			}
-
-			fprintf(wrl,"\n");
-			fprintf(wrl,"    Transform {\n");
-			fprintf(wrl,"      rotation %f %f %f %f\n",axis[1], axis[2], axis[0], rot);
-			fprintf(wrl,"      translation %f %f %f\n",loc[1], loc[2], loc[0]);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"		Shape { \n");
-			fprintf(wrl,"		 geometry Cone { bottomRadius 0.5 height %f }\n",len);
-			fprintf(wrl,"        appearance Appearance { material Material { diffuseColor 0.7 0.0 1.0 } }\n");
-			fprintf(wrl,"		} \n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
+			double rgb[3] = { 0.7, 0.0, 1.0 }; 
+			wrl->add_cone(wrl, tp->v[0]->ch, tp->v[1]->ch, rgb, 0.5);
 		} END_FOR_ALL_ITEMS(tp);
 	}
 
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0) {
-		fprintf(stderr,"Error closing output file '%s'\n",filename);
+	if (wrl->flush(wrl) != 0) {
+		fprintf(stderr,"Error closing output file '%s%s'\n",filename,vrml_ext());
 		return 2;
 	}
 
 	return 0;
 }
 
-#endif /* DEBUG_TRIANG */
+#endif /* DEBUG_TRIANG_VRML */
 
 
 #ifdef DEBUG_SPLIT_VRML
 
-/* Write a triangle split diagnostic VRML .wrl file */
+/* Write a triangle split diagnostic .wrl/.x3d/.x3dom file */
 static int write_split_diag_vrml(
 gamut *s,
 gtri **list,	/* Triangle list */
 int llen		/* Number of triangles in the list */
 ) {
-	char *filename;
 	int i, j;
-	FILE *wrl;
+	int doaxes = 0;
+	vrml *wrl;
 
-	filename = "diag3.wrl";		/* Triangles split */
-
-	if ((wrl = fopen(filename,"w")) == NULL) {
-		fprintf(stderr,"Error opening output file '%s'\n",filename);
+	if ((wrl = new_vrml("diag3", doaxes, vrml_lab)) == NULL) {
+		fprintf(stderr,"Error creating %s object '%s%s'\n",vrml_format(),filename,vrml_ext());
 		return 2;
 	}
 
-	/* Spit out a VRML 2 Object surface of gamut */
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-  	fprintf(wrl,"children [\n");
-    fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        ambientIntensity 0.3           # Ambient light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 5      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation 0 0 0\n");
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
-	fprintf(wrl,"				ccw FALSE\n");
-	fprintf(wrl,"				convex TRUE\n");
-	fprintf(wrl,"				solid FALSE\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coord Coordinate { \n");
-	fprintf(wrl,"		            point [			# Verticy coordinates\n");
+	wrl->start_line_set(wrl, 0);
 
 	/* Spit out the vertex values, in order. */
 	for (i = 0; i < llen; i++) {
-		fprintf(wrl,"%f %f %f,\n",list[i]->v[0]->sp[0], list[i]->v[0]->sp[1], list[i]->v[0]->sp[2]);
-		fprintf(wrl,"%f %f %f,\n",list[i]->v[1]->sp[0], list[i]->v[1]->sp[1], list[i]->v[1]->sp[2]);
-		fprintf(wrl,"%f %f %f,\n",list[i]->v[2]->sp[0], list[i]->v[2]->sp[1], list[i]->v[2]->sp[2]);
-	}
-	fprintf(wrl,"					]\n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
+		double pos[3];
 
-	for (i = 0; i < llen; i++) {
-		fprintf(wrl,"%d, %d, %d, -1\n", i * 3 + 0, i * 3 + 1, i * 3 + 2);
-	}
-	fprintf(wrl,"				]\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"				colorPerVertex FALSE\n");
-	fprintf(wrl,"		        color Color {\n");
-	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
+		for (j = 0; j < 3; j++) {
+	
+			pos[0] = 100.0 * list[i]->v[j]->sp[0];
+			pos[1] = 100.0 * list[i]->v[j]->sp[1];
+			pos[2] = 100.0 * list[i]->v[j]->sp[2];
 
-	/* Spit out the colors for each face */
+			wrl->add_vertex(wrl, 0, pos);
+		}
+	}
+
+	/* Triangle faces and colors */
 	for (i = 0; i < llen; i++) {
+		int ix[3];
+		double rgb[3];
+
+		ix[0] = i * 3 + 0;
+		ix[1] = i * 3 + 1;
+		ix[2] = i * 3 + 2;
+
 		if (list[i]->bsort == 1) {	/* Positive */
-			fprintf(wrl,"%f %f %f,\n", 1.0, 0.3, 0.3);		/* Red */
+			rgb[0]= 1.0; rgb[1] = 0.3; rgb[2] = 0.3;		/* Red */
 		} else if (list[i]->bsort == 2) {	/* Negative */
-			fprintf(wrl,"%f %f %f,\n", 0.3, 1.0, 0.3);		/* Green */
+			rgb[0]= 0.3; rgb[1] = 1.0; rgb[2] = 0.3;		/* Green */
 		} else if (list[i]->bsort == 3) {	/* Both */
-			fprintf(wrl,"%f %f %f,\n", 1.0, 1.0, 0.3);		/* Yellow */
+			rgb[0]= 1.0; rgb[1] = 1.0; rgb[2] = 0.3;		/* Yellow */
 		} else {	/* Neither */
-			fprintf(wrl,"%f %f %f,\n", 0.3, 0.3, 1.0);		/* Blue */
-		} 
+			rgb[0]= 0.3; rgb[1] = 0.3; rgb[2] = 1.0;		/* Blue */
+		}
+		wrl->add_col_triangle(wrl, 0, ix, rgb);
 	}
-	fprintf(wrl,"					] \n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"		    }	# end IndexedFaceSet\n");
 
-	fprintf(wrl,"		    appearance Appearance { \n");
-	fprintf(wrl,"		        material Material {\n");
-	fprintf(wrl,"					transparency 0.0\n");
-	fprintf(wrl,"					ambientIntensity 0.3\n");
-	fprintf(wrl,"					shininess 0.5\n");
-	fprintf(wrl,"				}\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		}	# end Shape\n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    } # end of transform\n");
+	wrl->make_triangles_vc(wrl, 0, 0.0);
 
 	/* center of gamut */
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation %f %f %f\n",0.0, 0.0, 0.0);
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		 geometry Sphere { radius 0.05 }\n");
-	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 1.0, 0.0);
-	fprintf(wrl,"		} \n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
+	{
+		double pos[3] = { 0.0, 0.0, 0.0 };
+		double rgb[3] = { 1.0, 1.0, 0.0 };	/* Yellow */
 
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
+		wrl->add_marker(wrl, pos, rgb, 5.0);
+	}
 
-	if (fclose(wrl) != 0) {
-		fprintf(stderr,"Error closing output file '%s'\n",filename);
+	if (wrl->flush(wrl) != 0) {
+		fprintf(stderr,"Error closing output file '%s%s'\n",filename,vrml_ext());
 		return 2;
 	}
+	wrl->del(wrl);
 
 	return 0;
 }

@@ -43,6 +43,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "numlib.h"
+#include "ui.h"
 
 void
 usage(char *mes) {
@@ -200,7 +201,7 @@ int main(int argc, char *argv[])
 	cmy->add_other(cmy, "ECI2002");			/* Gretag/Logo Target file */
 	cmy->add_other(cmy, ""); 				/* Wildcard */
 	if (cmy->read_name(cmy, devname))
-		error ("Read: Can't read dev file '%s'. Unknown format or corrupted file ? (%s)",devname,cmy->err);
+		error ("Read: Can't read dev file '%s'. Unknown format, missing or corrupted file ? (%s)",devname,cmy->err);
 	if (cmy->ntables != 1)
 		warning("Input file '%s' doesn't contain exactly one table",devname);
 
@@ -291,7 +292,7 @@ int main(int argc, char *argv[])
 	ncie->add_other(ncie, "ECI2002"); 		/* Gretag/Logo Target file */
 	ncie->add_other(ncie, ""); 				/* Wildcard */
 	if (ncie->read_name(ncie, ciename))
-		error ("Read: Can't read cie file '%s'. Unknown format or corrupted file ?",ciename);
+		error ("Read: Can't read cie file '%s'. Unknown format, missing or corrupted file ?",ciename);
 	if (ncie->ntables != 1)
 		warning("Input file '%s' doesn't contain exactly one table",ciename);
 
@@ -365,7 +366,7 @@ int main(int argc, char *argv[])
 		spec->add_other(spec, "ECI2002"); 		/* Gretag/Logo Target file */
 		spec->add_other(spec, ""); 				/* Wildcard */
 		if (spec->read_name(spec, specname))
-			error ("Read: Can't read spec file '%s'. Unknown format or corrupted file ?",specname);
+			error ("Read: Can't read spec file '%s'. Unknown format, missing or corrupted file ?",specname);
 		if (spec->ntables != 1)
 			warning("Input file '%s' doesn't contain exactly one table",specname);
 

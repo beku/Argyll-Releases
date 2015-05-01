@@ -31,11 +31,13 @@ struct _gammap {
 	rspl *map;			/* Rotated, L mapped Lab -> Lab gamut map */
 	double imin[3], imax[3];	/* Input range limits of map */
 
+	double tv[3];		/* Inversion target value */
 /* Public: */
 
 	/* Methods */
 	void (*del)(struct _gammap *s);			/* Free ourselves */
 	void (*domap)(struct _gammap *s, double *out, double *in);	/* Do the mapping */
+	void (*invdomap1)(struct _gammap *s, double *out, double *in);	/* Do the inverse mapping */
 
 }; typedef struct _gammap gammap;
 

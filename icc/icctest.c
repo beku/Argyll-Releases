@@ -160,7 +160,7 @@ main(
 		}
 
 		/*
-			Would normally call icco->free(wr_icco);
+			Would normally call wr_icco->del(wr_icco);
 			but leave it, so that we can verify the read.
 		*/
 

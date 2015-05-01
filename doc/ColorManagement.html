@@ -1,7 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
   <head>
-    <meta content="text/html; charset=ISO-8859-1"
+    <meta content="text/html; charset=windows-1252"
       http-equiv="Content-Type">
     <title>Color Management</title>
     <meta content="Graeme W. Gill" name="author">
@@ -30,8 +30,8 @@
     with the interaction of human vision and devices, allowing for such
     fundamental vision characteristics as white point adaptation and
     other phenomena. It should also allow the human end purposes to
-    influence the choice between&nbsp; tradeoffs in dealing with
-    practical device limitations.<br>
+    influence the choice of&nbsp; tradeoffs in dealing with practical
+    device limitations.<br>
     <br>
     The key means of implementing color management is to have a way of
     relating what we see, to the numbers that each device uses to
@@ -40,13 +40,14 @@
     The human eye is known to have 3 type of receptors responsible for
     color vision, the long, medium and short wavelength receptors.
     Because there are 3 receptors, human color perception is a 3
-    dimensional phenomena, and therefore at least 3 channels are
-    necessary when communicating color information. Any device capable
-    of sensing or reproducing color must therefore have at least 3
-    channels, and any numerical representation of a full range of colors
-    must have at least 3 components and hence may be interpreted as a
-    point in a 3 dimensional space. Such a representation is referred to
-    as a <span style="font-weight: bold;">Color Space</span>. <br>
+    dimensional phenomena, and therefore at least 3 information channels
+    are necessary when communicating color information. Any device
+    capable of sensing or reproducing color must therefore have at least
+    3 channels, and any numerical representation of a full range of
+    colors must have at least 3 components and hence may be interpreted
+    as a point in a 3 dimensional space. Such a representation is
+    referred to as a <span style="font-weight: bold;">Color Space</span>.
+    <br>
     <br>
     Typically color capture and output devices expose their native color
     spaces in their hardware interfaces. The native color space is
@@ -69,13 +70,13 @@
       style="font-weight: bold;">CMYK</span>). This is because a Cyan
     filters out Red wavelengths, Magenta filters out Green wavelengths,
     and Yellow filters out Blue wavelengths, allowing these colorants to
-    independently control how much RGB is emitted. Because it's
-    impossible to make filters that perfectly block C, M or Y
-    wavelengths without overlapping each other, C+M+Y filters together
-    tend to let some light through, making for an imperfect black.
-    Augmenting with an additional Black filter allows improving Black,
-    but the extra channel greatly complicates the choice of values to
-    create any particular color. <br>
+    independently control how much RGB is reflected or transmitted.
+    Because it's impossible to make filters that perfectly block C, M or
+    Y wavelengths without overlapping each other, C+M+Y filters together
+    tend to let some light from broadband light sources through, making
+    for an imperfect black. Augmenting with an additional Black filter
+    allows improving Black, but the extra channel greatly complicates
+    the choice of colorant values to create any particular color. <br>
     <br>
     Many color devices have mechanisms for changing the way they respond
     to or reproduce color, and such features are called <span
@@ -133,9 +134,8 @@
       style="font-weight: bold;">Named</span> profiles represent color <span
       style="text-decoration: underline;">anchor points</span>. <span
       style="font-weight: bold;">Device Link</span> and <span
-      style="font-weight: bold;">Abstract</span> profiles represent <span
-      style="text-decoration: underline;">journeys</span> between anchor
-    points.<br>
+      style="font-weight: bold;">Abstract</span> profiles represent <u>connections</u>
+    or journeys between anchor points.<br>
     <br>
     <span style="font-weight: bold;">Device</span><br>
     <br>
@@ -184,9 +184,8 @@
     Two basic models can be used in ICC profiles, a <span
       style="font-weight: bold;">Matrix/shaper</span> model and a <span
       style="font-weight: bold;">cLUT</span> (Color Lookup Table) model.
-    Models often contain several optional processing elements that are
-    applied one after the other in order to provide an overall
-    transformation. <br>
+    Models often contain several processing elements that are applied
+    one after the other in order to provide an overall transformation. <br>
     <br>
     The Matrix/Shaper model consists of a set of per channel lookup
     curves followed by a 3x3 matrix. The curves may be defined as a
@@ -234,8 +233,8 @@
     common white point (D50), to facilitate ease of matching colors
     amongst devices with different white points. Other viewing condition
     effects (ie. image luminance level, viewing surround luminance and
-    flare/glare) can be modeled using (for example) using CIECAM02 to
-    modify XYZ values.<br>
+    flare/glare) can be modeled using (for example) CIECAM02 to modify
+    XYZ values.<br>
     <br>
     Another limitation relates to spectral assumptions. CIE XYZ uses a
     Standard Observer to convert spectral light values into XYZ values,

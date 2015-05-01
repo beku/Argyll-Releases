@@ -1,6 +1,4 @@
 
-/* Version with Lab bt.1886 */
-
 /* 
  * collink
  *
@@ -25,9 +23,22 @@
  * Abstract link support intent doesn't work properly for anything
  * other than absolute. This should really be fixed.
  *
+ * It would be good to add an option to allow a smaller destination
+ * gamut than the destination colorspace. This would allow applying
+ * a gamut mapping while staying in a wide gamut space. Do this
+ * in a similar way to the source + image gamut.
+ * ie. "-S src.gam,dst.gam"
+ *
+ * TV YCbCr clipping should preserve hue.
+ *
  */
 
 /* NOTES:
+
+	Video :- current WTW TV encoding is clipped, not passed through with extrapolation.
+	If the display does a per component clipping, then passing through is probably
+	a bad thing, and cliping is the right behaviour, and just pass
+	the sync level though.
 
 	Normally the device side per channel curves are copied from
 	the source profiles to the link profile on the assumption that
@@ -83,22 +94,71 @@
 
  */
 
+/*
+	Video encoding:
+
+	ArgyllCMS represents device values in a FP normalised form,
+	where 0.0 corresponds to the smallest valid device encoding,
+	and 1.0 corresponds to the largest valid device encoding.
+
+	For normal device values this means that 0.0 corresponds
+	with 0, and 1.0 corresponds with 2^bits-1.
+
+	For video this means that 0.0 corresponds with 0,
+	and 1.0 corresponds with (2^8-1) * 2^(bits-8),
+	with values above this regarded as aliases for
+	the maximum encoded values (ie. clipped/clamped).
+	Suitable care needs to be taken when converting
+	ArgyllCMS normalized numbers to/from video encoded
+	binary values. Because the full range and Video
+	encoding valid ranges coincide for 8 bits,
+	the 8 bit nomenclature and FP values are used
+	internally to defined the black and white points
+	for normalised video values.
+
+	There are additional complications with video encoding
+	when interacting with cLUTs that have a resolution
+	of less that 256. From an accuracy point of
+	view it is highly desirable that the black and possibly
+	white points coincide with a cLUT node.
+
+	Using cLUTs that are implemented using FP or high precision
+	math, the best way of achieving this is to use a piecewise
+	mapping of the FP values 0.0 bp wp 1.0 to
+	0.0 cLUT_bp cLUT_wp 1.0, thereby preserving the
+	full encoding range in an encoding agnostic fashion.
+
+    External cLUTs that are implemented using integer logic
+    (ie, in HW, such as the eeColor) may choose to cope
+    with this probem in a different way, i.e. by
+    scaling against a value above the largest valid
+    device encoding. For instance, cLUTs of resolution
+    65 would be normalised to 65 rather than the usual 64,
+    and a 16 bit encoding would be normalised to
+    65536 rather than 65289, thereby lining the black
+    point encoded value up with a cLUT node as well
+    as making the normalised values independent
+    of the encoding bit depth. This implies that
+    the maximum valid encoding falls short of the
+    last cLUT entry.
+
+*/
+
 #undef USE_MERGE_CLUT_OPT	/* [Undef] When using inverse A2B table, merge the output luts */
 							/* with the clut for faster operation, and clipping in */
 							/* Jab space. Turned off because it affects the accuracy too much, */
 							/* and xicc handles Jab clip without this now. */
 
+#define USE_APXLS			/* [Define] Use least squares approximation setting cLUT */
 #define USE_CAM_CLIP_OPT	/* [Define] Clip out of gamut in CAM space rather than XYZ or L*a*b* */
 #define ENKHACK				/* [Define] Enable K hack code */
 #undef WARN_CLUT_CLIPPING	/* [Undef] Print warning if setting clut clips */
 
-#undef DEBUG		/* Report values of each sample transformed */
-#undef DEBUGC 		/* ie "if (tt)" */		/* Debug condition */
-#undef DEBUG_ONE	/* test a single value out. Look for DBGNO to set value. */
-#undef NEUTKDEBUG	/* print info about neutral L -> K mapping */
+#undef DEBUG		/* [Und] Report values of each sample transformed */
+#undef DEBUGC 		/* [Und] ie "if (tt)" */		/* Debug condition */
+#undef DEBUG_ONE	/* [Unf] test a single value out. Look for DBGNO to set value. */
+#undef NEUTKDEBUG	/* [Unf] print info about neutral L -> K mapping */
 
-
-#undef LINTERP_OR			/* Use simple extrapolation of Video encoded overrage values */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,9 +172,11 @@
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
+#include "bt1886.h"
 #include "gamut.h"
 #include "gammap.h"
 #include "vrml.h"
+#include "ui.h"
 
 void usage(char *diag, ...) {
 	int i;
@@ -138,7 +200,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
 //	fprintf(stderr," -q fmsu         Speed - Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -r res          Override clut res. set by -q\n");
-	fprintf(stderr," -n              Don't preserve device linearization curves in result\n");
+	fprintf(stderr," -n [i|o]        Don't preserve device linearization curves in result\n");
 	fprintf(stderr," -f              Special :- Force neutral colors to be K only output\n");
 	fprintf(stderr," -fk             Special :- Force K only neutral colors to be K only output\n");
 	fprintf(stderr," -F              Special :- Force all colors to be K only output\n");
@@ -164,7 +226,7 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"              %s\n",gmi.desc);
 	}
 	fprintf(stderr," -w [J,a,b]      Use forced whitepoint hack [optional target point]\n");
-//	fprintf(stderr," -W J,a,b        Forced whitepoint adjustment by delta Jab\n");
+	fprintf(stderr," -b              Use RGB->RGB forced black point hack\n");
 	fprintf(stderr," -c viewcond     set source viewing conditions for %s,\n",icxcam_description(cam_default));
 	fprintf(stderr,"                 either an enumerated choice, or a parameter\n");
 	fprintf(stderr," -d viewcond     set destination viewing conditions for %s,\n",icxcam_description(cam_default));
@@ -203,14 +265,16 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -3 flag         Create \"3DLut\" output file as well as devlink\n");
 	fprintf(stderr,"     e            eeColor .txt file\n");
 	fprintf(stderr,"     m            MadVR .3dlut\t file\n");
-	fprintf(stderr," -I b            Apply BT.1886-like mapping with effective gamma 2.2 to input\n");
-	fprintf(stderr," -I b:g.g        Apply BT.1886-like mapping with effective gamma g.g to input\n");
-	fprintf(stderr," -I B            Apply BT.1886 mapping with technical gamma 2.4 to input\n");
-	fprintf(stderr," -I B:g.g        Apply BT.1886 mapping with technical gamma g.g to input\n");
+	fprintf(stderr,"     c            IRIDAS .cube file\n");
+	fprintf(stderr," -I B            Use BT.1886 source EOTF with technical gamma 2.4\n");
+	fprintf(stderr," -I b:g.g        Use BT.1886-like source EOTF with effective gamma g.g\n");
+	fprintf(stderr," -I b:p.p:g.g    Use effective gamma g.g source EOTF with p.p prop. output black point offset\n");
+	fprintf(stderr," -I g:g.g        Use effective gamma g.g source EOTF with all output black point offset\n");
 	fprintf(stderr," -e flag         Video encode input as:\n");
 	fprintf(stderr," -E flag         Video encode output as:\n");
 	fprintf(stderr,"     n            normal 0..1 full range RGB levels (default)\n");
 	fprintf(stderr,"     t            (16-235)/255 \"TV\" RGB levels\n");
+	fprintf(stderr,"     T            (16-235)/255 \"TV\" RGB levels, clip WTW [Input Only]\n");
 	fprintf(stderr,"     6            Rec601 YCbCr SD (16-235,240)/255 \"TV\" levels\n");
 	fprintf(stderr,"     7            Rec709 1125/60Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
 	fprintf(stderr,"     5            Rec709 1250/50Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
@@ -218,36 +282,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"     C            Rec2020 Constant Luminance YCbCr UHD (16-235,240)/255 \"TV\" levels\n");
 	fprintf(stderr,"     x            xvYCC Rec601 YCbCr Rec709 Prims. SD (16-235,240)/255 \"TV\" levels\n");
 	fprintf(stderr,"     X            xvYCC Rec709 YCbCr Rec709 Prims. HD (16-235,240)/255 \"TV\" levels\n");
-	fprintf(stderr," -P              Create gamut gammap.wrl diagostic\n");
+	fprintf(stderr," -P              Create gamut gammap%s diagostic\n",vrml_ext());
 	exit(1);
 }
-
-/* ------------------------------------------- */
-
-#ifdef NEVER
-/* If video encoding is being used, the edge of the video range */
-/* may not fall on a gid boundary, leading to innacuracies */
-/* in black, white, or the saturated colors. */
-/* To fix this, we notice which gid values just get clipped */
-/* by the video encoding, and after the grid is complete, */
-/* do a fixup pass to set the grid value to that needed */
-/* to make the edge value perferct. */
-
-/* For the eeColor wich has a fixed grod res. of 65, */
-/* the Luminance range 16-235 lands perfectly on a grid point, */
-/* and the CbCr maximum value of 240 missed by 1/256, */
-/* so we haven't yet implemented this fixup */
-
-/* Instead we are just tweaking the cLUT values of the black */
-/* point to avoid any error at this critical value. */
-
-typedef struct {
-	int clip;			/* Clip mask */
-	int ix[MXDI];		/* Index of the grid point that was clipped */
-	double in[MXDI];	/* grid value that was clipped */
-	double out[MXDO];	/* clipped value */
-} edgepoints;
-#endif
 
 /* ------------------------------------------- */
 /* structures to support icc calbacks */
@@ -276,20 +313,23 @@ struct _profinfo {
 	int lcurve;					/* 1 to apply a Y like to L* curve for XYZ Matrix profiles */
 								/* 2 to apply a Y to L* curve for XYZ space */
 	int tvenc;					/* 0 = full range RGB, 1 = RGB Video Level encoding, */
-								/* 2 = Rec601 YCbCr encoding, 3 = Rec709 1150/60/2:1 YCbCr encoding */
-								/* 4 = Rec709 1250/50/2:1 YCbCr encoding */
-								/* 5 = Rec2020 Non-constant Luminance YCbCr encoding */
-								/* 6 = Rec2020 Constant Luminance YCbCr encoding */
-								/* 7 = xvYCC with Rec601 YCbCr encoding with Rec709 primaries */
-								/* 8 = xvYCC with Rec709 YCbCr encoding with Rec709 primaries */
+								/* 1 = RGB Video Level encoding, */
+								/* 3 = Rec601 YCbCr encoding, */
+								/* 4 = Rec709 1150/60/2:1 YCbCr encoding */
+								/* 5 = Rec709 1250/50/2:1 YCbCr encoding */
+								/* 6 = Rec2020 Non-constant Luminance YCbCr encoding */
+								/* 7 = Rec2020 Constant Luminance YCbCr encoding */
+								/* 8 = xvYCC with Rec601 YCbCr encoding with Rec709 primaries */
+								/* 9 = xvYCC with Rec709 YCbCr encoding with Rec709 primaries */
 								/* (We save Video YCbCr as "RGB" space ICC profile) */
-	int bt1886;					/* 1 to apply BT.1886 black point & effective gamma to input */
-								/* 2 to apply BT.1886 black point & technical gamma to input */
+	int tvclip;					/* Clip rather than extrapolate */
+	int bt1886;                 /* 1 to apply input gamma curve using effective gamma */
+								/* 2 to apply input gamma curve using technical gamma */
+	double outoprop;			/* Proportion of black output offset, 0.0 .. 1.0. 0.0 == BT.1886 */
 	double egamma;				/* effective gamma to ain for */
 	double tgamma;				/* technical gamma to ain for */
 	bt1886_info bt;				/* BT.1886 adjustment info */
 	double rgb_bk[3];			/* Linear light input RGB black to bend to */		
-	double bt_bk[3];			/* Input profile bt.1886 modified black point in gamut map space */
 	double wp[3];				/* Lab/Jab white point for profile used by wphack & xyzscale */
 	icxLuBase *b2aluo;			/* B2A lookup for inking == 7 */
 }; typedef struct _profinfo profinfo;
@@ -298,7 +338,7 @@ struct _profinfo {
 struct _clink {
 	/* Overall options */
 	int verb;
-	int gamdiag;	/* nz, create gammap.wrl diagnostic */
+	int gamdiag;	/* nz, create gammap diagnostic */
 	int total, count, last;	/* Progress count information */
 	int mode;		/* 0 = simple mode, 1 = mapping mode, 2 = mapping mode with inverse A2B */
 	int quality;	/* 0 = low, 1 = medium, 2 = high, 3 = ultra */
@@ -307,6 +347,7 @@ struct _clink {
 	int dst_kbp;	/* nz = Use K only black point as dst gamut black point */
 	int dst_cmymap;	/* masks C = 1, M = 2, Y = 4 to force 100% cusp map */
 	int tdlut;		/* nz = 3DLut output, 1 = eeColor format, 2 = MadVR format */
+					/*                    3 = .cube format */
 
 	icColorSpaceSignature pcsor;	/* PCS to use between in & out profiles */
 
@@ -315,8 +356,10 @@ struct _clink {
 	int cmyhack;	/* CMY 100% colorant map though hack, 1 = C, 2 = M, 4 = Y */
 	rspl *pcs2k;	/* PCS L to K' lookup for nhack */
 	int wphack;		/* 0 = off, 1 = hack to map input wp to output wp, 2 = to hwp[] */
+	int rgbbkhack;	/* 0 = off, 1 = hack to map input bp to output bp  (RGB -> RGB only) */
 	double hwp[3];	/* hack destination white point in PCS space */
 	int wphacked;	/* Operation flag, set nz if white point was translated */
+	int bkhacked;	/* Operation flag, set nz if black was translated */
 	int rel_oride;	/* Relative override flag */
 
 	icmFile *abs_fp;	/* Abstract profile transform */
@@ -336,9 +379,7 @@ struct _clink {
 	icxGMappingIntent gmi;
 	gammap *map;	/* Gamut mapping */
 	gammap *Kmap;	/* Gamut mapping K in to K out nhack == 2 and K in to K out */
-	
-//	edgepoints *epl;	/* Edge point list for fixups when in.tvenc */
-						/* we need 2 * di * gres ^ (di-1) entries max. */
+
 
 	/* Per profile setup information */
 	profinfo in;
@@ -410,6 +451,59 @@ static void l2y_curve(double *out, double *in, int isXYZ) {
 
 /* ------------------------------------------- */
 
+#ifndef NEVER
+
+/* Clip a value to the RGB Video range 16..235 RGB. */
+/* Clip the incoming value clip[] in place.  */
+/* Return the uncliped value in unclipped[] */
+/* Return a bit mask of the channels that have/would clip, */
+/* and the full value in the clip direction in full[]. */
+/* Scale all non-black values to avoid positive clipping and */
+/* Return the restoring scale factor (> 1.0) if this has occured. */
+static int clipVidRGB(double *pscale, double full[3], double unclipped[3], double clip[3]) {
+	int i, os = 0;
+	double mx = -1.0, scale = 1.0;
+
+	/* Locate the channel with the largest value */
+	for (i = 0; i < 3; i++) {
+		unclipped[i] = clip[i];
+		if (clip[i] > mx)
+			mx = clip[i];
+	}
+	/* One channel positively clipping */
+	if (mx > (235.0/255.0)) {
+		scale = ((235.0-16.0)/255.0)/(mx - (16.0/255.0));
+
+		/* Scale all non-black value down towards black, to avoid clipping */
+		for (i = 0; i < 3; i++) {
+			/* Note if channel would clip in itself */ 
+			if (clip[i] > (235.0/255.0)) {
+				full[i] = 1.0;
+				os |= (1 << i);
+			}
+			if (clip[i] > (16.0/255.0))
+				clip[i] = (clip[i] - 16.0/255.0) * scale + 16.0/255.0;
+		}
+	}
+
+	/* See if any values negatively clip */
+	for (i = 0; i < 3; i++) {
+		if (clip[i] < (16.0/255.0)) {
+			clip[i] = (16.0/255.0);
+			full[i] = 0.0;
+			os |= (1 << i);
+		}
+	}
+
+	scale = 1.0/scale;
+	if (pscale != NULL)
+		*pscale = scale;
+
+	return os;
+}
+
+#else
+
 /* Clip a value to the RGB Video range 16..235 RGB */
 /* Return a bit mask of the channels that have clipped */
 /* Clip the incoming value clip[] in place  */
@@ -431,6 +525,7 @@ static int clipVidRGB(double full[3], double unclipped[3], double clip[3]) {
 	}
 	return os;
 }
+#endif
 
 /* Clip a value to the YCbCr range range 16..235, 16..240 */
 /* Return a bit mask of the channels that have clipped */
@@ -533,11 +628,98 @@ static void xvYCC_fwd_matrix(double *out, double *in) {
 }
 
 /* ======================================================= */
+/* cLUT Input value tweaks to make Video emcoded black land on */
+/* 65 res grid nodes. This should help 33 and 17 res cLUTs too*/
+
+/* This also makes the cLUT nodes line up with the eeColor cLUT nodes. */
+
+static void VidRGB_to_cLUT65(double out[3], double in[3]) {
+	int i;
+	for (i = 0; i < 3; i++) {
+		if (in[i] <= (236.0/255.0))		/* Scale up to near black point */
+			out[i] = in[i] * 255.0/256.0;
+		else
+			out[i] = 1.0 - (1.0 - in[i]) * (1.0 - 236.0/256.0) / (1.0 - 236.0/255.0);
+	}
+}
+
+static void cLUT65_to_VidRGB(double out[3], double in[3]) {
+	int i;
+	for (i = 0; i < 3; i++) {
+		if (in[i] <= (236.0/256.0))		/* Scale up to near black point */
+			out[i] = in[i] * 256.0/255.0;
+		else
+			out[i] = 1.0 - (1.0 - in[i]) * (1.0 - 236.0/255.0) / (1.0 - 236.0/256.0);
+	}
+}
+
+static void YCrCb_to_cLUT65(double out[3], double in[3]) {
+	if (in[0] <= (236.0/255.0))		/* Scale up to near black point */
+		out[0] = in[0] * 255.0/256.0;
+	else
+		out[0] = 1.0 - (1.0 - in[0]) * (1.0 - 236.0/256.0) / (1.0 - 236.0/255.0);
+
+	if (in[1] <= (240.0/255.0))
+		out[1] = in[1] * 255.0/256.0;
+	else
+		out[1] = 1.0 - (1.0 - in[1]) * (1.0 - 240.0/256.0) / (1.0 - 240.0/255.0);
+
+	if (in[2] <= (240.0/255.0))
+		out[2] = in[2] * 255.0/256.0;
+	else
+		out[2] = 1.0 - (1.0 - in[2]) * (1.0 - 240.0/256.0) / (1.0 - 240.0/255.0);
+}
+
+static void cLUT65_to_YCrCb(double out[3], double in[3]) {
+	if (in[0] <= (236.0/256.0))		/* Scale up to near black point */
+		out[0] = in[0] * 256.0/255.0;
+	else
+		out[0] = 1.0 - (1.0 - in[0]) * (1.0 - 236.0/255.0) / (1.0 - 236.0/256.0);
+
+	if (in[1] <= (240.0/256.0))	
+		out[1] = in[1] * 256.0/255.0;
+	else
+		out[1] = 1.0 - (1.0 - in[1]) * (1.0 - 240.0/255.0) / (1.0 - 240.0/256.0);
+
+	if (in[2] <= (240.0/256.0))	
+		out[2] = in[2] * 256.0/255.0;
+	else
+		out[2] = 1.0 - (1.0 - in[2]) * (1.0 - 240.0/255.0) / (1.0 - 240.0/256.0);
+}
+
+/* Hmm. I'm not so sure of the one... */
+static void xvYCC_to_cLUT65(double out[3], double in[3]) {
+	if (in[0] <= (236.0/255.0))		/* Scale up to near black point */
+		out[0] = in[0] * 255.0/256.0;
+	else
+		out[0] = 1.0 - (1.0 - in[0]) * (1.0 - 236.0/256.0) / (1.0 - 236.0/255.0);
+
+	out[1] = in[1];
+	out[2] = in[2];
+}
+
+static void cLUT65_to_xvYCC(double out[3], double in[3]) {
+	if (in[0] <= (236.0/256.0))		/* Scale up to near black point */
+		out[0] = in[0] * 256.0/255.0;
+	else
+		out[0] = 1.0 - (1.0 - in[0]) * (1.0 - 236.0/255.0) / (1.0 - 236.0/256.0);
+
+	out[1] = in[1];
+	out[2] = in[2];
+}
+
+/* ======================================================= */
 /* Functions called back in setting up the transform table */
 
 #ifdef DEBUGC
 
-static int tt = 0;
+int tt = 0;
+
+#define DEBUGCND DEBUGC
+
+#else
+
+# define DEBUGCND			/* Define it as empty */
 
 #endif	/* DEBUGC */
 
@@ -545,21 +727,18 @@ static int tt = 0;
 void devi_devip(void *cntx, double *out, double *in) {
 	int rv = 0;
 	clink *p = (clink *)cntx;
-	int i, clip = 0;
+	int i, clip = 0;	/* Not preserving video sync when doing video decode in input lut */
 	double uc[3];		/* Unclipped values (Video) */
 	double cin[3];		/* clipped input value (Video) */
 	double full[3];		/* Full value in clip direction (Video) */
 
 #ifdef DEBUGC
-	if (in[0] == 1.0 && in[1] == 1.0 && in[2] == 1.0 && in[3])
-		tt = 1;
+//	if (in[0] == 1.0 && in[1] == 1.0 && in[2] == 1.0 && in[3])
+//		tt = 1;
 #endif
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevIn->DevIn' got %s\n",icmPdv(p->in.chan, in));
+	DEBUGCND printf("DevIn->DevIn' got %s\n",icmPdv(p->in.chan, in));
 #endif
 
 	for (i = 0; i < p->in.chan; i++)
@@ -567,22 +746,22 @@ void devi_devip(void *cntx, double *out, double *in) {
 
 	if (!p->in.nocurve) {	/* Using profile per channel curves */
 
-		/* Video encoding decode */
+		/* Video decode */
 		if (p->in.tvenc == 1) {				/* Video 16-235 range */
-			clip = clipVidRGB(full, uc, out);
+			clip = clipVidRGB(NULL, full, uc, out);
 			icmCpy3(cin, out);
 			icmVidRGB_2_RGB(out, out);
-#ifdef DEBUG
-#ifdef DEBUGC
-			DEBUGC
-#endif
-			printf("After TVdecode:\n",icmPdv(p->in.chan, out));
-#endif
 
-		} else if (p->in.tvenc >= 2) {		/* YCbCr */
+		} else if (p->in.tvenc >= 3) {		/* YCbCr */
 			error("Can't use input curves with YCbCr input encoding");
 		}
 
+#ifdef DEBUG
+		if (p->in.tvenc) {
+			DEBUGCND printf("After TVdecode:\n",icmPdv(p->in.chan, out));
+		}
+#endif
+		/* Input curve */
 		switch(p->in.alg) {
 		    case icmMonoFwdType: {
 				icxLuMono *lu = (icxLuMono *)p->in.luo;	/* Safe to coerce */
@@ -591,7 +770,10 @@ void devi_devip(void *cntx, double *out, double *in) {
 			}
 		    case icmMatrixFwdType: {
 				icxLuMatrix *lu = (icxLuMatrix *)p->in.luo;	/* Safe to coerce */
-				rv |= lu->fwd_curve(lu, out, out);
+				if (p->in.bt1886)
+					bt1886_fwd_curve(&p->in.bt, out, out);
+				else
+					rv |= lu->fwd_curve(lu, out, out);
 				break;
 			}
 		    case icmLutType: {
@@ -606,19 +788,16 @@ void devi_devip(void *cntx, double *out, double *in) {
 		}
 		if (rv >= 2)
 			error("icc lookup failed: %d, %s",p->in.c->errc,p->in.c->err);
-
-		/* Create linear interpolation from clip to full range */
-		if (clip && p->in.tvenc) {
-			for (i = 0; i < 3; i++) {
-				if (clip & (1 << i)) {
-					out[i] = out[i] + (uc[i] - cin[i])/(full[i] - cin[i]) * (full[i] - out[i]);
-				}
-			}
-		}
+#ifdef DEBUG
+		DEBUGCND printf("After input curve:\n",icmPdv(p->in.chan, out));
+#endif
 	}
 
 	if (p->in.lcurve) { 		/* Apply Y to L* */
 		y2l_curve(out, out, p->in.lcurve == 2);
+#ifdef DEBUG
+		DEBUGCND printf("After Y -. L* curve:\n",icmPdv(p->in.chan, out));
+#endif
 	}
 
 	/* eeColor cLUT is fake 65^3 - only 64^3 is usable. This affects */
@@ -629,21 +808,40 @@ void devi_devip(void *cntx, double *out, double *in) {
 				out[i] = out[i] * (p->clutres-2.0)/(p->clutres-1.0);
 
 		/* This isn't actually usable, because the eeColor does its own YCbCr conversion */
-		} else if (p->in.tvenc == 7 || p->in.tvenc == 8) {		/* xvYCC */
+		} else if (p->in.tvenc == 8 || p->in.tvenc == 9) {		/* xvYCC */
 			out[0] = out[0];
 			out[1] = (out[1] * (p->clutres-3.0) + 1.0)/(p->clutres-1.0);	/* Keep symetrical */
 			out[2] = (out[2] * (p->clutres-3.0) + 1.0)/(p->clutres-1.0);
 		}
 	}
 
+	/* For video encoding, adjust index value vert slightly, */
+	/* to align black with grid node. (We assume that the 3DLut HW */
+	/* is doing this when there are no input & output curves for 2DLuts) */
+	if (p->in.tvenc != 0
+	 && (p->clutres == 65
+	  || p->clutres == 33
+	  || p->clutres == 17)) {
+		if (p->in.tvenc == 1) {				/* Video 16-235 range */
+			VidRGB_to_cLUT65(out, out);
+		} else if (p->in.tvenc == 3 		/* Rec601 YCbCr */
+		        || p->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
+		        || p->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
+		        || p->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
+		        || p->in.tvenc == 7) { 		/* Rec2020 Constant Luminance YCbCr encoding */
+			YCrCb_to_cLUT65(out, out);
+
+		} else if (p->in.tvenc == 8 		/* SD xvYCC with Rec601 YCbCr encoding */
+		        || p->in.tvenc == 9) {		/* HD xvYCC with Rec709 YCbCr encoding */
+			// Hmm. Not sure what to do here, and how it interacts with above.
+			// YCrCb_to_cLUT65(out, out);
+		}
+	}
+
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevIn->DevIn' ret %s\n",icmPdv(p->in.chan, out));
+	DEBUGCND printf("DevIn->DevIn' ret %s\n",icmPdv(p->in.chan, out));
 #endif
 }
-
 
 /* - - - - - - - - - - - - */
 /* clut, DevIn' -> DevOut' */
@@ -657,18 +855,24 @@ void devip_devop(void *cntx, double *out, double *in) {
 	double konlyness = 0.0;		/* Degree of K onlyness */
 	int ntrig = 0;				/* K only output hack triggered */
 	int cmytrig = 0;			/* CMY output hack triggered */
+	int rgbbktrig = 0;			/* RGB black trigger */
 	int i, rv = 0;
 	clink *p = (clink *)cntx;
-	int clip = 0;		/* clip mask (Video) */
+	int clip = 0;		/* clip mask (Video), to pass sync through 3DLut with Video dec/enc */
 	double cin[3];		/* clipped input value (Video) */
-	double uc[3];		/* Unclipped values (Video) */
-	double full[3];		/* Full value in clip direction (Video) */
+	double uci[3];		/* Unclipped input values (Video) */
+	double full[3];		/* Full (0.0/1.0) input value in clip direction (Video) */
+	double scale;		/* RGB positive clipping scale factor (Video) */
+
+#ifdef DEBUGC
+	tt = 0;
+//	if (in[0] == 58.0/64.0 && in[1] == 58.0/64.0 && in[2] == 58.0/64.0)
+	if (in[0] == 4.0/64.0 && in[1] == 4.0/64.0 && in[2] == 4.0/64.0)
+		tt = 1;
+#endif
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevIn'->DevOut' got %s\n",icmPdv(p->in.chan, in));
+	DEBUGCND printf("DevIn'->DevOut' got %s\n",icmPdv(p->in.chan, in));
 #endif
 
 	/* Make a copy so we can modify it and are not affected when we write */
@@ -684,61 +888,84 @@ void devip_devop(void *cntx, double *out, double *in) {
 				win[i] = win[i] * (p->clutres-1.0)/(p->clutres-2.0);
 
 		/* This isn't actually usable, because the eeColor does its own YCbCr conversion */
-		} else if (p->in.tvenc == 7 || p->in.tvenc == 8) {		/* xvYCC */
+		} else if (p->in.tvenc == 8 || p->in.tvenc == 9) {		/* xvYCC */
 			win[0] = win[0];
 			win[1] = (win[1] * (p->clutres-1.0) - 1.0)/(p->clutres-3.0);
 			win[2] = (win[2] * (p->clutres-1.0) - 1.0)/(p->clutres-3.0);
 		}
 	}
 
-	if (p->in.nocurve) {	/* Not using profile per channel curves */
-		/* Video encoding decode */
+	/* For video encoding, adjust index value to align black with */
+	/* grid node */
+	if (p->in.tvenc != 0
+	 && (p->clutres == 65
+	  || p->clutres == 33
+	  || p->clutres == 17)) {
 		if (p->in.tvenc == 1) {				/* Video 16-235 range */
-			clip = clipVidRGB(full, uc, win);
+			cLUT65_to_VidRGB(win, win);
+		} else if (p->in.tvenc == 3 		/* Rec601 YCbCr */
+		        || p->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
+		        || p->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
+		        || p->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
+		        || p->in.tvenc == 7) { 		/* Rec2020 Constant Luminance YCbCr encoding */
+			cLUT65_to_YCrCb(win, win);
+
+		} else if (p->in.tvenc == 8 		/* SD xvYCC with Rec601 YCbCr encoding */
+		        || p->in.tvenc == 9) {		/* HD xvYCC with Rec709 YCbCr encoding */
+			// Hmm. Not sure what to do here, and how it interacts with above.
+			// YCrCb_to_cLUT65(win, win);
+		}
+#ifdef DEBUG
+		DEBUGCND printf("After cLUT65 decode: %s\n",icmPdv(p->in.chan, win));
+#endif
+	}
+
+	if (p->in.nocurve) {	/* Not using profile per channel curves */
+		/* Video encoding decode and input clipping */
+		scale = 1.0;
+		if (p->in.tvenc == 1) {				/* Video 16-235 range */
+			clip = clipVidRGB(&scale, full, uci, win);
 			icmCpy3(cin, win);
 			icmVidRGB_2_RGB(win, win);
-		} else if (p->in.tvenc == 2) {		/* Rec601 YCbCr */
-			clip = clipYCrCb(full, uc, win);
+		} else if (p->in.tvenc == 3) {		/* Rec601 YCbCr */
+			clip = clipYCrCb(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec601_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 3) {		/* Rec709 1150/60/2:1 YCbCr */
-			clip = clipYCrCb(full, uc, win);
+		} else if (p->in.tvenc == 4) {		/* Rec709 1150/60/2:1 YCbCr */
+			clip = clipYCrCb(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec709_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 4) {		/* Rec709 1250/50/2:1 YCbCr */
-			clip = clipYCrCb(full, uc, win);
+		} else if (p->in.tvenc == 5) {		/* Rec709 1250/50/2:1 YCbCr */
+			clip = clipYCrCb(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec709_50_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 5) {		/* Rec2020 Non-constant Luminance YCbCr encoding */
-			clip = clipYCrCb(full, uc, win);
+		} else if (p->in.tvenc == 6) {		/* Rec2020 Non-constant Luminance YCbCr encoding */
+			clip = clipYCrCb(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec2020_NCL_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 6) {		/* Rec2020 Constant Luminance YCbCr encoding */
-			clip = clipYCrCb(full, uc, win);
+		} else if (p->in.tvenc == 7) {		/* Rec2020 Constant Luminance YCbCr encoding */
+			clip = clipYCrCb(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec2020_CL_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 7) {		/* SD xvYCC with Rec601 YCbCr encoding */
-			clip = clip_xvYCC(full, uc, win);
+		} else if (p->in.tvenc == 8) {		/* SD xvYCC with Rec601 YCbCr encoding */
+			clip = clip_xvYCC(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec601_YPbPr_2_RGBd(win, win);
-		} else if (p->in.tvenc == 8) {		/* HD xvYCC with Rec709 YCbCr encoding */
-			clip = clip_xvYCC(full, uc, win);
+		} else if (p->in.tvenc == 9) {		/* HD xvYCC with Rec709 YCbCr encoding */
+			clip = clip_xvYCC(full, uci, win);
 			icmCpy3(cin, win);
 			icmRecXXX_YCbCr_2_YPbPr(win, win);
 			icmRec709_YPbPr_2_RGBd(win, win);
 		}
 
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("After TVdecode: %s\n",icmPdv(p->in.chan, win));
+		DEBUGCND printf("After TVdecode: %s\n",icmPdv(p->in.chan, win));
 #endif
 	}
 
@@ -760,7 +987,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 				ntrig = 1;			/* K only output triggered flag */
 
 		} else if (p->nhack == 2) {
-			double maxcmy;		/* Comute a degree of source "K onlyness" */
+			double maxcmy;		/* Compute a degree of source "K onlyness" */
 			double maxcmyk;
 
 			maxcmy = win[0];			/* Compute minimum of CMY */
@@ -790,10 +1017,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 		     && win[2] < thr)
 				ntrig = 1;			/* K only output triggered flag */
 #ifdef DEBUG
-#ifdef DEBUGC
-			DEBUGC
-#endif
-			printf("konlyness set to %f\n",konlyness);
+			DEBUGCND printf("konlyness set to %f\n",konlyness);
 #endif
 
 		}
@@ -826,13 +1050,22 @@ void devip_devop(void *cntx, double *out, double *in) {
 	}
 #endif /* ENKHACK */
 
+	/* Handle RGB black to RGB black hack */
+	if (p->rgbbkhack != 0) {
+		double thr = (0.5)/(p->clutres-1.0); /* Match threshold */
+
+	    if (win[0] < thr
+	     && win[1] < thr
+	     && win[2] < thr) {
+			rgbbktrig = 1;
+			p->bkhacked++;
+		}
+	}
+
 	if (p->in.lcurve) {	/* Apply L* to Y */
 		l2y_curve(win, win, p->in.lcurve == 2);
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("win[] set to L* value %s\n",icmPdv(p->in.chan, win));
+		DEBUGCND printf("win[] set to L* value %s\n",icmPdv(p->in.chan, win));
 #endif
 	}
 
@@ -856,35 +1089,37 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 			if (p->in.nocurve) {	/* No explicit curve, so do implicit here */
 
-				if (p->in.tvenc == 7 || p->in.tvenc == 8) {	/* xvYCC */
-					xvYCC_fwd_curve(pcsv, win);				/* Allow for overrange values */
+				if (p->in.tvenc == 8 || p->in.tvenc == 9) {	/* xvYCC */
+					if (p->in.bt1886)
+						bt1886_fwd_curve(&p->in.bt, pcsv, win);
+					else
+						xvYCC_fwd_curve(pcsv, win);			/* Allow for overrange values */
 					xvYCC_fwd_matrix(pcsv, pcsv);			/* Rec709 primaries */
 				} else {
-					rv |= lu->fwd_curve(lu, pcsv, win);
+					if (p->in.bt1886)
+						bt1886_fwd_curve(&p->in.bt, pcsv, win);
+					else
+						rv |= lu->fwd_curve(lu, pcsv, win);
 					rv |= lu->fwd_matrix(lu, pcsv, pcsv);
 				}
 			} else {
-				if (p->in.tvenc == 7 || p->in.tvenc == 8) 	/* xvYCC */
+				if (p->in.tvenc == 8 || p->in.tvenc == 9) 	/* xvYCC */
 					xvYCC_fwd_matrix(pcsv, pcsv);			/* Rec709 primaries */
 				else
 					rv |= lu->fwd_matrix(lu, pcsv, win);
 			}
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("After matrix PCS' XYZ %s Lab %s\n",icmPdv(p->in.chan, pcsv), icmPLab(pcsv));
+	DEBUGCND printf("After matrix PCS' XYZ %s Lab %s\n",icmPdv(p->in.chan, pcsv), icmPLab(pcsv));
 #endif
 			if (p->in.bt1886) {
-				bt1886_apply(&p->in.bt, plu, pcsv, pcsv);
+				bt1886_wp_adjust(&p->in.bt, pcsv, pcsv);
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
+	DEBUGCND printf("After bt1886 PCS' XYZ %s Lab %s\n",icmPdv(p->in.chan, pcsv), icmPLab(pcsv));
 #endif
-	printf("After bt1886 PCS' XYZ %s Lab %s\n",icmPdv(p->in.chan, pcsv), icmPLab(pcsv));
-#endif
-				}
+			}
+
 			rv |= lu->fwd_abs(lu, pcsv, pcsv);
+
 			break;
 		}
 	    case icmLutType: {
@@ -919,10 +1154,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 //printf("~1 copied win to locus\n");
 				}
 #ifdef DEBUG
-#ifdef DEBUGC
-				DEBUGC
-#endif
-				printf("Got possible K %s of %f %f %f %f\n",p->out.locus ? "locus" : "value", locus[0],locus[1],locus[2],locus[3]);
+				DEBUGCND printf("Got possible K %s of %f %f %f %f\n",p->out.locus ? "locus" : "value", locus[0],locus[1],locus[2],locus[3]);
 #endif
 			}
 			rv |= lu->output(lu, pcsv, pcsv);	/* PCS' ->     */
@@ -951,14 +1183,11 @@ void devip_devop(void *cntx, double *out, double *in) {
 	 * The order to do this intermediate processing is hard to figure out,
 	 * as is the interaction between such elements. How should the
 	 * abstract profile be properly handled ?
-	 * what should we do if the wphack is on and Y scaling is on ?
+	 * what should we do if the wphack/rgbbkhack is on and Y scaling is on ?
 	 */
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("PCS before map %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]);
+	DEBUGCND printf("PCS before map %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]);
 #endif
 
 	if (p->wphack) {
@@ -1023,10 +1252,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 //printf("scaled PCS %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]);
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-		printf("PCS after Y scale %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]);
+		DEBUGCND printf("PCS after Y scale %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]);
 #endif
 	}
 
@@ -1052,10 +1278,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 			}
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-			printf("PCS after map0 %f %f %f map1 %f %f %f\n", map0[0], map0[1], map0[2], map1[0], map1[1], map1[2]);
+			DEBUGCND printf("PCS after map0 %f %f %f map1 %f %f %f\n", map0[0], map0[1], map0[2], map1[0], map1[1], map1[2]);
 #endif
 
 		/* Normal gamut mapping */
@@ -1067,10 +1290,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("PCS after map %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]);
+		DEBUGCND printf("PCS after map %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]);
 #endif
 	} else {
 		pcsvm[0] = pcsv[0];
@@ -1096,10 +1316,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 		/* mapping properly. */
 		p->abs_luo->lookup(p->abs_luo, pcsvm, pcsvm);
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-		printf("PCS after abstract %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]);
+		DEBUGCND printf("PCS after abstract %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]);
 #endif
 	}
 
@@ -1131,17 +1348,15 @@ void devip_devop(void *cntx, double *out, double *in) {
 				locus[i] = tdevv[i];
 		}
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("Got possible K %s of %f %f %f %f\n",p->out.locus ? "locus" : "value", locus[0],locus[1],locus[2],locus[3]);
+		DEBUGCND printf("Got possible K %s of %f %f %f %f\n",p->out.locus ? "locus" : "value", locus[0],locus[1],locus[2],locus[3]);
 #endif
 	}
 
 	/* Do PCS -> DevOut' */
 	if (p->nhack == 3		/* All to K only */
 	 || ntrig	 			/* Neutral or K only to K only hack has triggered */
-	 || cmytrig) {			/* 100% CMY rough hack has triggered */
+	 || cmytrig				/* 100% CMY rough hack has triggered */
+	 || rgbbktrig) {		/* RGB black inpu thas triggered */
 
 		if (p->nhack == 3 || ntrig) { /* Neutral to K only hack has triggered */
 			co pp;
@@ -1183,8 +1398,11 @@ void devip_devop(void *cntx, double *out, double *in) {
 					printf("CMY hack mapped %s to %s\n",icmPdv(p->in.chan, win), icmPdv(p->out.chan, out));
 				fflush(stdout);
 			}
+		} else if (rgbbktrig) {
+			out[0] = out[1] = out[2] = 0.0;
 		}
-	} else {	/* Neutral to K hack has NOT triggered */
+	} else {	/* Various hacks haven't triggered */
+
 		switch(p->out.alg) {
 		    case icmMonoBwdType: {
 				icxLuMono *lu = (icxLuMono *)p->out.luo;	/* Safe to coerce */
@@ -1229,10 +1447,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 #endif
 
 #ifdef DEBUG
-#ifdef DEBUGC
-					DEBUGC
-#endif
-					printf("Calling inv_clut with K aux targets %f %f %f %f and pcsvm %f %f %f %f\n",
+					DEBUGCND printf("Calling inv_clut with K aux targets %f %f %f %f and pcsvm %f %f %f %f\n",
 					locus[0],locus[1],locus[2],locus[3],pcsvm[0],pcsvm[1],pcsvm[2],pcsvm[3]);
 #endif
 
@@ -1243,10 +1458,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 					rv |= lu->inv_clut(lu, out, pcsvm);
 #ifdef DEBUG
-#ifdef DEBUGC
-					DEBUGC
-#endif
-					printf("Got result %f %f %f %f\n", out[0],out[1],out[2],out[3]);
+					DEBUGCND printf("Got result %f %f %f %f\n", out[0],out[1],out[2],out[3]);
 #endif
 
 					
@@ -1266,31 +1478,22 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 	if (p->cal != NULL && p->addcal == 1 && p->out.nocurve) {
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("DevOut' before cal curve %s\n\n",icmPdv(p->out.chan, out));
+		DEBUGCND printf("DevOut' before cal curve %s\n\n",icmPdv(p->out.chan, out));
 #endif
 		p->cal->interp(p->cal, out, out);
 	}
 
 	if (p->out.lcurve) { 		/* Apply Y to L* */
 #ifdef DEBUG
-#ifdef DEBUGC
-		DEBUGC
-#endif
-		printf("DevOut' before y2l_curve %s\n\n",icmPdv(p->out.chan, out));
+		DEBUGCND printf("DevOut' before y2l_curve %s\n\n",icmPdv(p->out.chan, out));
 #endif
 		y2l_curve(out, out, p->out.lcurve == 2);
 	}
 
-	/* Video encoding encode */
-	if (p->out.tvenc) {
+	/* Video encode */
+	if (p->out.nocurve && p->out.tvenc) {
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevOut' before TVenc %s\n\n",icmPdv(p->out.chan, out));
+	DEBUGCND printf("DevOut' before TVenc %s\n",icmPdv(p->out.chan, out));
 #endif
 		for (i = 0; i < p->out.chan; i++) {
 			if (out[i] < 0.0)
@@ -1300,63 +1503,90 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 		if (p->out.tvenc == 1) {				/* Video 16-235 range */
 			icmRGB_2_VidRGB(out, out);
-		} else if (p->out.tvenc == 2) {			/* Rec601 YCbCr */
+		} else if (p->out.tvenc == 3) {			/* Rec601 YCbCr */
 			icmRec601_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
-		} else if (p->out.tvenc == 3) {			/* Rec709 1150/60/2:1 YCbCr */
+		} else if (p->out.tvenc == 4) {			/* Rec709 1150/60/2:1 YCbCr */
 			icmRec709_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
-		} else if (p->out.tvenc == 4) {			/* Rec709 1250/50/2:1 YCbCr */
+		} else if (p->out.tvenc == 5) {			/* Rec709 1250/50/2:1 YCbCr */
 			icmRec709_50_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
-		} else if (p->out.tvenc == 5) {			/* Rec2020 Non-constant Luminance YCbCr encoding */
+		} else if (p->out.tvenc == 6) {			/* Rec2020 Non-constant Luminance YCbCr encoding */
 			icmRec2020_NCL_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
-		} else if (p->out.tvenc == 6) {			/* Rec2020 Constant Luminance YCbCr encoding */
+		} else if (p->out.tvenc == 7) {			/* Rec2020 Constant Luminance YCbCr encoding */
 			icmRec2020_CL_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
 		}
 
 #ifdef NEVER
-		 else if (p->out.tvenc == 7) {			/* SD xvYCC with Rec601 YCbCr encoding */
+		 else if (p->out.tvenc == 8) {			/* SD xvYCC with Rec601 YCbCr encoding */
 			icmRec601_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
-		} else if (p->out.tvenc == 8) {			/* HD xvYCC with Rec709 YCbCr encoding */
+		} else if (p->out.tvenc == 9) {			/* HD xvYCC with Rec709 YCbCr encoding */
 			icmRec709_RGBd_2_YPbPr(out, out);
 			icmRecXXX_YPbPr_2_YCbCr(out, out);
 		}
 #endif /* NEVER */
+
+#ifdef DEBUG
+		DEBUGCND printf("DevOut' after TVenc %s\n",icmPdv(p->out.chan, out));
+#endif
 	}
 
-	/* Create linear interpolation from clip to full range */
-	if (clip && p->out.tvenc) {
-		for (i = 0; i < 3; i++) {
-			if (clip & (1 << i)) {
-#ifdef LINTERP_OR
-				/* Linear interpolate overrange to full */
-//printf("~1 clip[%d] = out %f + (uc %f - cin %f)/(full %f - cin %f) * (full %f - out %f) = ",
-//i, out[i], uc[i], cin[i], full[i], cin[i], full[i], out[i]);
-				out[i] = out[i] + (uc[i] - cin[i])/(full[i] - cin[i]) * (full[i] - out[i]);
-//printf("%f\n",out[i]);
-#else
-				double ifull = 1.0 - full[i];	/* Opposite limit to full */
+	if (clip && p->out.nocurve && p->out.tvenc) {
 
-				/* Do simple extrapolation (Not perfect though) */
-				out[i] = ifull + (out[i] - ifull) * (uc[i] - ifull)/(cin[i] - ifull);
+		/* For RGB encoding, unscale +ve clip to preserve hue */
+		if (p->out.tvenc == 1) {				/* RGB Video 16-235 range */
 
-				if (out[i] < 0.0 || out[i] > 1.0		/* clip */
-				 || fabs(uc[i] - full[i]) < 1e-6)		/* or input is at sync level */
-					out[i] = full[i];
-#endif
+			if (!p->in.tvclip && scale > 1.0) {		/* We got +ve clipping */
+
+				/* Re-scale all non-black values */
+				for (i = 0; i < 3; i++) {
+					if (out[i] > (16.0/255.0))
+						out[i] = (out[i] - 16.0/255.0) * scale + 16.0/255.0;
+				}
+			}
+
+			/* Deal with -ve clipping and sync */
+			for (i = 0; i < 3; i++) {
+				if (clip & (1 << i)) {
+
+					if (full[i] == 0.0) {	/* Only extrapolate in black direction */
+						double ifull = 1.0 - full[i];	/* Opposite limit to full */
+		
+						/* Do simple extrapolation (Not perfect though) */
+						out[i] = ifull + (out[i] - ifull) * (uci[i] - ifull)/(cin[i] - ifull);
+					}
+	
+					/* Clip or pass sync through */
+					if (out[i] < 0.0 || out[i] > 1.0		/* clip */
+					 || fabs(uci[i] - full[i]) < 1e-6)		/* or input is at sync level */
+						out[i] = full[i];
+				}
+			}
+
+		/* For YCrCb, do simple linear extrapolation of out of range input. */
+		/* (Note we should really change this to preserve hue instead !) */
+		} else {
+			for (i = 0; i < 3; i++) {
+				if (clip & (1 << i)) {
+					double ifull = 1.0 - full[i];	/* Opposite limit to full */
+	
+					/* Do simple extrapolation (Not perfect though) */
+					out[i] = ifull + (out[i] - ifull) * (uci[i] - ifull)/(cin[i] - ifull);
+	
+					if (out[i] < 0.0 || out[i] > 1.0		/* clip */
+					 || fabs(uci[i] - full[i]) < 1e-6)		/* or input is at sync level */
+						out[i] = full[i];
+				}
 			}
 		}
 	}
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevIn'->DevOut' ret %s\n\n",icmPdv(p->out.chan, out));
+	DEBUGCND printf("DevIn'->DevOut' ret %s\n\n",icmPdv(p->out.chan, out));
 #endif
 
 
@@ -1376,35 +1606,28 @@ void devip_devop(void *cntx, double *out, double *in) {
 void devop_devo(void *cntx, double *out, double *in) {
 	int rv = 0;
 	clink *p = (clink *)cntx;
-	int i, clip = 0;
+	int i, clip = 0;	/* Not preserving video sync when doing video decode in input lut */
 	double uc[3];		/* Unclipped values (Video) */
 	double cin[3];		/* clipped input value (Video) */
 	double full[3];		/* Full value in clip direction (Video) */
 
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevOut'->DevOut got %s\n",icmPdv(p->out.chan, in));
+	DEBUGCND printf("DevOut'->DevOut got %s\n",icmPdv(p->out.chan, in));
 #endif
 
 	for (i = 0; i < p->out.chan; i++)
 		out[i] = in[i];
 
-	if (p->out.lcurve)  		/* Apply L* to Y */
+	if (p->out.lcurve) {  		/* Apply L* to Y */
 		l2y_curve(out, out, p->out.lcurve == 2);
+#ifdef DEBUG
+		DEBUGCND printf("After L*->Y curve %s\n",icmPdv(p->out.chan, out));
+#endif
+	}
 
-	if (p->out.nocurve == 0) {	/* Using per channel curves */
+	if (!p->out.nocurve) {		/* Using per channel output curves */
 
-		/* Video encoding decode */
-		if (p->out.tvenc == 1) {			/* Video 16-235 range */
-			clip = clipVidRGB(full, uc, out);
-			icmCpy3(cin, out);
-			icmVidRGB_2_RGB(out, out);
-		} else if (p->out.tvenc >= 2) {		/* YCbCr */
-			error("Can't use output curves with YCbCr output encoding");
-		}
-
+		/* Apply output curve */
 		switch(p->out.alg) {
 		    case icmMonoBwdType: {
 				icxLuMono *lu = (icxLuMono *)p->out.luo;		/* Safe to coerce */
@@ -1435,34 +1658,34 @@ void devop_devo(void *cntx, double *out, double *in) {
 		if (rv >= 2)
 			error("icc lookup failed: %d, %s",p->in.c->errc,p->in.c->err);
 
+#ifdef DEBUG
+		DEBUGCND printf("After output curve %s\n",icmPdv(p->out.chan, out));
+#endif
+		/* Apply calibration curve */
 		if (p->cal != NULL && p->addcal == 1) {
 			p->cal->interp(p->cal, out, out);
+#ifdef DEBUG
+			DEBUGCND printf("After calibration curve %s\n",icmPdv(p->out.chan, out));
+#endif
 		}
 
-		/* Video encoding encode */
+		/* Apply Video encoding */
 		if (p->out.tvenc == 1) {			/* Video 16-235 range */
 			icmRGB_2_VidRGB(out, out);
 		}
-
-		/* Create linear interpolation from clip to full range */
-		if (clip && p->out.tvenc) {
-			for (i = 0; i < 3; i++) {
-				if (clip & (1 << i)) {
-					out[i] = out[i] + (uc[i] - cin[i])/(full[i] - cin[i]) * (full[i] - out[i]);
-				}
-			}
+#ifdef DEBUG
+		if (p->out.tvenc != 0) {
+		DEBUGCND printf("After Video encode %s\n",icmPdv(p->out.chan, out));
 		}
+#endif
+
 	}
 #ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevOut'->DevOut ret %s\n",icmPdv(p->out.chan, out));
+	DEBUGCND printf("DevOut'->DevOut ret %s\n",icmPdv(p->out.chan, out));
 #endif
 #ifdef DEBUGC
 	tt = 0;
 #endif
-//printf("DevOut'->DevOut ret %s\n",icmPdv(p->out.chan, out));
 }
 
 /* ------------------------------------------- */
@@ -1499,7 +1722,9 @@ static double xyzoptfunc(void *cntx, double *v) {
 	clink *p = (clink *)cntx;
 	double swxyz[3], jab[3], dev[MAX_CHAN];
 	double rv;
-	int rc = 0;
+	int j, rc = 0;
+
+//printf("~1 xyzoptfunc %f\n", v[0]);
 
 	rv = 2.0 - v[0];	/* Make Y as large as possible */
 
@@ -1531,18 +1756,21 @@ static double xyzoptfunc(void *cntx, double *v) {
 	switch(p->out.alg) {
 	    case icmMonoBwdType: {
 			icxLuMono *lu = (icxLuMono *)p->out.luo;	/* Safe to coerce */
+//printf("~1 Mono\n");
 
 			rc = lu->bwd_lookup(p->out.luo, dev, jab);
 			break;
 		}
 	    case icmMatrixBwdType: {
 			icxLuMatrix *lu = (icxLuMatrix *)p->out.luo;	/* Safe to coerce */
+//printf("~1 Matrix\n");
 
 			rc = lu->bwd_lookup(p->out.luo, dev, jab);
 			break;
 		}
 	    case icmLutType: {
 			icxLuLut *lu = (icxLuLut *)p->out.luo;	/* Safe to coerce */
+//printf("~1 Lut\n");
 
 			if (p->mode < 2)	/* Using B2A table */
 				rc = lu->lookup(p->out.luo, dev, jab);
@@ -1553,9 +1781,16 @@ static double xyzoptfunc(void *cntx, double *v) {
 		default:
 			error("Unexpected algorithm type %d in devop of devip_devop()",p->out.alg);
 	}
-//printf("~1 device = %f %f %f, rc = %d\n", dev[0], dev[1], dev[2], rc);
+//printf("~1 in chan %d\n", p->out.luo->inputChan);
+//printf("~1 device = %s, rc = %d\n", icmPdv(p->out.luo->inputChan, dev), rc);
+	/* Matrix power curves don't clip on device space out of range, */
+	/* so check explicitly as well. */
+	for (j = 0; j < p->out.luo->inputChan; j++) {
+		if (dev[j] < 0.0 || dev[j] > 1.0)
+			rc |= 1;
+	}
 	if (rc != 0)
-		rv += 500.0;
+		rv += 10.0;
 
 //printf("~1 xyzoptfunc rv %f from xyzscale %f\n\n",rv,v[0]);
 	return rv;
@@ -1564,10 +1799,12 @@ static double xyzoptfunc(void *cntx, double *v) {
 /* ------------------------------------------- */
 
 int write_eeColor1DinputLuts(clink *li, char *tdlut_name);
-int write_eeColor3DLut(icc *icc, char *fname);
+int write_eeColor3DLut(icc *icc, clink *li, char *fname);
 int write_eeColor1DoutputLuts(clink *li, char *tdlut_name);
 
 int write_MadVR_3DLut(clink *li, icc *icc, char *fname);
+
+int write_cube_3DLut(clink *li, icc *icc, char *fname);
 
 int
 main(int argc, char *argv[]) {
@@ -1626,8 +1863,9 @@ main(int argc, char *argv[]) {
 	li.in.nocurve = 0;					/* Preserve device linearisation curve */
 	li.in.lcurve = 0;					/* Don't apply a Y to L* curve after device curve */
 	li.in.tvenc = -1;
-	li.in.egamma = 2.2;					/* Default effective gamma */
-	li.in.tgamma = 2.4;					/* Default technical gamma */
+	li.in.outoprop = 0.0;				/* Default BT.1886 syle input offset */
+	li.in.egamma = 2.2;					/* Default effective gamma value */
+	li.in.tgamma = 2.4;					/* Default technical gamma value */
 	li.out.intent = icmDefaultIntent;	/* Default */
 	li.out.ink.tlimit = -1.0;			/* Default no total limit */
 	li.out.ink.klimit = -1.0;			/* Default no black limit */
@@ -1728,8 +1966,19 @@ main(int argc, char *argv[]) {
 
 			/* Disable profile per channel curve use in device link output */
 			else if (argv[fa][1] == 'n') {
-				li.in.nocurve = 1;
-				li.out.nocurve = 1;
+				if (na != NULL) {	/* Found an optional individual disable */
+					fa = nfa;
+	    			if (na[0] == 'i')
+						li.in.nocurve = 1;
+	    			else if (na[0] == 'o')
+						li.out.nocurve = 1;
+					else
+						usage("Unexpected argument '%c' to -n flag",na[0]);
+
+				} else {
+					li.in.nocurve = 1;
+					li.out.nocurve = 1;
+				}
 			}
 
 			/* Hack to force input neutrals to K only output */
@@ -1853,6 +2102,12 @@ main(int argc, char *argv[]) {
 						usage("Couldn't parse hack white point (-w) value '%s'",na);
 				}
 			}
+
+			/* RGB->RGB black hack */
+			else if (argv[fa][1] == 'b') {
+				li.rgbbkhack = 1;
+			}
+
 			/* Input profile Intent or Mapping mode intent */
 			else if (argv[fa][1] == 'i') {
 				fa = nfa;
@@ -1959,7 +2214,7 @@ main(int argc, char *argv[]) {
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
 						vc->Wxyz[0] = x; vc->Wxyz[1] = y; vc->Wxyz[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Wxyz[0] = x; vc->Wxyz[1] = y;
+						vc->Wxyz[0] = x; vc->Wxyz[1] = y; vc->Wxyz[2] = -1;
 					} else
 						usage("Viewing condition (-%cw) unrecognised white point '%s'",argv[fa][1],na+1);
 				} else if (na[0] == 'a' || na[0] == 'A') {
@@ -1977,15 +2232,15 @@ main(int argc, char *argv[]) {
 				} else if (na[0] == 'f' || na[0] == 'F') {
 					if (na[1] != ':')
 						usage("Viewing conditions (-cf) missing ':'");
-					vc->Yf = atof(na+2);
+					vc->Yf = atof(na+2)/100.0;
 				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
 						vc->Gxyz[0] = x; vc->Gxyz[1] = y; vc->Gxyz[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Gxyz[0] = x; vc->Gxyz[1] = y;
+						vc->Gxyz[0] = x; vc->Gxyz[1] = y; vc->Gxyz[2] = -1;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc->Yf = x/100.0;
+						vc->Yg = x/100.0;
 					} else
 						usage("Viewing condition (-%cf) unrecognised flare '%s'",argv[fa][1],na+1);
 				} else
@@ -2141,6 +2396,9 @@ main(int argc, char *argv[]) {
 					case 'm':
 						li.tdlut = 2;
 						break;
+					case 'c':
+						li.tdlut = 3;
+						break;
 					default:
 						usage("3DLut format (-3) argument '%s' not recognised",na);
 				}
@@ -2148,24 +2406,51 @@ main(int argc, char *argv[]) {
 
 			/* Intent modifier */
 			else if (argv[fa][1] == 'I') {
-				double gamma = 0.0;
 				fa = nfa;
 				if (na == NULL) usage("Intent modifier flag (-I) needs an argument");
 				
     			switch (na[0]) {
 					case 'b':
-						li.in.bt1886 = 1;
-						if (sscanf(na+1,":%lf",&gamma) == 1)
-							li.in.egamma = gamma;
-						break;
 					case 'B':
-						li.in.bt1886 = 2;
-						if (sscanf(na+1,":%lf",&gamma) == 1)
-							li.in.tgamma = gamma;
+					case 'g':
+					case 'G': {
+						double outoprop = -1.0, gamma = -1.0;
+
+						if (na[0] == 'b' || na[0] == 'B')
+							li.in.outoprop = 0.0;
+						else if (na[0] == 'g' || na[0] == 'G')
+							li.in.outoprop = 1.0;
+
+						if (sscanf(na+1,":%lf:%lf",&outoprop, &gamma) != 2) {
+							outoprop = -1.0;
+							if (sscanf(na+1,":%lf",&gamma) != 1)
+								gamma = -1.0;
+						}
+
+						if (outoprop != -1.0) {
+							if (outoprop < 0.0 || outoprop > 1.0)
+								usage("Intent modifier -I%c expects output proportion in range 0.0 and 1.0",na[0]);
+							li.in.outoprop = outoprop;
+						}
+
+						if (gamma != -1.0 && (gamma <= 0.0 || gamma > 4.0))
+							usage("Intent modifier -I%c expects gamma value between 0.0 and 4.0",na[0]);
+						if (na[0] == 'b' || na[0] == 'g') {
+							li.in.bt1886 = 1;
+							if (gamma != -1.0) {
+								li.in.egamma = gamma;
+							}
+						} else if (na[0] == 'B' || na[0] == 'G') {
+							li.in.bt1886 = 2;
+							if (gamma != -1.0) {
+								li.in.tgamma = gamma;
+							}
+						}
+
 						break;
+					}
 					default:
-						if (gamma == 0.0)
-							usage("Intent modifier (-I) argument '%s' not recognised",na);
+						usage("Intent modifier (-I) argument '%s' not recognised",na);
 				}
 			}
 
@@ -2181,29 +2466,35 @@ main(int argc, char *argv[]) {
 					case 't':				/* TV 16 .. 235 */
 						enc = 1;
 						break;
-					case '6':				/* Rec601 YCbCr */
-						enc = 2;
+					case 'T':				/* TV 16 .. 235 Clip */
+						if (argv[fa][1] == 'E')
+							usage("Video encoding (-E) argument T not valid");
+						enc = 1;
+						li.in.tvclip = 1;
 						break;
-					case '7':				/* Rec709 1150/60/2:1 YCbCr (HD) */
+					case '6':				/* Rec601 YCbCr */
 						enc = 3;
 						break;
-					case '5':				/* Rec709 1250/50/2:1 YCbCr (HD) */
+					case '7':				/* Rec709 1150/60/2:1 YCbCr (HD) */
 						enc = 4;
 						break;
-					case '2':				/* Rec2020 Non-constant Luminance YCbCr (UHD) */
+					case '5':				/* Rec709 1250/50/2:1 YCbCr (HD) */
 						enc = 5;
 						break;
-					case 'C':				/* Rec2020 Constant Luminance YCbCr (UHD) */
+					case '2':				/* Rec2020 Non-constant Luminance YCbCr (UHD) */
 						enc = 6;
 						break;
-					case 'x':				/* xvYCC Rec601 YCbCr encoding (SD) */
+					case 'C':				/* Rec2020 Constant Luminance YCbCr (UHD) */
 						enc = 7;
 						break;
-					case 'X':				/* xvYCC Rec709 YCbCr encoding (HD) */
+					case 'x':				/* xvYCC Rec601 YCbCr encoding (SD) */
 						enc = 8;
 						break;
+					case 'X':				/* xvYCC Rec709 YCbCr encoding (HD) */
+						enc = 9;
+						break;
 					default:
-						usage("Video encoding (-E) argument not recognised");
+						usage("Video encoding (-%c) argument '%c' not recognised",argv[fa][1],na[0]);
 				}
 				if (argv[fa][1] == 'e')
 					li.in.tvenc = enc;
@@ -2221,6 +2512,18 @@ main(int argc, char *argv[]) {
 		} else
 			break;
 	}
+
+#ifdef NEVER
+	if (li.in.bt1886) {
+		printf("~1 bt1886 flag = %d\n",li.in.bt1886);
+
+		printf("~1  outoprop = %f\n",li.in.outoprop);
+		if (li.in.bt1886 == 2)
+			printf("~1 tgamma = %f\n",li.in.tgamma);
+		else
+			printf("~1 egamma = %f\n",li.in.egamma);
+	}
+#endif
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Missing input profile");
 	strncpy(in_name,argv[fa++],MAXNAMEL); in_name[MAXNAMEL] = '\000';
@@ -2252,6 +2555,15 @@ main(int argc, char *argv[]) {
 
 			if (li.clutres == 0)
 				li.clutres = 65;		/* This is good for video encoding levels */
+
+		} else if (li.tdlut == 3) {	/* .cube */
+			strncpy(tdlut_name,link_name,MAXNAMEL-6); tdlut_name[MAXNAMEL-6] = '\000';
+			if ((xl = strrchr(tdlut_name, '.')) == NULL)	/* Figure where extention is */
+				xl = tdlut_name + strlen(tdlut_name);
+			strcpy(xl,".cube");
+
+			if (li.clutres == 0)
+				li.clutres = 65;		/* This is good for video encoding levels */
 		}
 	} else {
 		if (li.clutres > 255) usage("Resolution flag (-r) argument out of range (%d)",li.clutres);
@@ -2263,7 +2575,7 @@ main(int argc, char *argv[]) {
 		li.out.tvenc = 0;
 
 	/* Need to allow spec. of gamut/matrix for xvYCC & bt.1886 */
-	if (li.out.tvenc == 7 || li.out.tvenc == 8) {		/* xvYCC */
+	if (li.out.tvenc == 8 || li.out.tvenc == 9) {		/* xvYCC */
 		 usage("xvYCC output encoding is not supported");
 	}
 
@@ -2291,7 +2603,7 @@ main(int argc, char *argv[]) {
 	if (li.in.bt1886) {
 		if (li.mode == 0) {		/* Simple mode */
 			if (li.in.intent == icmDefaultIntent) {
-				warning("Setting BT.1886 input intent to Relative Colorimetric");
+				warning("Setting BT.1886/Abs power input intent to Relative Colorimetric");
 				li.in.intent = icRelativeColorimetric;
 			} else if (li.in.intent != icRelativeColorimetric
 			        && li.in.intent != icAbsoluteColorimetric) {
@@ -2299,7 +2611,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (li.out.intent == icmDefaultIntent) {
-				warning("Setting BT.1886 output intent to Relative Colorimetric");
+				warning("Setting BT.1886/Abs power output intent to Relative Colorimetric");
 				li.out.intent = icRelativeColorimetric;
 			} else if (li.out.intent != icRelativeColorimetric
 			        && li.out.intent != icAbsoluteColorimetric) {
@@ -2307,7 +2619,7 @@ main(int argc, char *argv[]) {
 			}
 		} else {
 			if (!intentset) {
-				warning("Setting BT.1886 intent to Relative Colorimetric");
+				warning("Setting BT.1886/Abs power intent to Relative Colorimetric");
 				if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, "r") == -999)
 					error("Internal - intent 'r' isn't recognised");
 			}
@@ -2327,6 +2639,7 @@ main(int argc, char *argv[]) {
 		/* eeColor format. Currently we assume no input or output curves, */
 		/* even though it's technically possible to use them */
 		if (li.tdlut == 1) {
+			int inc;
 
 			if (li.in.nocurve == 0) {
 				warning("Disabling input curves for eeColor 3DLut creation");
@@ -2350,6 +2663,19 @@ main(int argc, char *argv[]) {
 			}
 			if (li.out.nocurve == 0) {
 				warning("Disabling output curves for MadVR 3DLut creation");
+				li.out.nocurve = 1;
+			}
+		}
+
+		/* .cube format. It doesn't support in and out per channel curves */
+		else if (li.tdlut == 3) {
+
+			if (li.in.nocurve == 0) {
+				warning("Disabling input curves for .cube 3DLut creation");
+				li.in.nocurve = 1;
+			}
+			if (li.out.nocurve == 0) {
+				warning("Disabling output curves for .cube 3DLut creation");
 				li.out.nocurve = 1;
 			}
 		}
@@ -3172,6 +3498,17 @@ main(int argc, char *argv[]) {
 				error("Output profile must be RGB to output MadVR 3DLut");
 		}
 
+		/* .cube format. */
+		else if (li.tdlut == 3) {
+
+			if (li.in.csp != icSigRgbData)
+				error("Input profile must be RGB to output .cube 3DLut");
+
+			if (li.out.csp != icSigRgbData)
+				error("Output profile must be RGB to output .cube 3DLut");
+		}
+
+
 		if (li.in.tvenc) {
 			if (li.in.csp != icSigRgbData)
 				error("Input profile must be RGB to use video encoding option");
@@ -3179,95 +3516,6 @@ main(int argc, char *argv[]) {
 		if (li.out.tvenc) {
 			if (li.out.csp != icSigRgbData)
 				error("Output profile must be RGB to use video encoding option");
-		}
-	}
-
-	/* Do sanity check and setup for BT.1886 gamma mapping */
-	if (li.in.bt1886) {
-		bt1886_setnop(&li.in.bt);
-	}
-	if (li.in.bt1886 == 1 || li.in.bt1886 == 2) {	/* If doing BT.1886 black point mapping */
-		icxLuBase *oluo;			/* Output fwd lookup */
-		icxLuMatrix *lu;			/* Input profile lookup */
-		icmLuMatrix *plu;			/* Input profile lookup */
-		double bp[3], rgb[3];
-
-		/* Check input profile is an RGB matrix profile */
-		if (li.in.alg != icmMatrixFwdType
-		 || li.in.csp != icSigRgbData)
-			error("BT.1886 mode only works with an RGB matrix input profile");
-
-		lu = (icxLuMatrix *)li.in.luo;	/* Safe to coerce - we have checked it's matrix. */
-		plu = (icmLuMatrix *)lu->plu;
-
-		if ((oluo = li.out.x->get_luobj(li.out.x, ICX_CLIP_NEAREST, icmFwd, icRelativeColorimetric,
-		                              icSigXYZData, icmLuOrdNorm, &li.out.vc, &li.out.ink)) == NULL) {
-			error("get xlookup object failed: %d, %s",li.out.x->errc,li.out.x->err);
-		}
-		/* We're assuming that the input space has a perfect black point... */
-
-		/* Lookup the ouput black point in XYZ PCS.*/
-		bp[0] = bp[1] = bp[2] = 0.0;
-		oluo->lookup(oluo, bp, bp);
-
-		if (li.in.bt1886 == 1) {		/* Using effective gamma */
-			li.in.tgamma = xicc_tech_gamma(li.in.egamma, bp[1]);
-			if (li.verb)
-				printf("Technical gamma %f used to achieve effective gamma %f\n",li.in.tgamma, li.in.egamma);
-		} else {
-			if (li.verb)
-				printf("Using technical gamma %f\n",li.in.tgamma);
-		}
-
-		bt1886_setup(&li.in.bt, bp, li.in.tgamma);
-		
-		if (li.verb) {
-			printf("bt1886 target out black rel XYZ = %f %f %f, Lab %f %f %f\n",
-			    bp[0],bp[1],bp[2], li.in.bt.outL, li.in.bt.tab[0], li.in.bt.tab[1]);
-			printf("bt1886 Y input offset = %f\n", li.in.bt.ingo);
-			printf("bt1886 Y output scale = %f\n", li.in.bt.outsc);
-		}
-
-		/* Check black point now produced by input profile with bt.1886 adjustment */
-		rgb[0] = rgb[1] = rgb[2] = 0.0;
-		lu->fwd_curve(lu, rgb, rgb);
-		lu->fwd_matrix(lu, rgb, rgb);
-		bt1886_apply(&li.in.bt, plu, rgb, rgb);
-		if (li.verb) printf("bt1886 check input black point rel. XYZ %f %f %f\n", rgb[0],rgb[1],rgb[2]);
-		/* Convert XYZ black point to gamut mapping space */
-		lu->fwd_abs(lu, li.in.bt_bk, bp);
-		if (li.verb) printf("bt1886 check input black point PCS %f %f %f\n", li.in.bt_bk[0],li.in.bt_bk[1],li.in.bt_bk[2]);
-
-		oluo->del(oluo);
-
-		if (li.verb) {
-			int no = 21;
-
-			/* Overral rendering curve from video in to output target */
-			printf("BT.1886 overall rendering\n");
-			for (i = 0; i < no; i++) {
-				double v = i/(no-1.0), vv;
-				double vi[3], vo[3], Lab[3];
-				double loglog = 0.0;
-				
-				if (v <= 0.081)
-					vv = v/4.5;
-				else
-					vv = pow((0.099 + v)/1.099, 1.0/0.45);
-
-				vi[0] = vv * 0.9642;		/* To D50 XYZ */
-				vi[1] = vv * 1.0000;
-				vi[2] = vv * 0.8249;
-
-				bt1886_apply(&li.in.bt, plu, vo, vi);	/* BT.1886 mapping */
-		
-				icmXYZ2Lab(&icmD50, Lab, vo);
-
-				if (v > 1e-9 && vo[1] > 1e-9 && fabs(v - 1.0) > 1e-9)
-					loglog = log(vo[1])/log(v);
-
-				printf(" In %5.1f%% -> XYZ in %f -> bt.1886 %f, log/log %.3f, Lab %f %f %f \n",v * 100.0,vi[1],vo[1], loglog, Lab[0], Lab[1], Lab[2]);
-			}
 		}
 	}
 
@@ -3323,14 +3571,6 @@ main(int argc, char *argv[]) {
 		if ((csgam = li.in.luo->get_gamut(li.in.luo, sgres)) == NULL)
 			error ("%d, %s",li.in.x->errc, li.in.x->err);
 
-		/* If BT.1886 has modified the effective input space black point, */
-		/* change the black point in the source gamut to match. (Note that */
-		/* this doesn't fix the source gamut surface itself, but should */
-		/* make sure that the gamut mapping black point mapping works properly.) */
-		if (li.in.bt1886 == 1) {
-			csgam->set_cs_bp_kp_ovrd(csgam, li.in.bt_bk, li.in.bt_bk);
-		}
-
 		/* Grab a given source image gamut. */
 		if (sgam_name[0] != '\000') {		/* Optional source gamut - ie. from an images */
 
@@ -3367,7 +3607,7 @@ main(int argc, char *argv[]) {
 
 		li.map = new_gammap(li.verb, csgam, igam, ogam, &li.gmi,
 		                    li.src_kbp, li.dst_kbp, li.cmyhack, li.rel_oride,
-		                    mapres, NULL, NULL, li.gamdiag ? "gammap.wrl" : NULL
+		                    mapres, NULL, NULL, li.gamdiag ? "gammap" : NULL
 		);
 		if (li.map == NULL)
 			error ("Failed to make gamut map transform");
@@ -3378,7 +3618,7 @@ main(int argc, char *argv[]) {
 
 			li.Kmap = new_gammap(li.verb, csgam, igam, ogam, &li.gmi,
 			                    1, 1, li.cmyhack, li.rel_oride,
-			                    mapres, NULL, NULL, li.gamdiag ? "gammap.wrl" : NULL
+			                    mapres, NULL, NULL, li.gamdiag ? "gammap" : NULL
 			);
 			if (li.Kmap == NULL)
 				error ("Failed to make K only gamut map transform");
@@ -3421,6 +3661,148 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	/* Check rgbbkhack is being used in correct circumstances */
+	if (li.rgbbkhack) {
+		 if (li.in.csp != icSigRgbData
+		  || li.out.csp != icSigRgbData)
+			error("Black hack (-b) only valid for RGB input & output");
+	}
+
+	/* Do sanity check and setup for BT.1886 gamma mapping */
+	if (li.in.bt1886) {
+		bt1886_setnop(&li.in.bt);
+	}
+	if (li.in.bt1886) {				/* If doing BT.1886/output offset power black point mapping */
+		int fl = 0;					/* Flags */
+		icxLuMatrix *lu;			/* Input profile lookup */
+		icmLuMatrix *plu;			/* Input profile lookup */
+		icxLuBase *oluo;			/* Output fwd lookup */
+		double bp[3], rgb[3];
+
+		/* Check input profile is an RGB matrix profile */
+		if (li.in.alg != icmMatrixFwdType
+		 || li.in.csp != icSigRgbData)
+			error("BT.1886/Abs power mode only works with an RGB matrix input profile");
+
+		/* Get ready to do fwd lookup on input profile */
+		lu = (icxLuMatrix *)li.in.luo;	/* Safe to coerce - we have checked it's matrix. */
+		plu = (icmLuMatrix *)lu->plu;
+
+		/* Get ready to do fwd lookup on output profile */
+		/* (li.out.lu may or may not be what we want, so temporarily make another one */ 
+
+		fl = ICX_CLIP_NEAREST;
+
+#ifdef USE_MERGE_CLUT_OPT
+		fl |= ICX_MERGE_CLUT;
+#endif
+#ifdef USE_CAM_CLIP_OPT
+		fl |= ICX_CAM_CLIP;
+#endif
+		if ((oluo = li.out.x->get_luobj(li.out.x, fl, icmFwd,
+		                  li.out.intent, li.pcsor, icmLuOrdNorm, &li.out.vc,
+		                  &li.out.ink)) == NULL) {
+			error("get xlookup object failed: %d, %s",li.out.x->errc,li.out.x->err);
+		}
+		
+		/* We're assuming that the input space has a perfect black point... */
+		/* and we're assuming that RGB=0 gives us outpu black. Hmm... */
+
+		/* Lookup the ouput black point in our gamut mapping PCS.*/
+		bp[0] = bp[1] = bp[2] = 0.0;
+		oluo->lookup(oluo, bp, bp);
+
+		if (li.verb)
+			printf("Output black PCS = %f %f %f\n",bp[0],bp[1],bp[2]);
+
+		/* Compute pre-gamut mapping black point value */
+		if (li.mode > 0 && li.gmi.usemap) {
+			li.map->invdomap1(li.map, bp, bp);
+			if (li.verb)
+				printf("Output black PCS pre GMAP = %f %f %f\n",bp[0],bp[1],bp[2]);
+		}
+
+		/* Undo luminence scaling */
+		if (li.xyzscale < 1.0) {
+			double xyz[3];
+
+			/* Convert our PCS to XYZ */
+			if (li.pcsor == icxSigJabData) {
+				/* We're being bad in delving inside the xluo, but we'll fix it latter */
+				oluo->cam->cam_to_XYZ(oluo->cam, xyz, bp);
+			} else
+				error("Internal :- not setup to handle Y scaling and non-Jab PCS");
+
+			/* Unscale it */
+			xyz[0] /= li.xyzscale;
+			xyz[1] /= li.xyzscale;
+			xyz[2] /= li.xyzscale;
+
+			/* Convert back to PCS */
+			if (li.pcsor == icxSigJabData) {
+				/* We're being bad in delving inside the xluo, but we'll fix it latter */
+				oluo->cam->XYZ_to_cam(oluo->cam, bp, xyz);
+			} else
+				error("Internal :- not setup to handle Y scaling and non-Jab PCS");
+
+			if (li.verb)
+				printf("Output black PCS pre lumscale = %f %f %f\n",bp[0],bp[1],bp[2]);
+		}
+
+		/* PCS to matrix relative colorimetric XYZ value */
+		lu->bwd_abs(lu, bp, bp);
+
+		bt1886_setup(&li.in.bt, &plu->pcswht, bp, li.in.outoprop,
+		             li.in.bt1886 == 1 ? li.in.egamma : li.in.tgamma, li.in.bt1886 == 1 ? 1 : 0);
+
+		if (li.verb) {
+			printf("Gamma curve target out black rel XYZ = %f %f %f, Lab %f %f %f\n",
+			    bp[0],bp[1],bp[2], li.in.bt.outL, li.in.bt.tab[1], li.in.bt.tab[2]);
+			printf("Proportion of black output offset = %f%s\n", li.in.outoprop, 
+			                         li.in.outoprop == 0.0 ? " (BT.1886)" : "");
+			printf("Gamma Y input offset = %f\n", li.in.bt.ingo);
+			if (li.in.bt1886 == 1) 		/* Using effective gamma */
+				printf("Gamma Y power = %f (effective = %f)\n", li.in.bt.gamma,li.in.egamma);
+			else
+				printf("Gamma Y power = %f\n", li.in.bt.gamma);
+			printf("Gamma Y output scale = %f\n", li.in.bt.outsc);
+			printf("Gamma Y output offset = %f\n", li.in.bt.outo);
+		}
+
+		/* Check black point now produced by input profile with bt.1886/Abs power adjustment */
+		rgb[0] = rgb[1] = rgb[2] = 0.0;
+		bt1886_fwd_curve(&li.in.bt, rgb, rgb);
+		lu->fwd_matrix(lu, rgb, rgb);
+		bt1886_wp_adjust(&li.in.bt, rgb, rgb);
+		if (li.verb) printf("bt1886 check input black point rel. XYZ %f %f %f\n", rgb[0],rgb[1],rgb[2]);
+		/* We're done with our output profile lookup */
+		oluo->del(oluo);
+
+		if (li.verb) {
+			int no = 21;
+
+			/* Overral rendering curve from video in to output target */
+			printf("BT.1886 overall rendering\n");
+			for (i = 0; i < no; i++) {
+				double v = i/(no-1.0), vv;
+				double vi[3], vo[3], Lab[3];
+				double loglog = 0.0;
+				
+				vi[0] = vi[1] = vi[2] = v;
+
+				bt1886_fwd_curve(&li.in.bt, vo, vi);
+				lu->fwd_matrix(lu, vo, vo);
+				bt1886_wp_adjust(&li.in.bt, vo, vo);
+				icmXYZ2Lab(&plu->pcswht, Lab, vo);
+
+				if (v > 1e-9 && vo[1] > 1e-9 && fabs(v - 1.0) > 1e-9)
+					loglog = log(vo[1])/log(v);
+
+				printf(" In %5.1f%% -> XYZ in %f -> bt.1886 %f, log/log %.3f, Lab %f %f %f \n",v * 100.0,vi[1],vo[1], loglog, Lab[0], Lab[1], Lab[2]);
+			}
+		}
+	}
+
 	/* Create the link profile */
 	if (verify == 0) {
 		icmFile *wr_fp;
@@ -3444,12 +3826,12 @@ main(int argc, char *argv[]) {
 
 			/* Values that must be set before writing */
 			wh->deviceClass     = icSigLinkClass;			/* We are creating a link ! */
-			if (li.in.tvenc >= 2) {
+			if (li.in.tvenc >= 3) {
 				wh->colorSpace  = icSigYCbCrData;			/* Use YCbCr encoding */
 			} else {
 				wh->colorSpace  = li.in.h->colorSpace;		/* Input profile device space */
 			}
-			if (li.out.tvenc >= 2) {
+			if (li.out.tvenc >= 3) {
 				wh->pcs         = icSigYCbCrData;			/* Use YCbCr encoding */
 			} else {
 				wh->pcs         = li.out.h->colorSpace;		/* Output profile device space */
@@ -3880,7 +4262,7 @@ main(int argc, char *argv[]) {
 				outputEnt = out_curve_res;
 
 			/* Sanity checking */
-			if (li.in.tvenc >= 2) {		/* YCbCr encoded input */
+			if (li.in.tvenc >= 3) {		/* YCbCr encoded input */
 				if ((clutPoints & 1) == 0)
 					warning("Making grid resolution is even - this is not ideal for YCbCr input");
 			}
@@ -3897,6 +4279,12 @@ main(int argc, char *argv[]) {
 					warning("MadVR 3DLut will work best with grid resolution of 65 (got %d)",clutPoints);
 				inputEnt = 1024;		/* Not used */
 				outputEnt = 1024;		/* Not used */
+
+			} else if (li.tdlut == 3) {
+				if (clutPoints != 65 && clutPoints != 129 && clutPoints != 256)
+					warning(".cube 3DLut will work best with grid resolution of 65 (got %d)",clutPoints);
+				inputEnt = 1024;		/* Not used */
+				outputEnt = 1024;		/* Not used */
 			}
 
 			/* Limits are grid indexes that should not be adjusted by SET_APXLS */
@@ -3905,18 +4293,31 @@ main(int argc, char *argv[]) {
 				apxls_min = tapxls_min;
 				apxls_max = tapxls_max;
 				for (i = 0; i < li.in.chan; i++) {
-					apxls_min[i] = (int)(16.0/255.0 * (clutPoints-1.0) + 0.9);
-					apxls_max[i] = (int)(235.0/255.0 * (clutPoints-1.0) + 0.1);
+					if (clutPoints <= 65) {
+						apxls_min[i] = (int)(4.0/64.0 * (clutPoints-1.0) + 0.9);
+						apxls_max[i] = (int)(58.0/64.0 * (clutPoints-1.0) + 0.1);
+					} else {
+						apxls_min[i] = (int)(16.0/255.0 * (clutPoints-1.0) + 0.9);
+						apxls_max[i] = (int)(235.0/255.0 * (clutPoints-1.0) + 0.1);
+					}
 				}
-			} else if (li.in.tvenc >= 2) {	/* YCbCr encoded */
+			} else if (li.in.tvenc >= 3) {	/* YCbCr encoded */
 				apxls_min = tapxls_min;
 				apxls_max = tapxls_max;
 				for (i = 0; i < li.in.chan; i++) {
-					apxls_min[i] = (int)(16.0/255.0 * (clutPoints-1.0) + 0.9);
-					if (i == 0)
-						apxls_max[i] = (int)(235.0/255.0 * (clutPoints-1.0) + 0.1);
-					else
-						apxls_max[i] = (int)(240.0/255.0 * (clutPoints-1.0) + 0.1);
+					if (clutPoints <= 65) {
+						apxls_min[i] = (int)(4.0/64.0 * (clutPoints-1.0) + 0.9);
+						if (i == 0)
+							apxls_max[i] = (int)(58.0/64.0 * (clutPoints-1.0) + 0.1);
+						else
+							apxls_max[i] = (int)(60.0/64.0 * (clutPoints-1.0) + 0.1);
+					} else {
+						apxls_min[i] = (int)(16.0/255.0 * (clutPoints-1.0) + 0.9);
+						if (i == 0)
+							apxls_max[i] = (int)(235.0/255.0 * (clutPoints-1.0) + 0.1);
+						else
+							apxls_max[i] = (int)(240.0/255.0 * (clutPoints-1.0) + 0.1);
+					}
 				}
 			}
 
@@ -3954,13 +4355,19 @@ main(int argc, char *argv[]) {
 			if (li.verb)
 				printf("Filling in Lut table\n");
 #ifdef DEBUG_ONE
-#define DBGNO 3		/* Up to 10 */
+#define DBGNO 1		/* Up to 10 */
 
 #ifndef NEVER
 			/* Test a single given rgb/cmyk -> cmyk value */
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
+
+				in[0][0] = 125.0/255.0;
+				in[0][1] = 61.4/255.0;
+				in[0][2] = 28.42/255.0;
+				in[0][0] = 0.5;
+
 //				in[0][0] = 0.2;
 //				in[0][1] = 0.2;
 //				in[0][2] = 0.8;
@@ -3980,20 +4387,23 @@ main(int argc, char *argv[]) {
 //				in[0][2] = 16.0/255.0;
 //				in[0][3] = 0.0;
 
-				in[0][0] = 3.0/64.0;
-				in[0][1] = 3.0/64.0;
-				in[0][2] = 3.0/64.0;
-				in[0][3] = 0.0;
+//				in[0][0] = 3.0/64.0;
+//				in[0][1] = 3.0/64.0;
+//				in[0][2] = 3.0/64.0;
+//				in[0][3] = 0.0;
 
-				in[1][0] = 4.0/64.0;
-				in[1][1] = 4.0/64.0;
-				in[1][2] = 4.0/64.0;
-				in[1][3] = 0.0;
+//				in[1][0] = 4.0/64.0;
+//				in[1][1] = 4.0/64.0;
+//				in[1][2] = 4.0/64.0;
+//				in[1][3] = 0.0;
 
-				in[2][0] = 5.0/64.0;
-				in[2][1] = 5.0/64.0;
-				in[2][2] = 5.0/64.0;
-				in[2][3] = 0.0;
+//				in[2][0] = 5.0/64.0;
+//				in[2][1] = 5.0/64.0;
+//				in[2][2] = 5.0/64.0;
+//				in[2][3] = 0.0;
+
+				if (li.map != NULL)
+					li.map->dbg = 1;
 
 				for (i = 0; i < DBGNO; i++) {
 					printf("Input %f %f %f %*\n",in[i][0], in[i][1], in[i][2], in[i][3]);
@@ -4002,8 +4412,12 @@ main(int argc, char *argv[]) {
 					devip_devop((void *)&li, out, out);
 					printf("Out'' %f %f %f %*\n",out[0], out[1], out[2], out[3]);
 					devop_devo((void *)&li, out, out);
-					printf("Out %f %f %f %*\n\n",out[0], out[1], out[2], out[3]);
+					printf("Out %f %f %f %f\n\n",out[0], out[1], out[2], out[3]);
 				}
+
+				if (li.map != NULL)
+					li.map->dbg = 0;
+
 			}
 #endif /* NEVER */
 
@@ -4016,6 +4430,7 @@ main(int argc, char *argv[]) {
 					; 
 				li.total = itotal;
 				/* Allow for extra lookups due to ICM_CLUT_SET_APXLS */
+#ifdef USE_APXLS
 				if (apxls_min != NULL && apxls_max != NULL) {
 					for (itotal = 1, ui = 0; ui < li.in.chan; ui++)
 						itotal *= (apxls_max[ui] - apxls_min[ui]);
@@ -4024,13 +4439,17 @@ main(int argc, char *argv[]) {
 						itotal *= (clutPoints-1);
 				}
 				li.total += itotal;
+#endif /* USE_APXLS */
 				li.count = 0;
 				printf(" 0%%"); fflush(stdout);
 			}
 			if (icmSetMultiLutTables(
 				1,
 				&wo,
-				ICM_CLUT_SET_APXLS,			/* Use aproximate least squares */
+#ifdef USE_APXLS
+				ICM_CLUT_SET_APXLS |			/* Use aproximate least squares */
+#endif /* USE_APXLS */
+				0,
 				&li,						/* Context */
 				li.in.h->colorSpace,		/* Input color space */
 				li.out.h->colorSpace,		/* Output color space */
@@ -4060,7 +4479,13 @@ main(int argc, char *argv[]) {
 		if (li.verb && li.wphack && li.wphacked > 1)
 			printf("Warning :- white point hack trigger more than once! (%d)\n",li.wphacked);
 
-		/* Special case black point correction when we are usng TV encoding */
+		if (li.verb && li.rgbbkhack && li.bkhacked == 0)
+			printf("Warning :- RGB black point hack didn't trigger!\n");
+		if (li.verb && li.rgbbkhack && li.bkhacked > 1)
+			printf("Warning :- RGB black hack trigger more than once! (%d)\n",li.bkhacked);
+
+#ifdef NEVER	/* Don't need this now that we've made the black line up on the grid ? */
+		/* Special case black point correction when we are using TV encoding */
 		/* and the black probably doesn't lie on a grid point. */
 		/* This probably only works if we can have "-ve" output values */
 		/* by virtue of the output being tv encoded too. */
@@ -4077,26 +4502,24 @@ main(int argc, char *argv[]) {
 			/* Encode input value */
 			if (li.out.tvenc == 1) {				/* Video 16-235 range */
 				icmRGB_2_VidRGB(ival, ival);
-			} else if (li.out.tvenc == 2) {			/* Rec601 YCbCr */
+			} else if (li.out.tvenc == 3) {			/* Rec601 YCbCr */
 				icmRec601_RGBd_2_YPbPr(ival, ival);
 				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
-			} else if (li.out.tvenc == 3) {			/* Rec709 1150/60/2:1 YCbCr */
+			} else if (li.out.tvenc == 4) {			/* Rec709 1150/60/2:1 YCbCr */
 				icmRec709_RGBd_2_YPbPr(ival, ival);
 				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
-			} else if (li.out.tvenc == 4) {			/* Rec709 1250/50/2:1 YCbCr */
+			} else if (li.out.tvenc == 5) {			/* Rec709 1250/50/2:1 YCbCr */
 				icmRec709_50_RGBd_2_YPbPr(ival, ival);
 				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
-			} else if (li.out.tvenc == 5) {			/* Rec2020 Non-constant Luminance YCbCr encoding */
+			} else if (li.out.tvenc == 6) {			/* Rec2020 Non-constant Luminance YCbCr encoding */
 				icmRec2020_NCL_RGBd_2_YPbPr(ival, ival);
 				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
-			} else if (li.out.tvenc == 6) {			/* Rec2020 Constant Luminance YCbCr encoding */
+			} else if (li.out.tvenc == 7) {			/* Rec2020 Constant Luminance YCbCr encoding */
 				icmRec2020_CL_RGBd_2_YPbPr(ival, ival);
 				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
 			}
 
-//printf("input value     %f %f %f\n",ival[0], ival[1], ival[2]);
 			lut->lookup_clut_sx(lut, oval, ival);
-//printf("before tune out %f %f %f\n",oval[0], oval[1], oval[2]);
 			
 			/* Lookup the cLUT input value */
 			devi_devip((void *)&li, ival, ival);
@@ -4104,25 +4527,19 @@ main(int argc, char *argv[]) {
 			/* Look up black output value we want */
 			devip_devop((void *)&li, oval, ival);
 
-//printf("bp tune target  %f %f %f\n",oval[0], oval[1], oval[2]);
 
-			// ~~~~9999 should do a lookup to set sx/nl type corrctly
+			// ~9 should do a lookup to set sx/nl type corrctly
 			rv = lut->tune_value(lut, oval, ival);
 //			rv = icmLut_tune_value_sx(lut, oval, ival);
 //			rv = icmLut_tune_value_nl(lut, oval, ival);
 
 			if (rv != 0)
 				warning("Fine tuning video black failed - clipping");
-
-//			lut->lookup_clut_sx(lut, oval, ival);
-//printf("after sx out    %f %f %f\n",oval[0], oval[1], oval[2]);
-
-//			lut->lookup_clut_nl(lut, oval, ival);
-//printf("after nl out    %f %f %f\n",oval[0], oval[1], oval[2]);
 		}
+#endif /* NEVER */
 
 		if (li.verb)
-			printf("Writing out file\n");
+			printf("Writing ICC file '%s'\n",link_name);
 
 		/* Write the file out */
 		if ((rv = wr_icc->write(wr_icc,wr_fp,0)) != 0)
@@ -4131,7 +4548,7 @@ main(int argc, char *argv[]) {
 		/* eeColor format */
 		if (li.tdlut == 1) {
 			write_eeColor1DinputLuts(&li, tdlut_name); 
-			if (write_eeColor3DLut(wr_icc, tdlut_name)) 
+			if (write_eeColor3DLut(wr_icc, &li, tdlut_name)) 
 				error ("Write file '%s' failed",tdlut_name);
 			write_eeColor1DoutputLuts(&li, tdlut_name); 
 		}
@@ -4139,6 +4556,12 @@ main(int argc, char *argv[]) {
 		/* MadVR format */
 		else if (li.tdlut == 2) {
 			if (write_MadVR_3DLut(&li, wr_icc, tdlut_name)) 
+				error ("Write file '%s' failed",tdlut_name);
+		}
+
+		/* .cube format */
+		else if (li.tdlut == 3) {
+			if (write_cube_3DLut(&li, wr_icc, tdlut_name)) 
 				error ("Write file '%s' failed",tdlut_name);
 		}
 
@@ -4323,6 +4746,21 @@ main(int argc, char *argv[]) {
 
 /* ===================================================================== */
 
+/* Tweak for eeColor input and output value encodings */
+
+static void VidRGB_to_eeColor(double out[3], double in[3]) {
+	int i;
+	for (i = 0; i < 3; i++)
+		out[i] = in[i] * 255.0/256.0;
+}
+
+static void eeColor_to_VidRGB(double out[3], double in[3]) {
+	int i;
+	for (i = 0; i < 3; i++)
+		out[i] = in[i] * 256.0/255.0;
+}
+
+
 /* Write a eeColor 1DLut input LUT files */
 /* Return nz on error */
 int write_eeColor1DinputLuts(clink *li, char *tdlut_name) {
@@ -4350,7 +4788,23 @@ int write_eeColor1DinputLuts(clink *li, char *tdlut_name) {
 		for (i = 0; i < 1024; i++) {
 			for (k = 0; k < 3; k++)
 				in[k] = i/(1024-1.0);
+
+			/*    Full range -> 64/65 scaled */
+			/* or Video -> cLUT65 index */
 			devi_devip((void *)li, out, in);
+
+			if (li->in.tvenc == 1) {				/* Video 16-235 range */
+				cLUT65_to_VidRGB(out, out);
+
+			/* eeColor doesn't actually do YCrCb explicitly, but put this here for completeness */
+			} else if (li->in.tvenc == 3 		/* Rec601 YCbCr */
+			        || li->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
+			        || li->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
+			        || li->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
+			        || li->in.tvenc == 7) {		/* Rec2020 Constant Luminance YCbCr encoding */
+				cLUT65_to_YCrCb(out, out);
+			}
+
 			fp->gprintf(fp,"%.6f\n",out[j]);
 		}
 
@@ -4360,79 +4814,16 @@ int write_eeColor1DinputLuts(clink *li, char *tdlut_name) {
 	return 0;
 }
 
-#ifdef NEVER
-
-/* Write a eeColor 3DLut file */
-/* Return nz on error */
-/* (We delve inside the icc structure, so don't use this code) */
-int write_eeColor3DLut(icc *icc, char *fname) {
-	icmLut *lut;
-	icmFile *fp;
-	
-	if ((lut = (icmLut *)icc->read_tag(icc, icSigAToB0Tag)) == NULL)
-		error("write_eeColor3DLut: unableto locate A2B tag: %d, %s",icc->errc,icc->err);
-
-	/* Open up the 3dlut file for writing */
-	if ((fp = new_icmFileStd_name(fname,"w")) == NULL)
-		error ("write_eeColor3DLut: Can't open file '%s'",fname);
-
-	{
-		int i, j, k;
-		DCOUNT(gc, MAX_CHAN, lut->inputChan, 0, 0, lut->clutPoints);
-		int ord[3] = { 1, 0, 2 };		/* Channel order, fastest to slowest, G, R, B */
-
-		DC_INIT(gc);
-
-		while (!DC_DONE(gc)) {
-			int ix;
-
-			ix = 0;
-			for (i = 0; i < lut->inputChan; i++) {
-				ix += lut->dinc[ord[i]] * gc[i];
-			}
-
-			/* Hmm. We're assuming that the eeColor is smart enough */
-			/* to map the floating point values to the maximum */
-			/* video encoded range, ie 255 * (bits - 8). */
-			/* It's not clear if "bits" is 8, 10 or 12, or if */
-			/* it actually works this way though. */
-
-			/* It's also not clear what it does for full range input, */
-			/* if anything. Ie. it may just map that to 255 * (bits - 8) too. */
-
-			/* There are two sets of RGB values. One is (suposedly)
-			 the "calibrated white point" and one "the native white point".
-			 It's hard to guess what this is.
-			 */
-	
-			for (i = 0; i < lut->inputChan; i++) {
-				fp->gprintf(fp," %.6f",lut->clutTable[ix + i]);
-			}
-			for (i = 0; i < lut->outputChan; i++) {
-				fp->gprintf(fp," %.6f",lut->clutTable[ix + i]);
-			}
-
-			fp->gprintf(fp,"\n");
-
-			DC_INC(gc);
-		}
-	}
-	if (fp->del(fp)) 
-		error ("write_eeColor3DLut: write to '%s' failed",fname);
-	return 0;
-}
-
-#else
-
 /* Write a eeColor 3DLut file by doing a lookup for each node. */
 /* Return nz on error */
-int write_eeColor3DLut(icc *icc, char *fname) {
+int write_eeColor3DLut(icc *icc, clink *li, char *fname) {
 	icmLuBase *luo;
 	icmLuLut *lut;
 	int i, j, k;
 	DCOUNT(gc, MAX_CHAN, 3, 0, 0, 65);
 	int ord[3];			/* Input channel order, fastest to slowest */
 	icmFile *fp;
+//	int trace = 0;
 	
 	/* Get a conversion object. We assume it is of the right type, being a link */
 	if ((luo = icc->get_luobj(icc, icmFwd, icmDefaultIntent, icmSigDefaultData, icmLuOrdNorm))
@@ -4451,33 +4842,81 @@ int write_eeColor3DLut(icc *icc, char *fname) {
 	ord[0] = 1;  ord[1] = 0;  ord[2] = 2;  /* Fastest to slowest G R B */
 
 	while (!DC_DONE(gc)) {
-		double in[3], out[3];
+		double oin[3], in[3], out[3];
 
-		/* Hmm. If we knew how the eeColor quantized the incoming video values, */
-		/* we could do the same quantization here for better accuracy. */
-		/* It's hard to guess given the unknown 8/10/12 bit nature of it. */
+		/* Our assumption is that the eeColor maps the FP range 1.0
+		  to 64 * 2^(bits -6). This is sligghtly too much for
+		  full range (PC), but exactly lines the black point
+		  up on the 4th grid node for any video encodig bit depth,
+	 	  and results in input values being the same as output
+		  values for the null transform
+		 */
+		/* There are two sets of RGB values. One is (suposedly)
+		 the "calibrated white point" and one "the native white point",
+		 but experiments don't give any indications that the first
+		 three entries are capable of affecting the result in any way
+		 in any mode..
+		 */
+	
+		/* The eeColor wires the 65'th node to 1.0, and we can skip */
+		/* creating it */
+		if (gc[0] == 64 || gc[1] == 64 || gc[2] == 64)
+			goto next;
+
 		for (i = 0; i < 3; i++)
-			in[ord[i]] = gc[i]/64.0;
+			oin[ord[i]] = gc[i]/64.0;
+
+//		trace = 0;
+//		if (gc[0] == 4 && gc[1] == 4 && gc[2] == 4) trace = 1;
+//		if (gc[0] == 58 && gc[1] == 58 && gc[2] == 58) trace = 1;
+//		if (gc[0] == 59 && gc[1] == 59 && gc[2] == 59) trace = 1;
+
+//		if (trace) printf("eeColor ix oin = %f %f %f\n", oin[0], oin[1], oin[2]);
+
+		eeColor_to_VidRGB(in, oin);
+
+//		if (trace) printf("Video in       = %f %f %f\n", in[0], in[1], in[2]);
+
+		if (li->clutres == 65
+		  || li->clutres == 33
+		  || li->clutres == 17) {
+
+			if (li->in.tvenc == 1) {				/* Video 16-235 range */
+				VidRGB_to_cLUT65(in, in);
+	
+			/* eeColor doesn't actually do YCrCb explicitly, but put this here for completeness */
+			} else if (li->in.tvenc == 3 		/* Rec601 YCbCr */
+			        || li->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
+			        || li->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
+			        || li->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
+			        || li->in.tvenc == 7) { 		/* Rec2020 Constant Luminance YCbCr encoding */
+				YCrCb_to_cLUT65(in, in);
+			}
+		}
+//		if (trace) printf("cLut in        = %f %f %f\n", in[0], in[1], in[2]);
 
 		if (lut->clut(lut, out, in) > 1)
 		    error ("write_eeColor3DLut: %d, %s",icc->errc,icc->err);
 
-//printf("~1 %f %f %f -> %f %f %f\n", in[0], in[1], in[2], out[0], out[1], out[2]);
+//		if (trace) printf("cLut/video out = %f %f %f\n", out[0], out[1], out[2]);
+
+		VidRGB_to_eeColor(out, out);
+//		if (trace) printf("eeColor out    = %f %f %f\n", out[0], out[1], out[2]);
 
 		for (i = 0; i < 3; i++)
-			fp->gprintf(fp," %.6f",out[i]);
+			fp->gprintf(fp," %.6f",oin[i]);
 		for (i = 0; i < 3; i++)
 			fp->gprintf(fp," %.6f",out[i]);
 
 		fp->gprintf(fp,"\n");
 
+  next:;
 		DC_INC(gc);
 	}
 	if (fp->del(fp)) 
 		error ("write_eeColor3DLut: write to '%s' failed",fname);
 	return 0;
 }
-#endif
 
 /* Write a eeColor 1DLut output LUT files */
 /* Return nz on error */
@@ -4574,11 +5013,11 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 	write_ORD32_le(8, h + of); of += 4;								/* input bit depth */
 	write_ORD32_le(8, h + of); of += 4;
 	write_ORD32_le(8, h + of); of += 4;
-	write_ORD32_le(li->in.tvenc >= 2 ? 1 : 0, h + of); of += 4;			/* Input BGR or cCbCr enc */
+	write_ORD32_le(li->in.tvenc >= 3 ? 1 : 0, h + of); of += 4;			/* Input BGR or cCbCr enc */
 	if (dov2)
 		write_ORD32_le(li->in.tvenc != 0 ? 1 : 0, h + of), of += 4;		/* Range */
 	write_ORD32_le(16, h + of); of += 4;								/* Output bit depth */
-	write_ORD32_le(li->out.tvenc >= 2 ? 1 : 0, h + of); of += 4;		/* Output BGR or YCbCr encoding */
+	write_ORD32_le(li->out.tvenc >= 3 ? 1 : 0, h + of); of += 4;		/* Output BGR or YCbCr encoding */
 	if (dov2)
 		write_ORD32_le(li->out.tvenc != 0 ? 1 : 0, h + of), of += 4;	/* Range */
 	write_ORD32_le(0x200, h + of); of += 4;								/* Bytes to parameters */
@@ -4604,7 +5043,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 	write_ORD32_le(clutsize, h + of); of += 4;						/* Uncompressed clut size */
 
 	if (li->verb)
-		printf("Writing 3dLut\n");
+		printf("Writing MadVR 3dLut '%s'\n",fname);
 
 	/* Write the 3dlutheader */
 	if (fp->write(fp, h, 1, 0x4000) != 0x4000)
@@ -4619,7 +5058,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 
 		DC_INIT(gc);
 
-		if (li->in.tvenc >= 2) {	/* YCbCr fastest to slowest is Y Cb Cr */
+		if (li->in.tvenc >= 3) {	/* YCbCr fastest to slowest is Y Cb Cr */
 			ord[0] = 0;  ord[1] = 1;  ord[2] = 2;		/* Y Cb Cr */  
 
 		} else {					/* RGB fastest to slowest is B G R */
@@ -4638,7 +5077,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 
 //printf("~1 %f %f %f -> %f %f %f\n", in[0], in[1], in[2], out[0], out[1], out[2]);
 
-			if (li->in.tvenc == 7 || li->in.tvenc == 8) {		/* xvYCC */
+			if (li->in.tvenc == 8 || li->in.tvenc == 9) {		/* xvYCC */
 				for (i = 1; i < 3; i++) {		/* Force 'sync' entry values on CbCr*/
 					if (gc[i] == 0) {
 						out[i] = 0.0;
@@ -4660,7 +5099,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 
 			}
 
-			if (li->out.tvenc >= 2) {	/* YCbCr order is YCbCr */
+			if (li->out.tvenc >= 3) {	/* YCbCr order is YCbCr */
 				write_ORD16_le(iout[0], buf + 0);
 				write_ORD16_le(iout[1], buf + 2);
 				write_ORD16_le(iout[2], buf + 4);
@@ -4735,6 +5174,76 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 
 	return 0;
 }
+
+/* ===================================================================== */
+/* Write .cube 3dlut file */
+
+/* Return nz on error */
+int write_cube_3DLut(clink *li, icc *icc, char *fname) {
+	icmFile *fp;
+	ORD8 *h;
+	int clutsize;
+	int i;
+
+	icmLuBase *luo;
+	icmLut *lu;
+
+	/* Get a conversion object. We assume it is of the right type */
+	if ((luo = icc->get_luobj(icc, icmFwd, icmDefaultIntent,
+		                                 icmSigDefaultData, icmLuOrdNorm)) == NULL)
+		error ("write_cube_3DLut: %d, %s",icc->errc, icc->err);
+
+	/* Open up the 3dlut file for writing */
+	if ((fp = new_icmFileStd_name(fname,"w")) == NULL)
+		error("write_cube_3DLut: Can't open file '%s'",fname);
+
+	lu = ((icmLuLut *)luo)->lut;
+	clutsize = lu->clutPoints;
+
+	fp->gprintf(fp, "# Created by ArgyllCMS\n");
+	fp->gprintf(fp, "LUT_3D_SIZE %d\n",clutsize);
+//	fp->gprintf(fp, "DOMAIN_MIN %f %f %f\n",0.0, 0.0, 0.0);
+//	fp->gprintf(fp, "DOMAIN_MAX %f %f %f\n",1.0, 1.0, 1.0);
+
+	if (li->verb)
+		printf("Writing .cube 3dLut '%s'\n",fname);
+
+	/* Write the clut data */
+	{
+		int i, j, k;
+		DCOUNT(gc, MAX_CHAN, 3, 0, 0, clutsize);
+		int ord[3];			/* Input channel order, fastest to slowest */
+
+		DC_INIT(gc);
+
+		/* RGB fastest to slowest is R G B */
+		ord[0] = 0;  ord[1] = 1;  ord[2] = 2;  /* R G B */
+
+		while (!DC_DONE(gc)) {
+			double in[3], out[3];
+			int iout[3];
+
+			for (i = 0; i < 3; i++)
+				in[ord[i]] = gc[i]/(clutsize-1.0);
+
+			if (luo->lookup(luo, out, in) > 1)
+			    error ("write_cube_3DLut: %d, %s",icc->errc,icc->err);
+
+//printf("~1 %f %f %f -> %f %f %f\n", in[0], in[1], in[2], out[0], out[1], out[2]);
+			fp->gprintf(fp, " %f %f %f\n",out[0], out[1], out[2]);
+
+			DC_INC(gc);
+		}
+	}
+
+	if (fp->del(fp)) 
+		error ("write_cube_3DLut: write to '%s' failed",fname);
+
+	luo->del(luo);
+
+	return 0;
+}
+
 
 
 

@@ -37,6 +37,9 @@
 #include <math.h>
 #include "numlib.h"
 #include "plot.h"
+//#ifdef STANDALONE_TEST
+#include "ui.h"
+//#endif /* STANDALONE_TEST */
 
 #undef DODEBUG				/* Print error messages & progress reports */
 //#define STANDALONE_TEST	/* Defined by build script */
@@ -889,7 +892,6 @@ static int do_plot_imp(
 	/* ------------------------------------------- */
 	/* Setup windows stuff */
 	{
-
 		/* It would be nice to reduce number of globals. */
 
 		/* We don't clean up properly either - ie. don't delete thread etc. */
@@ -1341,7 +1343,8 @@ static void DoPlot(NSRect *rect, plot_info *pdp);
 	chars = [[event characters] UTF8String];
 //	printf("Got Window KeyDown type %d char %s\n",(int)[event type], chars);
 
-	if (chars[0] == ' ') {
+	if (chars[0] == ' '
+	 || chars[0] == '\r') {
 //		printf("Set plot_signal = 1\n");
 		plot_cx->plot_signal = 1;
 	}
@@ -1395,12 +1398,10 @@ static void create_my_win(cntx_t *cx) {
 
 /*
 	Cocoa NSApp is pretty horrible - it will only get user events
-	if created and run in the main thread. So the only way we could
-	decouble the windows from the application would be to intercept
+	if created and run in the main thread. So the only way we can
+	decouble the windows from the application is to intercept
 	main() and create a secondary thread to run the appication while
 	leaving main() in reserve for creating an NSApp and windows.
-	
-	Instead we poll events for a while and then go back to the main application.
  */
 
 /* Superset implementation function: */
@@ -1488,36 +1489,21 @@ static int do_plot_imp(
 		pd.o = abs(o);
 	}
 
+	/* If we may be in a different thread to the main thread or */
+	/* the application thread, establish our own pool. */
+	NSAutoreleasePool *tpool = nil;
+	if (pthread_self() != ui_thid
+	 && pthread_self() != ui_main_thid)
+		tpool = [NSAutoreleasePool new];
+
 	/* If needed, create the indow */
 	if (plot_cx == NULL) {
 
-		/* If there is no NSApp */
-		/* (This should go in a common library) */
-		/* Note that we don't actually clean this up on exit - */
-		/* possibly we can't. */
+		/* If there is no NSApp, then we haven't run main() in libui before */
+		/* main() in the application. */
 		if (NSApp == nil) {
-			static NSAutoreleasePool *pool = nil;
-			ProcessSerialNumber psn = { 0, 0 };
-
-			/* Transform the process so that the desktop interacts with it properly. */
-			/* We don't need resources or a bundle if we do this. */
-			if (GetCurrentProcess(&psn) == noErr) {
-				OSStatus stat;
-				if (psn.lowLongOfPSN != 0 && (stat = TransformProcessType(&psn,
-					               kProcessTransformToForegroundApplication)) != noErr) {
-//				fprintf(stderr,"TransformProcess failed with code %d\n",stat);
-				} else {
-//				fprintf(stderr,"TransformProcess suceeded\n");
-				}
-			}
-
-
-			pool = [NSAutoreleasePool new];
-			[NSApplication sharedApplication];	/* Creates NSApp */
-			[NSApp finishLaunching];
-
-			/* We seem to need this, because otherwise we don't get focus automatically */
-			[NSApp activateIgnoringOtherApps: YES];
+			fprintf(stderr,"NSApp is nil - need to rename main() to main() and link with libui !\n");
+			exit(1);
 		}
 
 		if ((plot_cx = (cntx_t *)calloc(sizeof(cntx_t), 1)) == NULL)
@@ -1529,35 +1515,24 @@ static int do_plot_imp(
 		[plot_cx->view setNeedsDisplay: YES ];
 	}
 
-	/* Wait until the events are done */
-	{
-		NSEvent *event;
-		double tot;
-		NSDate *to;
-		/* We're creating and draining a pool here to ensure that all the */
-		/* auto release objects get drained when we're finished (?) */
-		NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+	/* (Main thread will service events) */
 
-		if (dowait > 0) {		/* Wait for a space key */
-			tot = 24.0 * 60.0 * 60.0;
-		} else if (dowait < 0) {
-			tot = (double)-dowait;
-		} else {
-			tot = 0.1;
-		}
-		to = [NSDate dateWithTimeIntervalSinceNow:tot];		/* autorelease ? */
-		plot_cx->plot_signal = 0;
-		for (;plot_cx->plot_signal == 0;) {
-			/* Hmm. Assume event is autorelease */
-			if ((event = [NSApp nextEventMatchingMask:NSAnyEventMask
-			             untilDate:to inMode:NSDefaultRunLoopMode dequeue:YES]) != nil) {
-				[NSApp sendEvent:event];
-			} else {
-				break;
-			}
+	/* Wait until for a key if we should */
+	if (dowait > 0) {		/* Wait for a space key */
+		for (plot_cx->plot_signal = 0; plot_cx->plot_signal == 0;) {
+		    struct timespec ts;
+
+		    ts.tv_sec = 100 / 1000;
+    		ts.tv_nsec = (100 % 1000) * 1000000;
+		    nanosleep(&ts, NULL);
 	    }
-		[tpool release];
+	} else if (dowait < 0) {
+		Sleep(-dowait * 1000);
 	}
+
+	if (tpool != nil)
+		[tpool release];
+
 	return 0;
 }
 
@@ -1744,10 +1719,12 @@ static void DoPlot(NSRect *rect, plot_info *pdp) {
 			                            blue: gcolors[j][2]/255.0
 			                           alpha: 1.0] setStroke];
 
-			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
+			if (pdp->n > 0) {
+				lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
+				ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
+			}
 
-			for (i = 0; i < pdp->n; i++) {
+			for (i = 1; i < pdp->n; i++) {
 				int cx,cy;
 				cx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
 				cy = (int)((     yp[i] - pdp->mny) * pdp->scy + 0.5);
@@ -2338,11 +2315,6 @@ double nicenum(double x, int round) {
 #ifdef STANDALONE_TEST
 /* test code */
 
-// ~~99
-#define TEST_NON_CONSOLE	/* Version that works from command line and GUI */
-// May have to add link flag -Wl,-subsystem,windows
-// since MingW is stupid about noticing WinMain or pragma
-
 //#include <windows.h>
 //#include <stdio.h>
 #include <fcntl.h>
@@ -2445,39 +2417,6 @@ printf("~1 failed to find AttachConsole\n"); fflush(stdout);
 // ~~~~~~~~~~~~~
 #endif // NEVER
 
-#if defined(TEST_NON_CONSOLE) && defined(NT)
-# pragma comment( linker, "/subsystem:windows" )
-
-APIENTRY WinMain(
-    HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine,
-    int nCmdShow
-) {
-	{			/* Only works on >= XP though */
-		BOOL (WINAPI *AttachConsole)(DWORD dwProcessId);
-
-		*(FARPROC *)&AttachConsole = 
-          GetProcAddress(LoadLibraryA("kernel32.dll"), "AttachConsole");
-
-		if (AttachConsole != NULL && AttachConsole(((DWORD)-1)))
-		{
-			if (_fileno(stdout) < 0)
-				freopen("CONOUT$","wb",stdout);
-			if (_fileno(stderr) < 0)
-				freopen("CONOUT$","wb",stderr);
-			if (_fileno(stdin) < 0)
-				freopen("CONIN$","rb",stdin);
-#ifdef __cplusplus 
-			// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
-			std::ios::sync_with_stdio();
-#endif
-		}
-	}
-
-	return main(__argc, __argv);
-}
-#endif /* TEST_NON_CONSOLE && NT */
 
 int main(int argc, char *argv[]) {
 	double x[10]  = {0.0, 0.5, 0.7, 1.0};

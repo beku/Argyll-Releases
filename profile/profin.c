@@ -678,15 +678,15 @@ make_input_icc(
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
 			error ("Input file doesn't contain field RGB_R");
 		if (icg->t[0].ftype[ri] != r_t)
-			error ("Field CMYK_C is wrong type - corrupted file ?");
+			error ("Field RGB_R is wrong type - corrupted file ?");
 		if ((gi = icg->find_field(icg, 0, "RGB_G")) < 0)
 			error ("Input file doesn't contain field RGB_G");
 		if (icg->t[0].ftype[gi] != r_t)
-			error ("Field CMYK_M is wrong type - corrupted file ?");
+			error ("Field RGB_G is wrong type - corrupted file ?");
 		if ((bi = icg->find_field(icg, 0, "RGB_B")) < 0)
 			error ("Input file doesn't contain field RGB_B");
 		if (icg->t[0].ftype[bi] != r_t)
-			error ("Field CMYK_Y is wrong type - corrupted file ?");
+			error ("Field RGB_B is wrong type - corrupted file ?");
 
 		if (spec == 0) {        /* Using instrument tristimulous value */
 
@@ -838,7 +838,9 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags, 		/* Flags */
-		               npat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev, 1.0,
+		               npat, npat, tpat, NULL, 0.0, wpscale,
+//		               NULL,		/* bpo */
+			           smooth, avgdev, 1.0,
 		               NULL, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -890,7 +892,7 @@ make_input_icc(
 			/* Create gamma/matrix model to extrapolate with. */
 			/* (Use ofset & gain, gamma curve as 0th order with 1 harmonic, */
 			/* and smooth it.) */
-			if ((mm = new_MatrixModel(verb, nmpat, mpat, wantLab,
+			if ((mm = new_MatrixModel(wr_icco, verb, nmpat, mpat, wantLab,
 				      /* quality */ -1, /* isLinear */ ptype == prof_matonly,
 				      /* isGamma */ 0, /* isShTRC */ 0,
 				      /* shape0gam */ 1, /* clipbw */ 0, /* clipprims */ 0,
@@ -1123,7 +1125,9 @@ make_input_icc(
 			               ICX_2PASSSMTH |
 #endif
 		               flags, 		/* Flags */
-		               npat + nxpat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev, 1.0,
+		               npat + nxpat, npat, tpat, NULL, 0.0, wpscale,
+//			           NULL,	/* bpo */
+			           smooth, avgdev, 1.0,
 			           NULL, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 

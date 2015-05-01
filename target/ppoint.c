@@ -37,11 +37,14 @@
 #include "numlib.h"
 #include "rspl.h"
 #include "sort.h"
-#include "plot.h"
 #include "icc.h"
 #include "xcolorants.h"
 #include "targen.h"
 #include "ppoint.h"
+#ifdef DUMP_PLOT
+# include "plot.h"
+# include "ui.h"
+#endif
 
 #undef DEBUG
 #define DUMP_PLOT		/* Show on screen plot */

@@ -1,6 +1,6 @@
 
 /* 
- * Create a gamut mapping test set from a TIFF file.
+ * Create a gamut mapping locus set from a TIFF file.
  *
  * Author:  Graeme W. Gill
  * Date:    08/10/14
@@ -42,6 +42,7 @@
 #include "xicc.h"
 #include "vrml.h"
 #include "sort.h"
+#include "ui.h"
 
 #define DE_SPACE 3		/* Delta E of spacing for output points */
 #undef DEBUG_PLOT
@@ -52,8 +53,8 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: tiffgmts [-v level] [profile.icm | embedded.tif] infile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
-	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .ts file\n");
-	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
+	fprintf(stderr," -w            emit %s %s file as well as CGATS .ts file\n",vrml_format(),vrml_ext());
+	fprintf(stderr," -n            Don't add %s axes or white/black point\n",vrml_format());
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
 //  fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
@@ -484,7 +485,7 @@ main(int argc, char *argv[]) {
 					usage();
 			}
 
-			/* VRML output */
+			/* VRML/X3D output */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				dovrml = 1;
 			}
@@ -1003,14 +1004,14 @@ printf("~1 itter %d, alen = %f, minl = %f, maxl = %f\n",j,alen,minl,maxl);
 			    error("Write error : %s",pp->err);
 		}
 
-		/* Create the VRML file */
+		/* Create the VRML/X3D file */
 		if (dovrml) {
 			vrml *vv;
 			
-			strcpy(xl,".wrl");
-			printf("Output vrml file '%s'\n",out_name);
+			xl[0] = '\000';			/* remove extension */
+			printf("Output %s file '%s%s'\n",vrml_format(),out_name,vrml_ext());
 			if ((vv = new_vrml(out_name, doaxes, 0)) == NULL)
-				error ("Creating VRML object failed");
+				error ("Creating %s object %s%s failed",vrml_format(),out_name,vrml_ext());
 
 #ifdef NEVER
 			vv->start_line_set(vv);
@@ -1024,7 +1025,7 @@ printf("~1 itter %d, alen = %f, minl = %f, maxl = %f\n",j,alen,minl,maxl);
 			}
 #endif
 
-			vv->del(vv);
+			vv->del(vv);		/* Write file */
 		}
 		free(outp);
 	}

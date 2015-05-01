@@ -30,17 +30,21 @@
 
  */
 
-#define DEBUG			/* Save measurements and restore them to outname_X.sp */
-						/* 
+/* 
+	Test mode files restored/saved:
 
-							outname_i.sp	Illuminant spectrum
-							outname_r.sp	Illuminant off paper spectrum
-							outname_p.sp	Instrument measured paper reflectance spectrum
-							outname_mpir.sp	Measured paper under illuminant spectrum
-							outname_cpir.sp	Computed paper under illuminant spectrum
+	outname_i.sp	Illuminant spectrum
+	outname_r.sp	Illuminant off paper spectrum
+	outname_p.sp	Instrument measured paper reflectance spectrum
 
-						 */
+	Just saved:
 
+	outname_mpir.sp	Measured paper under illuminant spectrum
+	outname_cpir.sp	Computed paper under illuminant spectrum
+ */
+
+#undef DEBUG			/* Debug messages */
+#undef PLOT_FITTING	/* Plot the fitting itterations */
 #undef SHOWDXX			/* Plot the best matched daylight as well */
 
 #include <stdio.h>
@@ -59,7 +63,10 @@
 #include "icoms.h"
 #include "instappsup.h"
 #include "plot.h"
-#include "spyd2setup.h"			/* Enable Spyder 2 access */
+#include "ui.h"
+#ifdef ENABLE_USB
+# include "spyd2.h"
+#endif
 
 #include <stdarg.h>
 
@@ -123,10 +130,15 @@ static double bfindfunc(void *adata, double pv[]) {
 	double rv = 0.0;
 
 	/* Add UV level to illuminant */
-	b->ill = *b->i_sp;
+	b->ill = *b->i_sp;							/* Structure copy */
 	xsp_setUV(&b->ill, b->i_sp, pv[0]);		/* Extends ill range into UV */
 
-	/* Update the conversion */
+#ifdef NEVER	/* Plot the two reflectance spectra */
+	printf("Black = Measured illum, Red = illum + %f UV\n",pv[0]);
+	xspect_plot(b->i_sp, &b->ill, NULL);
+#endif
+
+	/* Update the conversion to use observer illuminant with UV */
 	if (b->pap->update_fwa_custillum(b->pap, NULL, &b->ill) != 0) 
 		error ("Updating FWA compensation failed");
 
@@ -161,7 +173,13 @@ static double bfindfunc(void *adata, double pv[]) {
 	/* if the case is unconstrained. */  
 	rv += 0.1 * fabs(pv[0]);
 
-//printf("~1 rev = %f (%f %f %f - %f %f %f) from %f %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
+#ifdef PLOT_FITTING	/* Plot the two reflectance spectra */
+	printf("rev = %f (%f %f %f - %f %f %f) from UV %f GA %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
+
+	printf("Black = Measured, Red = trial\n");
+	xspect_plot(&b->srop, &b->cpsp, NULL);
+#endif
+
 	return rv;
 }
 
@@ -216,8 +234,6 @@ usage(char *diag, ...) {
 	icompaths *icmps;
 	fprintf(stderr,"Measure an illuminant, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	if (setup_spyd2() == 2)
-		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -237,7 +253,8 @@ usage(char *diag, ...) {
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+				if ((paths[i]->itype == instSpyder1 && setup_spyd2(0) == 0)
+				 || (paths[i]->itype == instSpyder2 && setup_spyd2(1) == 0))
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
@@ -250,6 +267,8 @@ usage(char *diag, ...) {
 	fprintf(stderr," -Y r                 Set refresh measurement mode\n");
 	fprintf(stderr," -Y R:rate            Override measured refresh rate with rate Hz\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
+	fprintf(stderr," -T                   Test mode - restore & save measurements to\n");
+	fprintf(stderr,"                       *_i.sp, *_r.sp, *_p.sp, *_mpir.sp, *_cpir.sp files\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," illuminant.sp        File to save measurement to\n");
 	
@@ -270,10 +289,10 @@ int main(int argc, char *argv[])
 	int refrmode = -1;				/* -1 = default,  = non-refresh mode, 1 = non-refresh mode */
 	double refrate = 0.0;			/* 0.0 = default, > 0.0 = override refresh rate */ 
 	char outname[MAXNAMEL+1] = "\000";  /* Spectral output file name */
-#ifdef DEBUG
-	char tname[MAXNAMEL+11] = "\000", *tnp;
-	int rd_i = 0, rd_r = 0, rd_p = 0;
-#endif
+
+	int tmode = 0;					/* Test mode */
+	char tname[MAXNAMEL+11] = "\000", *tnp;		/* Test mode file names */
+	int rd_i = 0, rd_r = 0, rd_p = 0;			/* Test mode flags */
 
 	icompaths *icmps = NULL;		/* Ports to choose from */
 	int comno = 1;					/* Specific port suggested by user */
@@ -300,7 +319,6 @@ int main(int argc, char *argv[])
 
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
 	check_if_not_interactive();
-	setup_spyd2();				/* Load firware if available */
 
 	i_sp.spec_n = 0;
 	r_sp.spec_n = 0;
@@ -383,6 +401,9 @@ int main(int argc, char *argv[])
 					else
 						usage(NULL);
 
+			} else if (argv[fa][1] == 'T') {
+				tmode = 1;
+
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
@@ -403,31 +424,31 @@ int main(int argc, char *argv[])
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 
-#ifdef DEBUG
-	strcpy(tname, outname);
-	if ((tnp = strrchr(tname, '.')) == NULL)
-		tnp = tname + strlen(tname);
-
-	/* Special debug */
-	strcpy(tnp, "_i.sp");
-	if (read_xspect(&i_sp, tname) == 0) {
-		rd_i = 1;
-		printf("(Found '%s' file and loaded it)\n",tname);
+	if (tmode) {
+		strcpy(tname, outname);
+		if ((tnp = strrchr(tname, '.')) == NULL)
+			tnp = tname + strlen(tname);
+	
+		/* Special debug */
+		strcpy(tnp, "_i.sp");
+		if (read_xspect(&i_sp, tname) == 0) {
+			rd_i = 1;
+			printf("(Found '%s' file and loaded it)\n",tname);
+		}
+		strcpy(tnp, "_r.sp");
+		if (read_xspect(&r_sp, tname) == 0) {
+			rd_r = 1;
+			printf("(Found '%s' file and loaded it)\n",tname);
+		}
+		strcpy(tnp, "_p.sp");
+		if (read_xspect(&p_sp, tname) == 0) {
+			rd_p = 1;
+			/* Should read instrument type from debug_p.sp !! */
+			if (inst_illuminant(&insp, instI1Pro) != 0)		/* Hack !! */
+				error ("Instrument doesn't have an FWA illuminent");
+			printf("(Found '%s' file and loaded it)\n",tname);
+		}
 	}
-	strcpy(tnp, "_r.sp");
-	if (read_xspect(&r_sp, tname) == 0) {
-		rd_r = 1;
-		printf("(Found '%s' file and loaded it)\n",tname);
-	}
-	strcpy(tnp, "_p.sp");
-	if (read_xspect(&p_sp, tname) == 0) {
-		rd_p = 1;
-		/* Should read instrument type from debug_p.sp !! */
-		if (inst_illuminant(&insp, instI1Pro) != 0)		/* Hack !! */
-			error ("Instrument doesn't have an FWA illuminent");
-		printf("(Found '%s' file and loaded it)\n",tname);
-	}
-#endif /* DEBUG */
 
 	/* Until the measurements are done, or we give up */
 	for (;;) {
@@ -474,11 +495,13 @@ int main(int argc, char *argv[])
 			int ch;
 
 			if (it == NULL) {
+				icompath *ipath;
 				if (icmps == NULL)
 					icmps = new_icompaths(g_log);
 
 				/* Open the instrument */
-				if ((it = new_inst(icmps->get_path(icmps, comno), 0, g_log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
+				ipath = icmps->get_path(icmps, comno);
+				if ((it = new_inst(ipath, 0, g_log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
 					printf("!!! Unknown, inappropriate or no instrument detected !!!\n");
 					continue;
 				}
@@ -694,7 +717,7 @@ int main(int argc, char *argv[])
 					}
 				}
 
-				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0);
 				if (ev != inst_ok) {	/* Abort or fatal error */
 					printf("!!! Calibration failed with error :'%s' (%s) !!!\n",
 						it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -871,7 +894,7 @@ int main(int argc, char *argv[])
 			} else if ((rv & inst_mask) == inst_needs_cal) {
 				inst_code ev;
 				printf("\nIlluminant measure failed because instruments needs calibration.\n");
-				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL, 0);
 				continue;
 
 			/* Deal with a bad sensor position */
@@ -900,20 +923,16 @@ int main(int argc, char *argv[])
 
 			if (c == '1') {
 				i_sp = val.sp;
-#ifdef DEBUG
-				if (rd_i == 0) {
+				if (tmode && rd_i == 0) {
 					strcpy(tnp, "_i.sp");
 					write_xspect(tname,&i_sp);
 				}
-#endif
 			} else if (c == '2') {
 				r_sp = val.sp;
-#ifdef DEBUG
-				if (rd_r == 0) {
+				if (tmode && rd_r == 0) {
 					strcpy(tnp, "_r.sp");
 					write_xspect(tname,&r_sp);
 				}
-#endif
 			} else if (c == '3') {
 				p_sp = val.sp;
 
@@ -921,13 +940,11 @@ int main(int argc, char *argv[])
 				if (inst_illuminant(&insp, itype) != 0)
 					error ("Instrument doesn't have an FWA illuminent");
 
-#ifdef DEBUG
-				if (rd_p == 0) {
+				if (tmode && rd_p == 0) {
 					/* Should save instrument type/instrument illuminant spectrum !!! */
 					strcpy(tnp, "_p.sp");
 					write_xspect(tname,&p_sp);
 				}
-#endif
 			}
 
 			if (pspec) {
@@ -982,7 +999,8 @@ int main(int argc, char *argv[])
 					for (i = 0; ; i++) {
 						if (paths[i] == NULL)
 							break;
-						if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+						if ((paths[i]->itype == instSpyder1 && setup_spyd2(0) == 0)
+						 || (paths[i]->itype == instSpyder2 && setup_spyd2(1) == 0))
 							fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 						else
 							fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
@@ -1111,12 +1129,13 @@ int main(int argc, char *argv[])
 					printf("\nWriting file '%s' failed\n",outname);
 				else
 					printf("\nWriting file '%s' succeeded\n",outname);
-#ifdef DEBUG
-				strcpy(tnp, "_mpir.sp");		// Measured paper under illuminant spectrum
-				write_xspect(tname,&bf.srop);
-				strcpy(tnp, "_cpir.sp");		// Computed paper under illuminant spectrum
-				write_xspect(tname,&bf.cpsp);
-#endif
+
+				if (tmode) {
+					strcpy(tnp, "_mpir.sp");		// Measured paper under illuminant spectrum
+					write_xspect(tname,&bf.srop);
+					strcpy(tnp, "_cpir.sp");		// Computed paper under illuminant spectrum
+					write_xspect(tname,&bf.cpsp);
+				}
 			}
 
 			/* Plot the result */

@@ -21,7 +21,7 @@ HDRS = ../h ../icc ../rspl ../cgats ../numlib ../gamut ../spectro ../profile
 
 # XICC library
 Library libxicc :  xicc.c xlutfix.c xspect.c xcolorants.c xutils.c iccjpeg.c xdevlin.c
-        xcam.c cam97s3.c cam02.c mpp.c ccmx.c ccss.c xfit.c xdgb.c moncurve.c xcal.c ;
+        xcam.c cam97s3.c cam02.c mpp.c ccmx.c ccss.c xfit.c xdgb.c moncurve.c xcal.c bt1886.c ;
 
 # colorant library. Use instead of libxicc
 Object xcolorants2 : xcolorants.c ;
@@ -35,7 +35,8 @@ LibraryFromObjects libxutils : xutils2 iccjpeg2 ;
 # Utilities / test programs
 
 LINKLIBS = libxicc ../spectro/libinsttypes ../gamut/libgamut ../rspl/librspl
-           ../cgats/libcgats ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum
+           ../cgats/libcgats ../icc/libicc ../plot/libplot ../plot/libvrml
+           ../numlib/libnum ../numlib/libui
            $(TIFFLIB) $(JPEGLIB) ; 
 
 # Not created yet
@@ -54,7 +55,7 @@ Main iccgamut : iccgamut.c ;
 Main tiffgamut : tiffgamut.c : : : $(TIFFINC) $(JPEGINC) : : ;
 
 # diagnostic utility
-if [ GLOB . : tiffgmts.c ]  {
+if [ GLOB [ NormPaths . ] : tiffgmts.c ]  {
 	Main tiffgmts : tiffgmts.c : : : $(TIFFINC) $(JPEGINC) : : ../plot/libvrml ;
 }
 
@@ -136,6 +137,8 @@ if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/xicc" {
 if $(BUILD_JUNK) {
 
 	LINKLIBS += ../render/librender ;
+
+	Main illlocus : illlocus.c ;
 
 	Main slocustest : slocustest.c ;
 	

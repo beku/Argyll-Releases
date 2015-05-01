@@ -29,15 +29,15 @@
     enable the Argyll driver for this instrument by using the oeminst utility
 	to create a spyd2PLD.bin file.
 
-	[ The Spyder 3 & 4 don't need a PLD firmware file. ]
+	[ The Spyder 3, 4 & 5 don't need a PLD firmware file. ]
 
 
-    The Spyder 4 instrument will not have the full range of manufacturer
+    The Spyder 4 & 5 instrument will not have the full range of manufacturer
 	calibration settings available without the vendor calibration data.
     This calibration day is not provided with Argyll, since it is not
 	available under a compatible license.
 
-    The purchaser of a Spyder 4 instrument should have received a copy
+    The purchaser of a Spyder 4 or 5 instrument should have received a copy
     of this calibration data along with their instrument, and should therefore
 	be able to enable the use of the full range of calibration settings
 	by using the spyd4en utility to create a spyd4cal.bin file.
@@ -52,7 +52,7 @@
 	(Perhaps it has only 4 sensors ?) 
 
 	The frequency measurement is not very accurate, particularly for
-	the Spyder 3 & 4, being too low by about 3.5%.
+	the Spyder 3, 4 & 5, being too low by about 3.5%.
 	
  */
 
@@ -103,9 +103,9 @@
 
 #undef PLOT_SPECTRA			/* Plot the sensor senitivity spectra */
 #undef PLOT_SPECTRA_EXTRA	/* Plot the sensor senitivity spectra extra values */
-#undef SAVE_SPECTRA			/* Save the sensor senitivity spectra to "sensors.sp" */
-#undef SAVE_XYZSPECTRA		/* Save the XYZ senitivity spectra to "sensorsxyz.sp" (scale 1.4) */
-#undef SAVE_STDXYZ			/* save 1931 2 degree to stdobsxyz.sp */
+#undef SAVE_SPECTRA			/* Save the sensor senitivity spectra to "sensors.cmf" */
+#undef SAVE_XYZSPECTRA		/* Save the XYZ senitivity spectra to "sensorsxyz.cmf" (scale 1.4) */
+#undef SAVE_STDXYZ			/* save 1931 2 degree to stdobsxyz.cmf */
 
 
 #define DO_RESETEP				/* Do the miscelanous resetep()'s */
@@ -168,6 +168,14 @@ static int buf2ushort(unsigned char *buf) {
 	int val;
 	val =               (0xff & buf[0]);
 	val = ((val << 8) + (0xff & buf[1]));
+	return val;
+}
+
+/* Take a unsigned short sized buffer, and convert it to an int little endian */
+static int buf2uleshort(unsigned char *buf) {
+	int val;
+	val =               (0xff & buf[1]);
+	val = ((val << 8) + (0xff & buf[0]));
 	return val;
 }
 
@@ -267,6 +275,7 @@ spyd2_reset(
 		if (retr >= RETRIES ) {
 			a1logd(p->log, 1, "spyd2_reset: failed with ICOM err 0x%x\n",se);
 			return spyd2_interp_code((inst *)p, icoms2spyd2_err(se));
+			break;
 		}
 		msec_sleep(500);
 		a1logd(p->log, 1, "spyd2_reset: reset retry with  ICOM err 0x%x\n",se);
@@ -333,7 +342,7 @@ spyd2_readEEProm_imp(
 
 	if (addr < 0
 	 || (p->hwver < 7 && (addr + size) > 512)
-	 || (p->hwver == 7 && (addr + size) > 1024))
+	 || (p->hwver >= 7 && (addr + size) > 1024))
 		return spyd2_interp_code((inst *)p, SPYD2_BAD_EE_ADDRESS);
 
 	if (size >= 256)
@@ -371,7 +380,7 @@ spyd2_readEEProm(
 
 	if (addr < 0
 	 || (p->hwver < 7 && (addr + size) > 512)
-	 || (p->hwver == 7 && (addr + size) > 1024))
+	 || (p->hwver >= 7 && (addr + size) > 1024))
 		return spyd2_interp_code((inst *)p, SPYD2_BAD_EE_ADDRESS);
 	
 	while (size > 255) {		/* Single read is too big */
@@ -898,7 +907,7 @@ spyd2_GetReading_ll(
 #endif
 		}
 
-	/* Spyder 3/4 decoding */
+	/* Spyder 3/4/5 decoding */
 	} else {
 		/* Convert the raw buffer readings into 3 groups of 8 integers. */
 		/* At the start of each reading, the HW starts counting master */
@@ -915,7 +924,17 @@ spyd2_GetReading_ll(
 		/* The light level is directly proportional to the frequency, */
 		/* hence the transitions-1 counted. */
 
-		int map[8] = { 0,0,1,2,5,6,7,4 };	/* Map sensors into Spyder 2 order */
+		int *map;
+		int nat[8]  = { 0,1,2,3,4,5,6,7 };	/* Natural order */
+		int map3[8] = { 0,0,1,2,5,6,7,4 };	/* Map Sp3 sensors into Spyder 2 order */
+		int map4[8] = { 0,0,1,2,5,6,7,4 };	/* Map Sp4 sensors into Spyder 2 order */
+		int map5[8] = { 1,1,0,5,2,7,6,4 };	/* Map Sp5 sensors into Spyder 2 order */
+
+		map = map3;
+		if (p->hwver == 7)
+			map = map4;
+		else if (p->hwver == 10)
+			map = map5;
 
 		for (j = 0; j < 3; j++) {
 			for (k = 0; k < 8; k++) {
@@ -1058,7 +1077,7 @@ spyd2_SetAmbReg(
 	return rv;
 }
 
-/* Spyder3/4: Read ambient light timing */
+/* Spyder3/4/5: Read ambient light timing */
 /* The byte value seems to be composed of:
 	bits 0,1
 	bits 4
@@ -1101,7 +1120,7 @@ spyd2_ReadAmbTiming(
 }
 
 
-/* Spyder3/4: Read ambient light channel 0 or 1 */
+/* Spyder3/4/5: Read ambient light channel 0 or 1 */
 static inst_code
 spyd2_ReadAmbChan(
 	spyd2 *p,
@@ -1144,7 +1163,7 @@ spyd2_ReadAmbChan(
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* Spyder3/4: Read temperature config */
+/* Spyder3/4/5: Read temperature config */
 static inst_code
 spyd2_ReadTempConfig(
 	spyd2 *p,
@@ -1182,7 +1201,7 @@ spyd2_ReadTempConfig(
 	return rv;
 }
 
-/* Spyder 3/4: Write Register */
+/* Spyder 3/4/5: Write Register */
 static inst_code
 spyd2_WriteReg(
 	spyd2 *p,
@@ -1227,7 +1246,7 @@ spyd2_WriteReg(
 }
 
 
-/* Spyder3/4: Read Register */
+/* Spyder3/4/5: Read Register */
 static inst_code
 spyd2_ReadRegister(
 	spyd2 *p,
@@ -1501,7 +1520,34 @@ spyd2_rdreg_7x41xshort(
 	return inst_ok;
 }
 
-/* Get refresh rate command. Set it to DEFRRATE if not detectable */
+/* Special purpose LE short read, */
+/* Read 7 x 41 vectors of Little Endian ints from the EEprom */
+static inst_code
+spyd2_rdreg_7x41xleshort(
+	spyd2 *p,				/* Object */
+	double sens[7][41],		/* Destination */
+	int addr				/* Register Address, 0 - 1023 */
+) {
+	inst_code ev;
+	unsigned char buf[7 * 41 * 2], *bp;
+	int i, j;
+
+	if ((ev = spyd2_readEEProm(p, buf, addr, 7 * 41 * 2)) != inst_ok)
+		return ev;
+
+	bp = buf;
+	for (i = 0; i < 7; i++) {
+		for (j = 0; j < 41; j++, bp += 2) {
+			int val;
+			val = buf2uleshort(bp);
+			sens[i][j] = val / 100.0;
+		}
+	}
+
+	return inst_ok;
+}
+
+/* Get refresh rate command. Set it to 0.0 if not detectable */
 /* if no refresh rate can be established */
 /* (This isn't used by the manufacturers Spyder3/4 driver, */
 /*  but the instrument seems to impliment it.) */
@@ -1517,6 +1563,9 @@ spyd2_read_refrate(
 
 	a1logd(p->log, 3, "spyd2_read_refrate: called\n");
 
+	if (ref_rate != NULL)
+		*ref_rate = 0.0;
+
 	/* Establish the frame rate detect threshold level */
 	clocks = (10 * CLKRATE)/DEFRRATE;
 
@@ -1527,7 +1576,7 @@ spyd2_read_refrate(
 		a1logd(p->log, 3, "spyd2_read_refrate: no refresh rate detectable\n");
 		if (ref_rate != NULL)
 			*ref_rate = 0.0;
-		return inst_ok;
+		return inst_misread | SPYD2_NO_REFRESH_DET;
 	} else {
 		int frclocks;		/* notional clocks per frame */
 		int nframes;		/* Number of frames to count */
@@ -1568,6 +1617,8 @@ spyd2_GetRefRate(
 	a1logd(p->log, 3, "Frequency calibration called\n");
 
 	if ((ev = spyd2_read_refrate((inst *)p, &p->refrate)) != inst_ok) {
+		p->refrate = DEFRRATE;
+		p->refrvalid = 0;
 		return ev;
 	}
 	if (p->refrate != 0.0) {
@@ -1611,7 +1662,7 @@ spyd2_GetReading(
 
 	a1logd(p->log, 3, "spyd2_GetReading: called\n");
 
-	if (p->refrmode)
+	if (p->refrmode != 0 && p->rrset != 0) 
 		inttime = RINTTIME;		/* ie. 1 second */
 	else
 		inttime = NINTTIME;		/* ie. 1 second */
@@ -1650,7 +1701,7 @@ spyd2_GetReading(
 	}
 
 	a1logd(p->log, 3, "spyd2_GetReading: Using cal table %d\n",(p->icx & 1));
-	if (p->hwver)
+	if (p->hwver >= 7)
 		a1logd(p->log, 3, "spyd2_GetReading: using spectral cal table %d\n",p->icx >> 1);
 
 	for (k = 0; k < 8; k++) 	/* Zero weighted average */
@@ -1737,8 +1788,9 @@ spyd2_GetReading(
 		/* Convert sensor readings to XYZ value */
 		for (j = 0; j < 3; j++) {
 			XYZ[j] = p->cal_A[p->icx & 1][j][0];		/* First entry is a constant */
-			for (k = 1; k < 8; k++)
+			for (k = 1; k < 8; k++) {
 				XYZ[j] += a_sensv[k] * p->cal_A[p->icx & 1][j][k+1];
+			}
 		}
 	}
 
@@ -1778,7 +1830,7 @@ spyd2_GetReading(
 	return ev;
 }
 
-/* Spyder3/4: Do an ambient reading */
+/* Spyder3/4/5: Do an ambient reading */
 
 /* NOTE :- the ambient sensor is something like a TAOS TLS 2562CS. */
 /* It has two sensors, one wide band and the other infra-red, */
@@ -1866,12 +1918,11 @@ spyd2_GetAmbientReading(
 	/* Compute ambient in Lux */
 	amb = s0[i] * amb0 - s1[i] * amb1;
 		
-//	a1logd(p->log, 4, "spyd2_GetAmbientReading: combined ambient = %f Lux\n",amb);
-	/* Compute the Y value */
+//	a1logd(p->log, 4, "spyd2_GetAmbientReading: combined ambient = %f cd/^m\n",amb);
 
-//	XYZ[1] = amb;			/* cd/m^2 ??? - not very accurate, due to */
-	XYZ[1] = 3.141592654 * amb;			/* Lux ??? - not very accurate, due to */
-										/* spectral response and/or integration angle. */
+	/* Compute the Y value */
+	XYZ[1] = amb;						/* cd/m^2 ??? - not very accurate, due to */
+										/* spectral response and/or integration angle ? */
 	XYZ[0] = icmD50.X * XYZ[1];			/* Convert to D50 neutral */
 	XYZ[2] = icmD50.Z * XYZ[1];
 
@@ -1881,8 +1932,10 @@ spyd2_GetAmbientReading(
 }
 
 /* ------------------------------------------------------------ */
-/* Spyder 4 manufacturer calibration data */
+/* Spyder 4/5 manufacturer calibration data */
 int spyd4_nocals = 0;				/* Number of calibrations */
+									/* 6 for Spyder 4 */				
+									/* 7 for Spyder 5 */				
 xspect *spyd4_cals = NULL;			/* [nocals] Device spectrum */
 
 /* ------------------------------------------------------------ */
@@ -1989,7 +2042,7 @@ spyd4_set_cal_ix(
 	}
 #endif /* PLOT_SPECTRA */
 
-#ifdef SAVE_XYZSPECTRA		/* Save the default XYZ senitivity spectra to "sensorsxyz.sp" */
+#ifdef SAVE_XYZSPECTRA		/* Save the default XYZ senitivity spectra to "sensorsxyz.cmf" */
 	{
 		int i, j, k;
 		xspect xyz[3];
@@ -2008,14 +2061,14 @@ spyd4_set_cal_ix(
 				xyz[j].spec[i] *= 1.4;	/* Align with std XYZ */
 			}
 		}
-		write_nxspect("sensorsxyz.sp", xyz, 3, 0);
+		write_nxspect("sensorsxyz.cmf", xyz, 3, 0);
 	}
 #endif
 #ifdef SAVE_STDXYZ
 	{
 		xspect xyz[3];
 		standardObserver(&xyz[0], &xyz[1], &xyz[2],icxOT_CIE_1931_2);
-		write_nxspect("stdobsxyz.sp", xyz, 3, 0);
+		write_nxspect("stdobsxyz.cmf", xyz, 3, 0);
 	}
 #endif /* SAVE_STDXYZ */
 	
@@ -2275,15 +2328,16 @@ spyd2_set_speccal(
 /* Preset the calibration to a matrix. The spectral type is set to none */
 static inst_code
 spyd2_set_matcal(spyd2 *p, double mtx[3][3]) {
-	if (mtx == NULL) {
+
+	if (p->samples != NULL)
+		free(p->samples);
+	p->samples = NULL;
+	p->nsamp = 0;
+
+	if (mtx == NULL)
 		icmSetUnity3x3(p->ccmat);
-	} else {
-		if (p->cbid == 0) {
-			a1loge(p->log, 1, "spyd2: can't set col_cor_mat over non-base display type\n");
-			return inst_wrong_setup;
-		}
+	else
 		icmCpy3x3(p->ccmat, mtx);
-	}
 
 	return inst_ok;
 }
@@ -2328,12 +2382,14 @@ spyd2_set_cal(spyd2 *p) {
 			                 p->cal_A[1][0][2+i], p->cal_A[1][1][2+i], p->cal_A[1][2][2+i]);
 			}
 		}
+		a1logd(p->log,4,"\n");
 		a1logd(p->log,4,"ccmat = %f %f %f\n",
 		                 p->ccmat[0][0], p->ccmat[0][1], p->ccmat[0][2]);
 		a1logd(p->log,4,"        %f %f %f\n",
 		                 p->ccmat[1][0], p->ccmat[1][1], p->ccmat[1][2]);
 		a1logd(p->log,4,"        %f %f %f\n\n",
 		                 p->ccmat[2][0], p->ccmat[2][1], p->ccmat[2][2]);
+		a1logd(p->log,4,"ucbid = %d, cbid = %d\n",p->ucbid, p->cbid);
 		a1logd(p->log,4,"\n");
 	}
 
@@ -2351,6 +2407,20 @@ spyd2_read_all_regs(
 
 	a1logd(p->log, 3, "spyd2_read_all_regs: about to read all the EEProm values\n");
 
+	if (p->log->debug >= 8) {
+		unsigned char buf[1024];
+		int len = 512;
+
+		if (p->hwver == 7
+		 || p->hwver == 10)
+			len = 1024;
+	
+		if ((ev = spyd2_readEEProm(p, buf, 0, len)) != inst_ok)
+			return ev;
+		a1logd(p->log, 8, "EEPROM:\n"); 
+		adump_bytes(p->log, "  ", buf, 0, len);
+	}
+
 	/* HW version */
 	if ((ev = spyd2_rd_ee_uchar(p, &p->hwver, 5)) != inst_ok)
 		return ev;
@@ -2359,12 +2429,16 @@ spyd2_read_all_regs(
 	if ((ev = spyd2_rd_ee_uchar(p, &p->fbits, 6)) != inst_ok)
 		return ev;
 
-	a1logd(p->log, 3, "spyd2_read_all_regs: hwver = 0x%02x%02x\n",p->hwver,p->fbits);
+	a1logd(p->log, 3, "spyd2_read_all_regs: hwver+fbits = 0x%02x%02x\n",p->hwver,p->fbits);
 
 	/* Check the EEProm checksum */
-	if (p->hwver == 7) {
-		if ((ev = spyd2_checkEECRC(p)) != inst_ok)
-		return ev;
+	if (p->hwver == 7
+	 || p->hwver == 10) {
+		if ((ev = spyd2_checkEECRC(p)) != inst_ok) {
+			a1logd(p->log, 3, "spyd2_read_all_regs: checksum failed\n");
+			return ev;
+		}
+		a1logd(p->log, 6, "spyd2_read_all_regs: checksum OK\n");
 	}
 
 	/* Serial number */
@@ -2470,14 +2544,20 @@ spyd2_read_all_regs(
 			a1logd(p->log, 4, "\n");
 		}
 
-	} else if (p->hwver == 7) {
+	} else if (p->hwver == 7
+		    || p->hwver == 10) {
 		int i, j;
 		unsigned int sscal;
 		double tsens[7][41];
 
 		/* Read sensor sensitivity spectral data */
-		if ((ev = spyd2_rdreg_7x41xshort(p, tsens, 170)) != inst_ok)
-			return ev;
+		if (p->hwver == 7) {	/* Spyder 4 */
+			if ((ev = spyd2_rdreg_7x41xshort(p, tsens, 0xAA)) != inst_ok)
+				return ev;
+		} else {				/* Spyder 5 */
+			if ((ev = spyd2_rdreg_7x41xleshort(p, tsens, 0x12C)) != inst_ok)
+				return ev;
+		}
 
 		/* Sensor scale factor */
 		if ((ev = spyd2_rd_ee_ushort(p, &sscal, 21)) != inst_ok) 
@@ -2502,7 +2582,7 @@ spyd2_read_all_regs(
 			}
 		}
 #ifdef SAVE_SPECTRA
-		write_nxspect("sensors.sp", p->sens, 7, 0);
+		write_nxspect("sensors.cmf", p->sens, 7, 0);
 #endif
 
 		/* Linearization */
@@ -2531,7 +2611,6 @@ spyd2_read_all_regs(
 		printf("The sensor and ambient sensor sensitivy curves\n");
 		do_plot10(xx, yp[0], yp[1], yp[2], yp[3], yp[4], yp[5], yp[6], yp[7], yp[8], yp[9], 81, 0);
 
-
 		for (j = 0; j < spyd4_nocals; j++) {
 			double max = 0;
 			for (i = 0; i < 81; i++) {
@@ -2545,7 +2624,7 @@ spyd2_read_all_regs(
 		for (; j < 10; j++)
 			yp[j] = NULL;
 	
-		printf("The display spectra\n");
+		printf("The %d display spectra\n",spyd4_nocals);
 		do_plot10(xx, yp[0], yp[1], yp[2], yp[3], yp[4], yp[5], yp[6], yp[7], yp[8], yp[9], 81, 0);
 	}
 #endif /* PLOT_SPECTRA */
@@ -2559,10 +2638,10 @@ spyd2_read_all_regs(
 
 /* ------------------------------------------------------------ */
 
-/* Table to hold Spyder 2 Firmware, if it's installed */
-unsigned int _spyder2_pld_size = 0;  /* Number of bytes to download */
-unsigned int *spyder2_pld_size = &_spyder2_pld_size;
-unsigned char *spyder2_pld_bytes = NULL;
+/* Spyder 1/2 Colorimeter Xilinx XCS05XL firmware pattern */
+unsigned int spyder_pld_xsize[2] = { 6817, 6817 };  	/* Expected size */
+unsigned int spyder_pld_size[2] = { 0, 0 };  			/* Number of bytes to download */
+unsigned char *spyder_pld_bytes[2] = { NULL, NULL };	/* Bytes to download */
 
 /* Spyder 2: Download the PLD if it is available, and check status */
 static inst_code
@@ -2572,16 +2651,25 @@ spyd2_download_pld(
 	inst_code ev;
 	int stat;
 	int i;
+	int id;
+
+	if (p->itype == instSpyder1)
+		id = 0;
+	else
+		id = 1;
 
 	a1logd(p->log, 2, "spyd2_download_pld: called\n");
 
-	if (*spyder2_pld_size == 0 || *spyder2_pld_size == 0x11223344) {
+	if (spyder_pld_size[id] == 0)		/* Try and read PLD pattern */
+		setup_spyd2(id);
+
+	if (spyder_pld_size[id] == 0) {
 		a1logd(p->log, 1, "spyd2_download_pld: No PLD pattern available! (have you run oeminst ?)\n");
 		return spyd2_interp_code((inst *)p, SPYD2_NO_PLD_PATTERN) ;
 	}
 		
-	for (i = 0; i < *spyder2_pld_size; i += 8) {
-		if ((ev = spyd2_loadPLD(p, spyder2_pld_bytes + i, 8)) != inst_ok)
+	for (i = 0; i < spyder_pld_size[id]; i += 8) {
+		if ((ev = spyd2_loadPLD(p, spyder_pld_bytes[id] + i, 8)) != inst_ok)
 			return ev;
 	}
 
@@ -2667,7 +2755,8 @@ spyd4_load_cal(spyd2 *p) {
 		}
 
 		nocals = size/(41 * 8);
-		if (nocals != 6) {
+		if (nocals != 6
+		 && nocals != 7) {
 			fclose(fp);
 			a1logd(p->log, 1, "spyd4_load_cal: calibration file '%s' is unexpected number of calibrations (%d)\n",bin_paths[0],nocals);
 			break;
@@ -2778,7 +2867,8 @@ spyd2_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 
 	/* On OS X the Spyder 2 can't close properly */
 #if defined(__APPLE__)			/* OS X*/
-	if (p->itype == instSpyder2) {
+	if (p->itype == instSpyder1
+	 || p->itype == instSpyder2) {
 		usbflags |= icomuf_reset_before_close;		/* The spyder 2 USB is buggy ? */
 	}
 #endif
@@ -2787,7 +2877,8 @@ spyd2_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 #if defined(UNIX_X11)		/* Linux*/
 	/* On Linux the Spyder 2 doesn't work reliably unless each */
 	/* read is preceeded by a reset endpoint. */
-	if (p->itype == instSpyder2) {
+	if (p->itype == instSpyder1
+	 || p->itype == instSpyder2) {
 		usbflags |= icomuf_resetep_before_read;		/* The spyder USB is buggy ? */
 	}
 #endif
@@ -2822,9 +2913,11 @@ spyd2_init_inst(inst *pp) {
 	if (p->gotcoms == 0) /* Must establish coms before calling init */
 		return spyd2_interp_code((inst *)p, SPYD2_NO_COMS);
 
-	if (p->itype != instSpyder2
+	if (p->itype != instSpyder1
+	 && p->itype != instSpyder2
 	 && p->itype != instSpyder3
-	 && p->itype != instSpyder4)
+	 && p->itype != instSpyder4
+	 && p->itype != instSpyder5)
 		return spyd2_interp_code((inst *)p, SPYD2_UNKNOWN_MODEL);
 
 	p->refrate = DEFRRATE;
@@ -2834,7 +2927,8 @@ spyd2_init_inst(inst *pp) {
 
 	/* For Spyder 1 & 2, reset the hardware and wait for it to become ready. */
 	if (p->itype != instSpyder3
-	 && p->itype != instSpyder4) {
+	 && p->itype != instSpyder4
+	 && p->itype != instSpyder5) {
 
 		/* Reset the instrument */
 		if ((ev = spyd2_reset(p)) != inst_ok)
@@ -2852,7 +2946,7 @@ spyd2_init_inst(inst *pp) {
 			return spyd2_interp_code((inst *)p, SPYD2_BADSTATUS);
 
 	} else {
-		/* Because the Spyder 3/4 doesn't have a reset command, */
+		/* Because the Spyder 3/4/5 doesn't have a reset command, */
 		/* it may be left in a borked state if the driver is aborted. */
 		/* Make sure there's no old read data hanging around. */
 		/* Sometimes it takes a little while for the old data to */
@@ -2974,24 +3068,34 @@ instClamping clamp) {		/* NZ if clamp XYZ/Lab to be +ve */
 	}
 
 	if (IMODETST(p->mode, inst_mode_emis_ambient)) {
-		if ((ev = spyd2_GetAmbientReading(p, val->XYZ)) != inst_ok)
-			return ev;
+		ev = spyd2_GetAmbientReading(p, val->XYZ);
 
 	} else {
+		ev = inst_ok;
 
 		/* Attempt a CRT frame rate calibration if needed */
-		if (p->refrmode != 0 && p->rrset == 0) { 
-			if ((ev = spyd2_GetRefRate(p)) != inst_ok)
-				return ev; 
+		if (p->refrmode != 0 && p->rrset == 0) 
+			ev = spyd2_GetRefRate(p);
+
+		if (ev != inst_ok) {
+			warning("Spyder: measuring refresh rate failed");
+			ev = inst_ok; 
 		}
 
-		/* Read the XYZ value */
-		if ((ev = spyd2_GetReading(p, val->XYZ)) != inst_ok)
-			return ev;
+		if (ev == inst_ok) {
+			/* Read the XYZ value */
+			if ((ev = spyd2_GetReading(p, val->XYZ)) == inst_ok) {
 
-		/* Apply the colorimeter correction matrix */
-		icmMulBy3x3(val->XYZ, p->ccmat, val->XYZ);
+				/* Apply the colorimeter correction matrix */
+				icmMulBy3x3(val->XYZ, p->ccmat, val->XYZ);
+			}
+		}
 	}
+
+	if (ev != inst_ok)
+		return ev;
+
+
 	/* This may not change anything since instrument may clamp */
 	if (clamp)
 		icmClamp3(val->XYZ, val->XYZ);
@@ -3011,11 +3115,31 @@ instClamping clamp) {		/* NZ if clamp XYZ/Lab to be +ve */
 	return ev;
 }
 
+/* Make a possible change of the refresh mode */
+static void update_refmode(spyd2 *p, int refrmode) {
+
+	if (     IMODETST(p->mode, inst_mode_emis_norefresh_ovd)) {	/* Must test this first! */
+		refrmode = 0;
+	} else if (IMODETST(p->mode, inst_mode_emis_refresh_ovd)) {
+		refrmode = 1;
+	}
+
+	if (p->refrmode != refrmode) {
+		p->rrset = 0;					/* This is a hint we may have swapped displays */
+		p->refrvalid = 0;
+	}
+	p->refrmode = refrmode; 
+}
+
+static inst_code set_base_disp_type(spyd2 *p, int cbid);
+
 /* Insert a colorimetric correction matrix in the instrument XYZ readings */
 /* This is only valid for colorimetric instruments. */
 /* To remove the matrix, pass NULL for the filter filename */
 inst_code spyd2_col_cor_mat(
 inst *pp,
+disptech dtech,		/* Use disptech_unknown if not known */				\
+int cbid,       	/* Calibration display type base ID, 1 if unknown */\
 double mtx[3][3]
 ) {
 	spyd2 *p = (spyd2 *)pp;
@@ -3025,6 +3149,13 @@ double mtx[3][3]
 		return inst_no_coms;
 	if (!p->inited)
 		return inst_no_init;
+
+	if ((ev = set_base_disp_type(p, cbid)) != inst_ok)
+		return ev;
+
+	p->dtech = dtech;
+	update_refmode(p, disptech_get_id(dtech)->refr);
+	p->cbid = 0;
 
 	if ((ev = spyd2_set_matcal(p, mtx)) != inst_ok)
 		return ev;
@@ -3038,6 +3169,7 @@ double mtx[3][3]
 /* To set calibration back to default, pass NULL for sets. */
 inst_code spyd2_col_cal_spec_set(
 inst *pp,
+disptech dtech,
 xspect *sets,
 int no_sets
 ) {
@@ -3051,6 +3183,8 @@ int no_sets
 	if (p->hwver < 7)
 		return inst_unsupported;
 
+	p->dtech = dtech;
+
 	if (sets == NULL || no_sets <= 0) {
 		if ((ev = set_default_disp_type(p)) != inst_ok)
 			return ev;
@@ -3058,8 +3192,10 @@ int no_sets
 		if ((ev = spyd2_set_speccal(p, sets, no_sets)) != inst_ok)
 			return ev; 
 
+		p->ucbid = 0;			/* We're using external samples */
 		ev = spyd2_set_cal(p);
 	}
+	update_refmode(p, disptech_get_id(dtech)->refr);
 
 	return ev;
 }
@@ -3093,7 +3229,7 @@ static inst_code spyd2_get_n_a_cals(inst *pp, inst_cal_type *pn_cals, inst_cal_t
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
-inst_code spyd2_calibrate(
+static inst_code spyd2_calibrate(
 inst *pp,
 inst_cal_type *calt,	/* Calibration type to do/remaining */
 inst_cal_cond *calc,	/* Current condition/desired condition */
@@ -3153,11 +3289,12 @@ double *ref_rate
 ) {
 	spyd2 *p = (spyd2 *)pp;
 	if (p->refrvalid) {
+
 		*ref_rate = p->refrate;
 		return inst_ok;
 	} else if (p->rrset) {
 		*ref_rate = 0.0;
-		return inst_misread;
+		return inst_misread | SPYD2_NO_REFRESH_DET;
 	}
 	return inst_needs_cal;
 }
@@ -3194,7 +3331,7 @@ spyd2_interp_error(inst *pp, int ec) {
 		case SPYD2_COMS_FAIL:
 			return "Communications failure";
 		case SPYD2_UNKNOWN_MODEL:
-			return "Not a Spyder 2 or 3";
+			return "Not a Spyder 2, 3, 4 or 5";
 		case SPYD2_DATA_PARSE_ERROR:
 			return "Data from i1 Display didn't parse as expected";
 
@@ -3244,6 +3381,10 @@ spyd2_interp_error(inst *pp, int ec) {
 		/* Configuration */
 		case SPYD2_DISP_SEL_RANGE:
 			return "Display device selection out of range";
+
+		/* User error */
+		case SPYD2_NO_REFRESH_DET:
+			return "Unable to detect & measure refresh rate";
 
 		default:
 			return "Unknown error code";
@@ -3296,6 +3437,9 @@ spyd2_interp_code(inst *pp, int ec) {
 		case SPYD2_DISP_SEL_RANGE:
 			return inst_wrong_setup | ec;
 
+		case SPYD2_NO_REFRESH_DET:
+			return inst_misread | ec;
+
 	}
 	return inst_other_error | ec;
 }
@@ -3313,7 +3457,7 @@ spyd2_del(inst *pp) {
 }
 
 /* Return the instrument mode capabilities */
-void spyd2_capabilities(inst *pp,
+static void spyd2_capabilities(inst *pp,
 inst_mode *pcap1,
 inst2_capability *pcap2,
 inst3_capability *pcap3) {
@@ -3331,7 +3475,8 @@ inst3_capability *pcap3) {
 	/* of ambinent capability, short of doing a read */
 	/* and noticing the result is zero. */
 	if (p->itype == instSpyder3
-	 || p->itype == instSpyder4) {
+	 || p->itype == instSpyder4
+	 || p->itype == instSpyder5) {
 		cap1 |= inst_mode_emis_ambient;
 	}
 
@@ -3344,7 +3489,8 @@ inst3_capability *pcap3) {
 	        ;
 
 	if (p->itype == instSpyder3
-	 || p->itype == instSpyder4) {
+	 || p->itype == instSpyder4
+	 || p->itype == instSpyder5) {
 		cap2 |= inst2_disptype;
 		cap2 |= inst2_has_leds;
 		cap2 |= inst2_ambient_mono;
@@ -3352,8 +3498,9 @@ inst3_capability *pcap3) {
 		cap2 |= inst2_disptype;
 	}
 
-	if (p->itype == instSpyder4)
-		cap2 |= inst2_ccss;		/* Spyder4 has spectral sensiivities */
+	if (p->itype == instSpyder4
+	 || p->itype == instSpyder5)
+		cap2 |= inst2_ccss;		/* Spyder4 & 5 has spectral sensivities */
 
 	if (pcap1 != NULL)
 		*pcap1 = cap1;
@@ -3364,7 +3511,7 @@ inst3_capability *pcap3) {
 }
 
 /* Check device measurement mode */
-inst_code spyd2_check_mode(inst *pp, inst_mode m) {
+static inst_code spyd2_check_mode(inst *pp, inst_mode m) {
 	spyd2 *p = (spyd2 *)pp;
 	inst_mode cap;
 
@@ -3388,7 +3535,7 @@ inst_code spyd2_check_mode(inst *pp, inst_mode m) {
 }
 
 /* Set device measurement mode */
-inst_code spyd2_set_mode(inst *pp, inst_mode m) {
+static inst_code spyd2_set_mode(inst *pp, inst_mode m) {
 	spyd2 *p = (spyd2 *)pp;
 	inst_code ev;
 
@@ -3397,21 +3544,20 @@ inst_code spyd2_set_mode(inst *pp, inst_mode m) {
 
 	p->mode = m;
 
-	if (     IMODETST(p->mode, inst_mode_emis_norefresh_ovd))	/* Must test this first! */
-		p->refrmode = 0;
-	else if (IMODETST(p->mode, inst_mode_emis_refresh_ovd))
-		p->refrmode = 1;
+	/* Effective refresh mode may change */
+	update_refmode(p, p->refrmode);
 
 	return inst_ok;
 }
 
-inst_disptypesel spyd2_disptypesel[3] = {
+static inst_disptypesel spyd2_disptypesel[3] = {
 	{
 		inst_dtflags_default,
 		1,
 		"l",
 		"LCD display",
 		0,
+		disptech_lcd,
 		1
 	},
 	{
@@ -3420,6 +3566,7 @@ inst_disptypesel spyd2_disptypesel[3] = {
 		"c",						/* sel */
 		"CRT display",				/* desc */
 		1,							/* refr */
+		disptech_crt,				/* disptype */
 		0							/* ix */
 	},
 	{
@@ -3428,17 +3575,19 @@ inst_disptypesel spyd2_disptypesel[3] = {
 		"",
 		"",
 		0,
+		disptech_none,
 		0
 	}
 };
 
-inst_disptypesel spyd3_disptypesel[3] = {
+static inst_disptypesel spyd3_disptypesel[3] = {
 	{
 		inst_dtflags_default,
 		1,
 		"nl",
 		"Non-Refresh display",
 		0,
+		disptech_lcd,
 		1
 	},
 	{
@@ -3447,6 +3596,7 @@ inst_disptypesel spyd3_disptypesel[3] = {
 		"rc",						/* sel */
 		"Refresh display",			/* desc */
 		1,							/* refr */
+		disptech_crt,				/* disptype */
 		1							/* ix */
 	},
 	{
@@ -3455,17 +3605,19 @@ inst_disptypesel spyd3_disptypesel[3] = {
 		"",
 		"",
 		0,
+		disptech_unknown,
 		0
 	}
 };
 
-inst_disptypesel spyd4_disptypesel_1[8] = {
+static inst_disptypesel spyd4_disptypesel_1[8] = {
 	{
 		inst_dtflags_default,
 		1,
 		"nl",
 		"Generic Non-Refresh Display",
 		0,
+		disptech_lcd,
 		1
 	},
 	{
@@ -3474,6 +3626,7 @@ inst_disptypesel spyd4_disptypesel_1[8] = {
 		"rc",						/* sel */
 		"Generic Refresh Display",	/* desc */
 		1,							/* refr */
+		disptech_crt,				/* disptype */
 		1							/* ix */
 	},
 	{
@@ -3482,17 +3635,19 @@ inst_disptypesel spyd4_disptypesel_1[8] = {
 		"",
 		"",
 		0,
+		disptech_none,
 		0
 	}
 };
 
-inst_disptypesel spyd4_disptypesel[8] = {
+static inst_disptypesel spyd4_disptypesel[8] = {
 	{
 		inst_dtflags_default,
 		1,
 		"nl",
 		"Generic Non-Refresh Display",
 		0,
+		disptech_lcd,
 		1
 	},
 	{
@@ -3501,6 +3656,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		"rc",						/* sel */
 		"Generic Refresh Display",	/* desc */
 		1,							/* refr */
+		disptech_crt,				/* disptype */
 		1							/* ix = hw bit + spec table << 1 */
 	},
 	{
@@ -3508,6 +3664,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		0,
 		"f",
 		"LCD, CCFL Backlight",
+		disptech_lcd_ccfl,
 		0,
 		(1 << 1) | 1
 	},
@@ -3517,6 +3674,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		"L",
 		"Wide Gamut LCD, CCFL Backlight",
 		0,
+		disptech_lcd_ccfl_wg,
 		(2 << 1) | 1
 	},
 	{
@@ -3524,6 +3682,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		0,
 		"e",
 		"LCD, White LED Backlight",
+		disptech_lcd_wled,
 		0,
 		(3 << 1) | 1
 	},
@@ -3533,6 +3692,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		"B",
 		"Wide Gamut LCD, RGB LED Backlight",
 		0,
+		disptech_lcd_rgbled,
 		(4 << 1) | 1
 	},
 	{
@@ -3541,6 +3701,7 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		"x",
 		"LCD, CCFL Backlight (Laptop ?)",
 		0,
+		disptech_lcd_ccfl,
 		(5 << 1) | 1
 	},
 	{
@@ -3549,16 +3710,95 @@ inst_disptypesel spyd4_disptypesel[8] = {
 		"",
 		"",
 		0,
+		disptech_none,
+		0
+	}
+};
+
+static inst_disptypesel spyd5_disptypesel[8] = {
+	{
+		inst_dtflags_default,
+		1,
+		"nl",
+		"Generic Non-Refresh Display",
+		0,
+		disptech_lcd,
+		1
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		2,							/* cbid */
+		"rc",						/* sel */
+		"Generic Refresh Display",	/* desc */
+		1,							/* refr */
+		disptech_crt,				/* disptype */
+		1							/* ix = hw bit + spec table << 1 */
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		0,
+		"f",
+		"LCD, CCFL Backlight",
+		disptech_lcd_ccfl,
+		0,
+		(1 << 1) | 1
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		0,
+		"L",
+		"Wide Gamut LCD, CCFL Backlight",
+		0,
+		disptech_lcd_ccfl_wg,
+		(2 << 1) | 1
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		0,
+		"e",
+		"LCD, White LED Backlight",
+		disptech_lcd_wled,
+		0,
+		(3 << 1) | 1
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		0,
+		"B",
+		"Wide Gamut LCD, RGB LED Backlight",
+		0,
+		disptech_lcd_rgbled,
+		(4 << 1) | 1
+	},
+	{
+		inst_dtflags_none,			/* flags */
+		0,
+		"x",
+		"LCD, CCFL Backlight (Laptop ?)",
+		0,
+		disptech_lcd_ccfl,
+		(5 << 1) | 1
+	},
+	{
+		inst_dtflags_end,
+		0,
+		"",
+		"",
+		0,
+		disptech_none,
 		0
 	}
 };
 
 static void set_base_disptype_list(spyd2 *p) {
 	/* set the base display type list */
-	if (p->itype == instSpyder4) {
+	if (p->itype == instSpyder4
+	 || p->itype == instSpyder5) {
 		if (spyd4_nocals <= 1) {
 			p->_dtlist = spyd4_disptypesel_1;
-		} else {
+		} else {							/* spyd4_nocals == 6 or 7, Spyder 4 or 5. */
+			/* Spyder 5 has exactly the same list as the Spyder 4, with an extra */
+			/* entry at the end that is the same as the first (flat spectrum). */
 			p->_dtlist = spyd4_disptypesel;
 		}
 	} else if (p->itype == instSpyder3) {
@@ -3601,65 +3841,35 @@ static inst_code set_disp_type(spyd2 *p, inst_disptypesel *dentry) {
 	int refrmode;
 
 	p->icx = dentry->ix;
+	p->dtech = dentry->dtech;
 	p->cbid = dentry->cbid;
-	refrmode = dentry->refr;
 
-	if (     IMODETST(p->mode, inst_mode_emis_norefresh_ovd)) {	/* Must test this first! */
-		refrmode = 0;
-	} else if (IMODETST(p->mode, inst_mode_emis_refresh_ovd)) {
-		refrmode = 1;
-	}
-
-	if (p->refrmode != refrmode) {
-		p->rrset = 0;					/* This is a hint we may have swapped displays */
-		p->refrvalid = 0;
-	}
-	p->refrmode = refrmode; 
+	update_refmode(p, dentry->refr);
 
 	if (dentry->flags & inst_dtflags_ccss) {	/* Spectral sample */
 
 		if ((ev = spyd2_set_speccal(p, dentry->sets, dentry->no_sets)) != inst_ok) 
 			return ev;
+		p->ucbid = dentry->cbid;	/* This is underying base if dentry is base selection */
 
 	} else {	/* Matrix */
 
 		if (dentry->flags & inst_dtflags_ccmx) {
+			if ((ev = set_base_disp_type(p, dentry->cc_cbid)) != inst_ok)
+				return ev;
 			if ((ev = spyd2_set_matcal(p, dentry->mat)) != inst_ok)
 				return ev;
+			p->cbid = 0;		/* Matrix is an override of cbid */
+
 		} else {
 			if ((ev = spyd2_set_matcal(p, NULL)) != inst_ok)		/* Noop */
 				return ev;
+			p->ucbid = dentry->cbid;	/* This is underying base if dentry is base selection */
 		}
 	}
 	return spyd2_set_cal(p);
 }
 
-
-/* Setup the default display type */
-static inst_code set_default_disp_type(spyd2 *p) {
-	inst_code ev;
-	int i;
-
-	if (p->dtlist == NULL) {
-		if ((ev = inst_creat_disptype_list((inst *)p, &p->ndtlist, &p->dtlist,
-		    p->_dtlist, p->hwver >= 7 ? 1 : 0 /* doccss*/, 1 /* doccmx */)) != inst_ok)
-			return ev;
-	}
-
-	for (i = 0; !(p->dtlist[i].flags & inst_dtflags_end); i++) {
-		if (p->dtlist[i].flags & inst_dtflags_default)
-			break;
-	}
-	if (p->dtlist[i].flags & inst_dtflags_end) {
-		a1loge(p->log, 1, "set_default_disp_type: failed to find type!\n");
-		return inst_internal_error; 
-	}
-	if ((ev = set_disp_type(p, &p->dtlist[i])) != inst_ok) {
-		return ev;
-	}
-
-	return inst_ok;
-}
 
 /* Set the display type */
 static inst_code spyd2_set_disptype(inst *pp, int ix) {
@@ -3690,6 +3900,82 @@ static inst_code spyd2_set_disptype(inst *pp, int ix) {
 	return inst_ok;
 }
 
+/* Setup the default display type */
+static inst_code set_default_disp_type(spyd2 *p) {
+	inst_code ev;
+	int i;
+
+	if (p->dtlist == NULL) {
+		if ((ev = inst_creat_disptype_list((inst *)p, &p->ndtlist, &p->dtlist,
+		    p->_dtlist, p->hwver >= 7 ? 1 : 0 /* doccss*/, 1 /* doccmx */)) != inst_ok)
+			return ev;
+	}
+
+	for (i = 0; !(p->dtlist[i].flags & inst_dtflags_end); i++) {
+		if (p->dtlist[i].flags & inst_dtflags_default)
+			break;
+	}
+	if (p->dtlist[i].flags & inst_dtflags_end) {
+		a1loge(p->log, 1, "set_default_disp_type: failed to find type!\n");
+		return inst_internal_error; 
+	}
+	if ((ev = set_disp_type(p, &p->dtlist[i])) != inst_ok) {
+		return ev;
+	}
+
+	return inst_ok;
+}
+
+/* Setup the display type to the given base type */
+static inst_code set_base_disp_type(spyd2 *p, int cbid) {
+	inst_code ev;
+	int i;
+
+	if (cbid == 0) {
+		a1loge(p->log, 1, "spyd2 set_base_disp_type: can't set base display type of 0\n");
+		return inst_wrong_setup;
+	}
+	if (p->dtlist == NULL) {
+		if ((ev = inst_creat_disptype_list((inst *)p, &p->ndtlist, &p->dtlist,
+		    p->_dtlist, p->hwver >= 7 ? 1 : 0 /* doccss*/, 1 /* doccmx */)) != inst_ok)
+			return ev;
+	}
+
+	for (i = 0; !(p->dtlist[i].flags & inst_dtflags_end); i++) {
+		if (!(p->dtlist[i].flags & inst_dtflags_ccmx)		/* Prevent infinite recursion */
+		 && p->dtlist[i].cbid == cbid)
+			break;
+	}
+	if (p->dtlist[i].flags & inst_dtflags_end) {
+		a1loge(p->log, 1, "set_base_disp_type: failed to find cbid %d!\n",cbid);
+		return inst_wrong_setup; 
+	}
+	if ((ev = set_disp_type(p, &p->dtlist[i])) != inst_ok) {
+		return ev;
+	}
+
+	return inst_ok;
+}
+
+/* Get the disptech and other corresponding info for the current */
+/* selected display type. Returns disptype_unknown by default. */
+/* Because refrmode can be overridden, it may not match the refrmode */
+/* of the dtech. (Pointers may be NULL if not needed) */
+static inst_code spyd2_get_disptechi(
+inst *pp,
+disptech *dtech,
+int *refrmode,
+int *cbid) {
+	spyd2 *p = (spyd2 *)pp;
+	if (dtech != NULL)
+		*dtech = p->dtech;
+	if (refrmode != NULL)
+		*refrmode = p->refrmode;
+	if (cbid != NULL)
+		*cbid = p->cbid;
+	return inst_ok;
+}
+
 /* 
  * set or reset an optional mode
  *
@@ -3714,24 +4000,6 @@ spyd2_get_set_opt(inst *pp, inst_opt_type m, ...) {
 		return inst_no_coms;
 	if (!p->inited)
 		return inst_no_init;
-
-	/* Get the display type information */
-	if (m == inst_opt_get_dtinfo) {
-		va_list args;
-		int *refrmode, *cbid;
-
-		va_start(args, m);
-		refrmode = va_arg(args, int *);
-		cbid = va_arg(args, int *);
-		va_end(args);
-
-		if (refrmode != NULL)
-			*refrmode = p->refrmode;
-		if (cbid != NULL)
-			*cbid = p->cbid;
-
-		return inst_ok;
-	}
 
 	/* Set the ccss observer type */
 	if (m == inst_opt_set_ccss_obs) {
@@ -3860,6 +4128,7 @@ extern spyd2 *new_spyd2(icoms *icom, instType itype) {
 	p->set_mode          = spyd2_set_mode;
 	p->get_disptypesel   = spyd2_get_disptypesel;
 	p->set_disptype      = spyd2_set_disptype;
+	p->get_disptechi     = spyd2_get_disptechi;
 	p->get_set_opt       = spyd2_get_set_opt;
 	p->read_sample       = spyd2_read_sample;
 	p->read_refrate      = spyd2_read_refrate;
@@ -3876,7 +4145,8 @@ extern spyd2 *new_spyd2(icoms *icom, instType itype) {
 	p->itype = icom->itype;
 
 	/* Load manufacturers Spyder4 calibrations */
-	if (itype == instSpyder4) {
+	if (itype == instSpyder4
+	 || itype == instSpyder5) {
 		int rv;
 		p->hwver = 7;		/* Set preliminary version */
 		if ((rv = spyd4_load_cal(p)) != SPYD2_OK)
@@ -3887,13 +4157,105 @@ extern spyd2 *new_spyd2(icoms *icom, instType itype) {
 	if (itype == instSpyder3) {
 		p->hwver = 4;		/* Set preliminary version */
 	}
-	if (itype == instSpyder2) {
+	if (itype == instSpyder1		// ????
+	 || itype == instSpyder2) {
 		p->hwver = 3;		/* Set preliminary version */
 	}
 
 	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
 	set_base_disptype_list(p);
+	p->dtech = disptech_unknown;
 
 	return p;
 }
 
+
+/* This is called by utilities that need to be able to access the Spyder 2 colorimeter. */
+/* and be able to check if the firmware is available. */
+
+/* id = 0 for Spyder 1, 1 for Spyder 2 */
+/* Return 0 if Spyder firmware is not available */
+/* Return 1 if Spyder firmware is available */
+int setup_spyd2(int id) {
+#ifdef ENABLE_USB
+	char **bin_paths = NULL;
+	int no_paths = 0;
+	unsigned int size, rsize;
+	char *p1;
+	FILE *fp;
+	int i;
+
+	id &= 1;
+
+	/* If not loaded, try and load it */
+	if (spyder_pld_size[id] == 0) {
+		
+
+		for (;;) {	/* So we can break out */
+			if (id == 0)
+				p1 = "ArgyllCMS/spyd1PLD.bin" XDG_FUDGE "color/spyd1PLD.bin";
+			else
+				p1 = "ArgyllCMS/spyd2PLD.bin" XDG_FUDGE "color/spyd2PLD.bin";
+
+			if ((no_paths = xdg_bds(NULL, &bin_paths, xdg_data, xdg_read, xdg_user, p1)) < 1) {
+				a1logd(g_log, 1, "setup_spyd2: failed to find PLD file on path '%s'\n",p1);
+				break;
+			}
+
+			/* open binary file */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
+#if defined(O_BINARY) || defined(_O_BINARY)
+			if ((fp = fopen(bin_paths[0],"rb")) == NULL)
+#else
+			if ((fp = fopen(bin_paths[0],"r")) == NULL)
+#endif
+			{
+				a1logd(g_log, 1, "setup_spyd2: couldn't find '%s'\n",bin_paths[0]);
+				break;
+			}
+
+			/* Figure out how file it is */
+			if (fseek(fp, 0, SEEK_END)) {
+				fclose(fp);
+				break;
+			}
+			size = (unsigned long)ftell(fp);
+			rsize = (size + 7) & ~7;		/* Rounded up size */
+
+			if ((spyder_pld_bytes[id] = malloc(rsize)) == NULL) {
+				a1logd(g_log,1,"Spyder pld load malloc failed\n");
+				fclose(fp);
+				break;
+			}
+
+			if (fseek(fp, 0, SEEK_SET)) {
+				fclose(fp);
+				break;
+			}
+		
+			if (fread(spyder_pld_bytes[id], 1, size, fp) != size) {
+				fclose(fp);
+				break;
+			}
+
+			/* Pad out to even 8 bytes */
+			for (i = size; i < rsize; i++)
+				spyder_pld_bytes[id][i] = 0xff;
+
+			spyder_pld_size[id] = rsize;
+
+			a1logd(g_log, 1, "setup_spyd2: loaded '%s' OK\n",bin_paths[0]);
+
+			fclose(fp);
+			break;
+		}
+		xdg_free(bin_paths, no_paths);
+	}
+
+	if (spyder_pld_size[id] != 0)
+		return 1;			/* Available */
+#endif /* ENABLE_USB */
+	return 0;				/* Not available */
+}

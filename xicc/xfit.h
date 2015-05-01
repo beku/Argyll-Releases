@@ -70,6 +70,7 @@ typedef struct {
 
 /* Context for optimising input and output luts */
 struct _xfit {
+	icc *picc;				/* ICC profile used to set cone space matrix, NULL for Bradford. */
 	int verb;				/* Verbose */
 	int flags;				/* Behaviour flags */
 	int di, fdi;			/* Dimensionaluty of input and output */
@@ -170,6 +171,7 @@ struct _xfit {
 		int gres[MXDI],			/* clut resolutions being optimised for/returned */
 		double out_min[MXDO],	/* Output value scaling/range minimum */
 		double out_max[MXDO],	/* Output value scaling/range maximum */
+//		co *bpo,				/* If != NULL, black point override in same spaces as ipoints */
 		double smooth,			/* clut rspl smoothing factor */
 		double oavgdev[MXDO],	/* Average output value deviation */
 		double demph,			/* dark emphasis factor for cLUT grid res. */
@@ -200,7 +202,8 @@ struct _xfit {
 
 }; typedef struct _xfit xfit;
 
-xfit *new_xfit();
+/* The icc is to provide the cone space matrix. If NULL, Bradford will be used. */
+xfit *new_xfit(icc *picc);
 
 #endif /* XFIT_H */
 

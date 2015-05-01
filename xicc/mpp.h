@@ -27,7 +27,7 @@
 /* ------------------------------------------------------------------------------ */
 
 #define MPP_MXINKS 8		/* Would like to be ICX_MXINKS but need more dynamic allocation */
-#define MPP_MXTCORD 10		/* Maximum shaper harmonic orders to use */
+#define MPP_MXTCORD 20		/* Maximum shaper harmonic orders to use */
 #define MPP_MXCCOMB (1 << MPP_MXINKS)	/* Maximum number of primary combinations */
 #define MPP_MXPARMS (MPP_MXINKS * MPP_MXTCORD + (MPP_MXINKS * MPP_MXCCOMB/2) + MPP_MXCCOMB)
 							/* Maximum total parameters for a band */

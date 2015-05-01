@@ -22,6 +22,7 @@
 #include "rspl.h"
 #include "tiffio.h"
 #include "plot.h"
+#include "ui.h"
 
 #ifdef NEVER
 #define INTERP spline_interp

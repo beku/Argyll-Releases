@@ -15,8 +15,13 @@
  * see the License2.txt file for licencing details.
  */
 
+#pragma message("!!!!!! usbio_bsd.c is INCOMPLETE and USB instruments will NOT WORK !!!!!!")
+
 /*
 	!!!! This driver is incomplete and non-functional !!!!
+
+	( Most of the below code is stubbed out, with the Linux
+	code as a placeholder. )
 
 	BSD uses fd per end point, so simplifies things.
 
@@ -504,7 +509,7 @@ static int icoms_usb_transaction(
 		bp += req.urbs[i].urb.buffer_length;
 		req.urbs[i].urb.status = -EINPROGRESS;
 	}
-a1logd(p->log, 8, "icoms_usb_transaction: reset req 0x%p nourbs to %d\n",&req,req.nourbs);
+a1logd(p->log, 8, "icoms_usb_transaction: reset req %p nourbs to %d\n",&req,req.nourbs);
 
 	/* Add our request to the req list so that it can be cancelled on reap failure */
 	pthread_mutex_lock(&p->usbd->lock);

@@ -38,6 +38,14 @@
 
 
 
+
+
+
+
+
+
+
+
         &nbsp; &nbsp; &nbsp; &nbsp; Verbose mode<br>
         &nbsp;<a href="#A">-A "manufacturer"</a>&nbsp; Set the
         manufacturer description string<br>
@@ -66,6 +74,14 @@
 
 
 
+
+
+
+
+
+
+
+
         &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Default
         intent: Perceptual, Rel. Colorimetric, Saturation, Abs.
         Colorimetric</small></tt><tt><br>
@@ -76,6 +92,14 @@
         &nbsp; Low quality B2A table - or specific B2A quality or none
         for input device<br>
         &nbsp;<a href="#ni">-ni</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -128,13 +152,22 @@
 
 
 
+
+
+
+
+
+
+
+
         &nbsp; &nbsp; &nbsp; &nbsp; Don't create output (PCS) shaper
         curves<br>
       </small></tt><tt><small>&nbsp;<a href="#nc">-nc</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
         Don't put the input .ti3 data in the profile</small></tt><tt><br>
     </tt><tt> </tt><tt><small>&nbsp;<a href="#k">-k zhxr</a>&nbsp;
-        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Black generation: z = zero K,<br>
+        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Black Ink generation: z =
+        zero K,<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 &nbsp;
@@ -147,6 +180,14 @@ K
 (def),
 x
 =
+
+
+
+
+
+
+
+
 
 
 
@@ -206,6 +247,14 @@ White
 
 
 
+
+
+
+
+
+
+
+
         - 1.0<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -219,6 +268,14 @@ point
 of
 transition
 Wh
+
+
+
+
+
+
+
+
 
 
 
@@ -278,6 +335,14 @@ Wh
 
 
 
+
+
+
+
+
+
+
+
         0.0 - Bk 1.0<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -290,6 +355,14 @@ K
 level
 at
 Black
+
+
+
+
+
+
+
+
 
 
 
@@ -349,8 +422,24 @@ concave,
 
 
 
+
+
+
+
+
+
+
+
         1.0-2.0 convex<br>
         &nbsp;<a href="#K">-K parameters</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -408,6 +497,14 @@ cLUT
 
 
 
+
+
+
+
+
+
+
+
         x = XYZ cLUT, X = display XYZ cLUT + matrix<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -420,6 +517,14 @@ g
 gamma+matrix,
 s
 =
+
+
+
+
+
+
+
+
 
 
 
@@ -479,12 +584,28 @@ S
 
 
 
+
+
+
+
+
+
+
+
         single shaper+matrix<br>
         &nbsp;<a href="#u">-u</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 &nbsp;
 &nbsp;
 &nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -538,8 +659,32 @@ and
 
 
 
+
+
+
+
+
+
+
+
       primaries to be +ve</tt><tt><br>
+      &nbsp;<a href="#B">-B X,Y,Z</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+      Display Black Point override hack<br>
       &nbsp;<a href="#V">-V demphasis</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -563,9 +708,25 @@ and
 
 
 
+
+
+
+
+
+
+
+
           M0, M1, M2, </small></small></tt><tt><small><small><small>A,
             C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp ]</small></small></small></tt><tt><br>
     </tt><tt><small><small><small><small>&nbsp;<a href="#i">-i <i>illum</i></a>&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -605,10 +766,26 @@ D50M2,
 
 
 
+
+
+
+
+
+
+
+
               D65, F5, F8, F10 or file.sp</small></small></small><br>
         &nbsp;<a href="#o">-o <i>observ</i></a>&nbsp; &nbsp; &nbsp;
         &nbsp; &nbsp; Choose CIE Observer for spectral data:<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -671,8 +848,24 @@ for
 
 
 
+
+
+
+
+
+
+
+
         given source<br>
         &nbsp;<a href="#S">-S src.icc</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -722,9 +915,25 @@ for
 
 
 
+
+
+
+
+
+
+
+
         Use colormetric source gamut to make output profile perceptual
         table<br>
         &nbsp;<a href="#nS">-nS</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -759,6 +968,14 @@ for
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override gamut
         mapping intent for output profile perceptual table:<br>
         &nbsp;<a href="#T">-T intent</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -824,8 +1041,24 @@ for
 
 
 
+
+
+
+
+
+
+
+
         pa - Perceptual Appearance</small></tt><tt><br>
     </tt><tt> </tt><tt><small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -867,8 +1100,24 @@ for
 
 
 
+
+
+
+
+
+
+
+
         rl - White Point Matched Colorimetric (Lab)<br>
         &nbsp;<a href="#c">-c viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -918,8 +1167,24 @@ for
 
 
 
+
+
+
+
+
+
+
+
         either an enumerated choice, or a parameter<br>
         &nbsp;<a href="#d">-d viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -969,6 +1234,14 @@ for
 
 
 
+
+
+
+
+
+
+
+
         either an enumerated choice, or a parameter:value change<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
@@ -994,8 +1267,24 @@ for
 
 
 
+
+
+
+
+
+
+
+
         Also sets out of gamut clipping CAM space.<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -1073,6 +1362,14 @@ for
 
 
 
+
+
+
+
+
+
+
+
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;
         &nbsp;&nbsp; c = transparency (default average)<br>
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
@@ -1101,6 +1398,14 @@ for
                 % of image luminance (default 0)<br>
               </span></small>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
             &nbsp;&nbsp; </span><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -1150,9 +1455,25 @@ for
 
 
 
-        Create gamut gammap_p.wrl and gammap_s.wrl diagostics<br>
+
+
+
+
+
+
+
+
+        Create gamut gammap_p.x3d.html and gammap_s.x3d.html diagostics<br>
       </small></tt><tt><small>&nbsp;<a href="#O">-O outputfile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
+
+
+
+
+
+
+
+
 
 
 
@@ -1322,10 +1643,26 @@ the
 
 
 
+
+
+
+
+
+
+
+
     device and CIE/spectral sample data and calibration curves used to
     create a profile is stored in the <span style="font-weight: bold;">'targ'</span>
     text tag in the resulting ICC profile. To suppress this and make the
     resulting profile smaller, use the <span style="font-weight: bold;">-nc
+
+
+
+
+
+
+
+
 
 
 
@@ -1409,9 +1746,25 @@ the
 
 
 
+
+
+
+
+
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;
       &nbsp;_______&nbsp; enle<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -1460,8 +1813,24 @@ the
 
 
 
+
+
+
+
+
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -1510,6 +1879,14 @@ the
 
 
 
+
+
+
+
+
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       stle&nbsp; | ------/<br>
@@ -1520,6 +1897,14 @@ the
       stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
 
 
 
@@ -1708,6 +2093,26 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     black and primary values, so as to work with these programs, but
     this will reduce the accuracy of the profile.<br>
     <br>
+    <b><a name="B"></a>-B X,Y,Z</b> This option is for display profiles
+    only, and allows overriding the black point of the resulting
+    profile. The XYZ value is in absolute instrument measurement units.
+    This option should be used only in special circumstances, for
+    instance if the display has a very low black point and the
+    instrument is not capable of measuring the black point accurately or
+    consistently. In this case a manual estimate of the black point
+    could be made and provided as the argument to -B. It may also be
+    useful for displays with black points that approach perfect black
+    (ie. Plasma or OLED) where a value of 0,0,0 may be more accurate
+    than typical instrument measurements. A value that is too different
+    to the default computed black point will likely result in a profile
+    with strange behavior near black.<br>
+    <b>Note</b> that the default contents of the .ti3 created by <a
+      href="dispread.html">dispread</a> is normalised to be 100 for the
+    white point Y value, and similarly values returned by icclu -ia -px
+    are normalized to a white Y value of 1.0, which is not what the <b>-B</b>
+    option expects, so some care needs to be taken in specifying and
+    evaluating the resulting black point XYZ values.<br>
+    <br>
     <a name="V"></a>The <b>-V demphasis</b> parameter allows sets the
     degree to which cLUT grid spacing should emphasize the accuracy of
     modelling the device response in the dark regions, over that of the
@@ -1735,20 +2140,28 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     Ultra Violet to the one the instrument actually used in the
     measurement. There are two ways this can be used:<br>
     <br>
-    The first and most common is to use the <b>-f</b> flag with the <b>-i</b>
-    illuminant parameter, to make the color values more accurately
-    reflect their appearance under the viewing illuminant. This will
-    work accurately if you specify the <span style="text-decoration:
-      underline;">actual illuminant spectrum you are using to view the
-      print</span>, using the <span style="font-weight: bold;"><span
-        style="font-weight: bold;">-i</span></span> flag. If you are
-    doing proofing, you need to apply this to <span
+    <b>The first and most useful</b> is to use the <b>-f</b> flag with
+    the <b>-i</b> illuminant parameter (i.e. "<b>-f -i D50"</b>), to
+    make the color values more accurately reflect their appearance under
+    the viewing illuminant. This will work accurately if you specify the
+    <span style="text-decoration: underline;">actual illuminant spectrum
+      you are using to view the print</span>, using the <span
+      style="font-weight: bold;"><span style="font-weight: bold;">-i</span></span>
+    flag. If you are doing proofing, you need to apply this to <span
       style="text-decoration: underline;">both your source profile, and
       your destination profile</span>. Note that it is not sufficient to
     specify an illuminant with the same white point as the one you are
     using, you should specify the spectrum of the illuminant you are <span
       style="text-decoration: underline;">actually using</span> for the
     proofing, including its <span style="text-decoration: underline;">Ultra
+
+
+
+
+
+
+
+
 
 
 
@@ -1785,6 +2198,7 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     ref/D50_X.X.sp set of illuminant spectra are the D50 spectrum with
     different levels of U.V. added or subtracted, ref/D50_1.0.sp being
     the standard D50 illuminant, and may be somewhere to start.<br>
+    <br>
     &nbsp;[Note: Generally using <span style="font-weight: bold;">-f</span>
     with the standard (<b>-i) </b>D50 illuminant spectrum will predict
     that the device will produce bluer output than the default of not
@@ -1797,13 +2211,14 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     result will be, as the overall color correction compensates for the
     blueness. The opposite will happen for an input profile.]<br>
     <br>
-    The second way of using the <b>-f</b> flag is to provide it with a
-    instrument simulation illuminant spectrum parameter, in addition to
-    the default D50 or <b>-i</b> parameter&nbsp; CIE XYZ&nbsp;
-    calculation illuminant<b></b>. This more complicated scenario
-    simulates the measurement of the spectral reflectance of the samples
-    under a particular instrument illuminant, then computes the CIE XYZ
-    values of that reflectance spectrum under the default D50 or <b>-i</b>
+    <b>The second way</b> of using the <b>-f</b> flag is to provide it
+    with a instrument simulation illuminant spectrum parameter, in
+    addition to the default D50 or <b>-i</b> parameter CIE XYZ&nbsp;
+    calculation illuminant (i.e. "<b>-f M1"</b>, or "<b>-f A -i D65"</b>
+    etc.). This more complicated scenario simulates the <u>measurement</u>
+    of the spectral reflectance of the samples under a particular
+    instrument illuminant, then <u>computes</u> the CIE XYZ values of
+    that reflectance spectrum under the default D50 or <b>-i</b>
     parameter illuminant. This is <u>not</u> used to give a more
     accurate real world result, but to provide simulations of various
     standardized measurement conditions. For instance, to reproduce ISO
@@ -1817,10 +2232,10 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     equivalent to<b>&nbsp;&nbsp;&nbsp; -f D50</b><br>
     &nbsp;&nbsp;&nbsp; <b>-f M2</b> &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;
     equivalent to<b>&nbsp;&nbsp;&nbsp; -f D50M2</b><b><br>
-    </b><br>
-    &nbsp;Note that using <span style="font-weight: bold;">-f</span> <b>M2</b>
-    gives a result that is comparable to that of a U.V. cut filter
-    instrument. See also the discussion <a href="FWA.html">About
+      <br>
+    </b> &nbsp;Note that using <span style="font-weight: bold;">-f</span>
+    <b>M2</b> gives a result that is comparable to that of a U.V. cut
+    filter instrument. See also the discussion <a href="FWA.html">About
       Fluorescent Whitening Agent compensation</a>.<br>
     <br>
     <a name="i"></a> The <b>-i</b> parameter allows specifying a
@@ -2064,7 +2479,7 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     been applied) into the device gamut. <br>
     <br>
     <b><a name="P"></a></b>The <b>-P</b> option causes diagnostic 3D <a
-      href="File_Formats.html#VRML">VRML</a> plots to be created that
+      href="File_Formats.html#X3DOM">X3DOM</a> plots to be created that
     illustrate the gamut mappings generated for the perceptual and
     saturation intent tables.<br>
     <br>

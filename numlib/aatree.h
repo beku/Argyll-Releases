@@ -4,7 +4,7 @@
 /*
   Andersson binary balanced tree library
 
-    > Created (Julienne Walker): September 10, 2005
+  > Created (Julienne Walker): September 10, 2005
 
   This code is in the public domain. Anyone may
   use it or change it in any way that they see

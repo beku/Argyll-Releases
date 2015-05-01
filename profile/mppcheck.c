@@ -33,6 +33,7 @@
 #include "xicc.h"
 #include "prof.h"
 #include "sort.h"
+#include "ui.h"
 
 void
 usage(void) {

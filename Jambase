@@ -445,7 +445,7 @@ if $(NT)
 #		WINLIBS			?= -lwinspool -lwinmm -lshell32 -lcomctl32 -lctl3d32
 #						   -lodbc32 -ladvapi32 -lodbc32 -lwsock32 -lopengl32
 #		                   -lglu32 -lshlwapi -lsetupapi ;
-		WINLIBS			?= -lshlwapi -lsetupapi -lole32 -lws2_32 -lpsapi ;
+		WINLIBS			?= -lshlwapi -lsetupapi -lole32 -lws2_32 -lpsapi -lversion ;
 		GUILIBS			?= -lgdi32 -lmscms ;
 
 		LINK			?= $(TPFX)g++ ;		# In case we link to C++ files
@@ -510,22 +510,82 @@ if $(NT)
 		DEFFLAG		 	?= /D ;						
 		UNDEFFLAG		?= "/u _" ;
 	}
+	else if $(TARGET_ARCH)
+	{
+		# Intel C++ compiler (ICL) 
+
+		# No IA64 dir
+		local I ; I = "" ;
+
+		AR				?= lib /NOLOGO ;
+		AS				?= masm386 ;
+		CC              ?= icl /nologo ; 
+		CCFLAGS			?= /DNT /MD ;		# DLL compatible build by default
+
+		C++				?= $(CC) ;
+		C++FLAGS		?= $(CCFLAGS) /GX ;		# GX enables syncronous exception handling
+		LINK			?= xilink /nologo ; 
+		LINKOUTFLAG		?= /out: ;
+		LINKFLAGS       ?= ; 		# iclvars.bat [arch] sets this up
+
+		SHLINKFLAGS		?= ;
+
+		STDLIBS			?= 
+						oldnames.lib
+						kernel32.lib 
+						advapi32.lib		
+						user32.lib		
+						mscms.lib		
+						gdi32.lib		 
+						shlwapi.lib		 
+						shell32.lib		 
+						setupapi.lib
+						ole32.lib
+						oleaut32.lib
+						ws2_32.lib
+						Wbemuuid.lib
+						;
+		SHSTDLIBS		?= $(STDLIBS) ;
+		LINKFLAG		?= ;						
+		STDHDRS			?= $(ICPP_COMPILER14)\\Include ;
+		DEFFLAG		 	?= /D ;				
+		UNDEFFLAG		?= /U ;
+		CCOPTFLAG		?= /O3 ; 
+
+		if $(MSVCVER) = 6 {
+			CCDEBUGFLAG		?= /Od /Z7 ;		# Include debugging into in each object		
+			CCPROFFLAG		?= /Od /Z7 ;
+			LINKDEBUGFLAG	?= /DEBUGTYPE:BOTH /DEBUG /PDB:NONE ;		
+		} else {
+			CCDEBUGFLAG		?= /Od /Zi ;		# /Zi creates debugging database
+			CCPROFFLAG		?= /Od /Zi ;
+			LINKDEBUGFLAG	?= /DEBUG ;
+		}
+		LINKPROFFLAG	?= /PROFILE $(LINKDEBUGFLAG) ;		
+		LINKOPTFLAG		?= /OPT:REF ;	
+		LINKSTRIPFLAG	?= ;
+		YACC			?= bison -y ;
+		YACCGEN			?= .c ;
+		YACCFILES		?= y.tab ;
+		YACCFLAGS		?= -d ;
+	}
 	else if $(MSVCNT) || $(MSVCDIR) || $(MSVCDir) || $(VCINSTALLDIR)
 	{
-		# Visual C++ 8.0/9.0/10.0 uses VCINSTALLDIR
+		# Visual C++ 8.0/9.0/10.0/11.0/12.0 uses VCINSTALLDIR
 		# We assume VC++ Express + XP32 SDK has been setup
-
-		# Visual C++ 6.0 uses MSVCDIR
 
 		if $(VCINSTALLDIR) {
 			MSVCNT		?= $(VCINSTALLDIR) ;		
 		} else if $(MSVCDir) {
 			MSVCNT		?= $(MSVCDir) ;		
-		} else {
+		} else {			# Visual C++ 6.0 uses MSVCDIR
 			MSVCNT		?= $(MSVCDIR) ;		
 		}
 
-		if [ MATCH 11\\.(.*) : $(VisualStudioVersion) ] {
+		if [ MATCH 12\\.(.*) : $(VisualStudioVersion) ] {
+			ECHO "Compiler is VC++12 32 bit" ;
+			MSVCVER     = 12 ;
+		} else if [ MATCH 11\\.(.*) : $(VisualStudioVersion) ] {
 			ECHO "Compiler is VC++11 32 bit" ;
 			MSVCVER     = 11 ;
 		} else if [ MATCH (.*)VC\\+\\+10(.*) : $(MSVCNT) ] {
@@ -585,6 +645,7 @@ if $(NT)
 						oleaut32.lib
 						ws2_32.lib
 						Wbemuuid.lib
+						Version.lib
 						;
 		SHSTDLIBS		?= $(STDLIBS) ;
 		LINKFLAG		?= ;						
@@ -916,9 +977,14 @@ else if $(UNIX)
 	}
 
 	# Make things work on 64 bit Linux
-	# Note that HOSTTYPE needs to be exported by the shell!
+	# Because HOSTTYPE is not normally exported, check the uname() result
+	if ! $(HOSTTYPE) {
+		HOSTTYPE = $(JAMUNAME[1]) ;
+	}
+
 	if $(HOSTTYPE) = x86_64 
-	 || $(HOSTTYPE) = x86_64-linux {
+	 || $(HOSTTYPE) = x86_64-linux
+	 || $(HOSTTYPE) = amd64 {
 		ECHO "We're on a 64 bit host" ;
 		HOST64     = true ;
 		CCFLAGS	   += -m64 ;
@@ -946,7 +1012,7 @@ else if $(UNIX)
 	CRELIB			?= ;
 	DOT				?= . ;
 	DOTDOT			?= .. ;
-	EXEMODE			?= 711 ;
+	EXEMODE			?= 755 ;
 	FILEMODE		?= 644 ;
 	FORTRAN			?= f77 ;
 	FORTRANFLAGS	?= ;
@@ -3474,7 +3540,7 @@ rule MkDir_
 # Object object : sources : flags : defines : hdrpaths 
 rule Object
 {
-#Echo "Object got " $(<) "and" $(>) "' flags '" $(3) "' defs '" $(4) "' hds '" $(5) "'" ;
+	#Echo "Object got " $(<) "and" $(>) "' flags '" $(3) "' defs '" $(4) "' hds '" $(5) "'" ;
 
 	# Normalize target names and set Grist LOCATE and SOURCE
 	local _t = [ NormDstTargets $(<[1]:S=$(SUFOBJ)) ] ;
@@ -3726,7 +3792,7 @@ rule RmTemps_
 rule Setuid
 {
 	local _t = [ NormPaths $(>:S=$(SUFEXE)) ] ;
-	MODE on $(_t) = 4711 ;
+	MODE on $(_t) = 4755 ;
 }
 
 # Shell

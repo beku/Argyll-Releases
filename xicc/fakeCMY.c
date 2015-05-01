@@ -31,6 +31,7 @@
 #include "xicc.h"
 #include "cgats.h"
 #include "targen.h"
+#include "ui.h"
 
 #define EXTRA_NEUTRAL 50		/* Crude way of increasing weighting */
 

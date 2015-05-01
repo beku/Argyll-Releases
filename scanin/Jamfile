@@ -9,10 +9,10 @@ Libraries = libscanrd ;
 Executables = scanin ;
 Headers = scanrd.h ;
 Samples = it8.cht ColorChecker.cht ColorChecker.cie ColorCheckerDC.cht ColorCheckerDC.ti2
-          ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht
+          ColorCheckerSG.cht ColorCheckerSG.ti2 Hutchcolor.cht i1_RGB_Scan_1.4.cht
           ColorCheckerPassport.cht ColorCheckerPassport.cie
           QPcard_201.cht QPcard_201.cie QPcard_202.cht QPcard_202.cie CMP_DT_003.cht
-          CMP_Digital_Target-3.cht CMP_Digital_Target-3.ti2 CMP_Digital_Target-3.cie
+          CMP_Digital_Target-4.cht CMP_Digital_Target-4.ti2 CMP_Digital_Target-4.cie
           LaserSoftDCPro.cht SpyderChecker.cht SpyderChecker.cie ;
 
 #Install
@@ -30,4 +30,9 @@ Main scanin : scanin.c ;
 ObjectHdrs scanin : ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro $(TIFFINC) ;
 LinkLibraries scanin : libscanrd ../xicc/libxicc ../spectro/libinsttypes 
                        ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
-                       ../icc/libicc ../numlib/libnum ../plot/libplot ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
+                       ../icc/libicc ../plot/libplot ../plot/libvrml
+                       ../numlib/libnum ../numlib/libui
+                       $(TIFFLIB) $(JPEGLIB) ;
+
+
+

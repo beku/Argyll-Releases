@@ -124,10 +124,15 @@ int icompaths_refresh_paths(icompaths *p) {
 			if (strstr(pname, "usbserial") != NULL)
 				fast = 1;
 
+#ifndef ENABLE_SERIAL
+			if (fast) {			/* Only add fast ports if !ENABLE_SERIAL */
+#endif
 			/* Add the port to the list */
 			p->add_serial(p, pname, pname, fast);
 			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' fast %d\n",pname, fast);
-
+#ifndef ENABLE_SERIAL
+			}
+#endif
 			/* If fast, try and identify it */
 			if (fast) {
 				icompath *path;
@@ -218,7 +223,7 @@ int icompaths_refresh_paths(icompaths *p) {
 				break;
 
 			if (!(
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
 			   /* This should match uart & USB devs. */
 				( strncmp (de->d_name, "cua", 3) == 0
 				&& strlen (de->d_name) < 7)
@@ -268,9 +273,15 @@ int icompaths_refresh_paths(icompaths *p) {
 			if (strncmp(de->d_name, "ttyUSB", 5) == 0)
 				fast = 1;
 
+#ifndef ENABLE_SERIAL
+			if (fast) {			/* Only add fast ports if !ENABLE_SERIAL */
+#endif
 			/* Add the path to the list */
 			p->add_serial(p, dpath, dpath, 0);
 			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' fast %d\n",dpath,fast);
+#ifndef ENABLE_SERIAL
+			}
+#endif
 			free(dpath);
 
 			/* If fast, try and identify it */
@@ -332,14 +343,18 @@ static void icoms_close_port(icoms *p) {
 
 #if defined(ENABLE_SERIAL) || defined(ENABLE_FAST_SERIAL)
 
-static int icoms_ser_write(icoms *p, char *wbuf, double tout);
-static int icoms_ser_read(icoms *p, char *rbuf, int bsize, char *tc, int ntc, double tout);
+static int icoms_ser_write(icoms *p, char *wbuf, int nwch, double tout);
+static int icoms_ser_read(icoms *p, char *rbuf, int bsize, int *bread,
+                                    char *tc, int ntc, double tout);
 
 
 #ifdef __APPLE__
 # ifndef IOSSIOSPEED
 #  define IOSSIOSPEED    _IOW('T', 2, speed_t)
 # endif
+#endif 
+
+#if defined(__APPLE__) || defined(__OpenBSD__)
 # ifndef B921600
 #  define B921600 921600
 # endif
@@ -449,6 +464,17 @@ word_length	 word
 				tio.c_cflag |= CRTS_IFLOW;
 #else
 				tio.c_cflag |= CRTSCTS;
+#endif
+				break;
+			case fc_HardwareDTR:
+				/* Use DTR/DSR bi-directional flow control */
+#ifdef __APPLE__
+				tio.c_cflag |= CDSR_OFLOW;
+				tio.c_cflag |= CDTR_IFLOW;
+#else
+#ifdef CDTRDSR	/* Hmm. Not all Linux's support this... */
+				tio.c_cflag |= CDTRDSR;
+#endif
 #endif
 				break;
 			default:
@@ -600,7 +626,8 @@ word_length	 word
 static int
 icoms_ser_write(
 icoms *p,
-char *wbuf,
+char *wbuf,			/* null terminated unless nwch > 0 */
+int nwch,			/* if > 0, number of characters to write */
 double tout
 ) {
 	int rv, retrv = ICOM_OK;
@@ -610,7 +637,6 @@ double tout
 	int nfd = 1;				/* Number of fd's to poll */
 	struct termios origs, news;
 
-	a1logd(p->log, 8, "icoms_ser_write: About to write '%s' ",icoms_fix(wbuf));
 	if (!p->is_open) {
 		a1loge(p->log, ICOM_SYS, "icoms_ser_write: device not initialised\n");
 		p->lserr = rv = ICOM_SYS;
@@ -623,8 +649,12 @@ double tout
 	pa[0].revents = 0;
 
 	/* Until timed out, aborted, or transmitted */
-	len = strlen(wbuf);
+	if (nwch != 0)
+		len = nwch;
+	else
+		len = strlen(wbuf);
 	tout *= 1000.0;		/* Timout in msec */
+	a1logd(p->log, 8, "icoms_ser_write: About to write %d bytes",len);
 
 	top = 100;						/* Timeout period in msecs */
 	toc = (int)(tout/top + 0.5);	/* Number of timout periods in timeout */
@@ -674,8 +704,9 @@ icoms_ser_read(
 icoms *p,
 char *rbuf,			/* Buffer to store characters read */
 int bsize,			/* Buffer size */
-char *tc,			/* Terminating characers, NULL for none */
-int ntc,			/* Number of terminating characters */
+int *pbread,		/* Bytes read (not including forced '\000') */
+char *tc,			/* Terminating characers, NULL for none or char count mode */
+int ntc,			/* Number of terminating characters or char count needed, if 0 use bsize */
 double tout			/* Time out in seconds */
 ) {
 	int rv, retrv = ICOM_OK;
@@ -685,6 +716,7 @@ double tout			/* Time out in seconds */
 	int nfd = 1;				/* Number of fd's to poll */
 	struct termios origs, news;
 	char *rrbuf = rbuf;		/* Start of return buffer */
+	int bread = 0;
 
 	if (!p->is_open) {
 		a1loge(p->log, ICOM_SYS, "icoms_ser_read: device not initialised\n");
@@ -698,12 +730,14 @@ double tout			/* Time out in seconds */
 		return rv;
 	}
 
+	a1logd(p->log, 8, "icoms_ser_read: About to read buf %d, tc %p ntc %d tout %f",bsize,tc,ntc,tout);
+
 	/* Wait for serial input to have data */
 	pa[0].fd = p->fd;
 	pa[0].events = POLLIN | POLLPRI;
 	pa[0].revents = 0;
 
-	bsize--;	/* Allow space for null */
+	bsize--;			/* Allow space for forced null */
 	tout *= 1000.0;		/* Timout in msec */
 
 	top = 100;						/* Timeout period in msecs */
@@ -711,11 +745,18 @@ double tout			/* Time out in seconds */
 	if (toc < 1)
 		toc = 1;
 
+	if (tc == NULL) {			/* no tc or char count mode */
+		j = -1;
+		if (ntc > 0 && ntc < bsize)
+			bsize = ntc;		/* Don't read more than ntc */
+	} else {
+		j = 0;
+	}
 	/* Until data is all read, we time out, or the user aborts */
-	for(i = toc, j = 0; i > 0 && bsize > 1 && j < ntc ;) {
-
+	for (i = toc; i > 0 && bsize > 0 && j < ntc ;) {
 		if (poll_x(pa, nfd, top) > 0) {
 			if (pa[0].revents != 0) {
+				int btr;
 				if (pa[0].revents != POLLIN &&  pa[0].revents != POLLPRI) {
 					a1loge(p->log, ICOM_SYS, "icoms_ser_read: poll on serin returned "
 					                     "unexpected value 0x%x",pa[0].revents);
@@ -730,6 +771,7 @@ double tout			/* Time out in seconds */
 				} else if (rbytes > 0) {
 					i = toc;		/* Reset time */
 					bsize -= rbytes;
+					bread += rbytes;
 					if (tc != NULL) {
 						while(rbytes--) {	/* Count termination characters */
 							char ch = *rbuf++, *tcp = tc;
@@ -740,8 +782,11 @@ double tout			/* Time out in seconds */
 								tcp++;
 							}
 						}
-					} else
+					} else {
+						if (ntc > 0)
+							j += rbytes;
 						rbuf += rbytes;
+					}
 				}
 			}
 		} else {
@@ -749,10 +794,12 @@ double tout			/* Time out in seconds */
 		}
 	}
 
-	*rbuf = '\000';
-	if (i <= 0) {			/* timed out */
+	if (i <= 0) 			/* timed out */
 		retrv |= ICOM_TO;
-	}
+
+	*rbuf = '\000';
+	if (pbread != NULL)
+		*pbread = bread;
 
 	a1logd(p->log, 8, "icoms_ser_read: returning '%s' ICOM err 0x%x\n",icoms_fix(rrbuf),retrv);
 

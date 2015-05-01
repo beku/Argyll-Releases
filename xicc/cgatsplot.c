@@ -23,9 +23,10 @@
 #include "numlib.h"
 #include "icc.h"
 #include "cgats.h"
-#include "plot.h"
 #include "xcolorants.h"
 #include "sort.h"
+#include "plot.h"
+#include "ui.h"
 
 void usage(void) {
 	fprintf(stderr,"Simple 2D plot of CGATS .ti3 data\n");

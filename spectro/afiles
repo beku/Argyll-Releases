@@ -19,6 +19,8 @@ webwin.h
 webwin.c
 madvrwin.h
 madvrwin.c
+ccwin.h
+ccwin.c
 mongoose.h
 mongoose.c
 insttypes.h
@@ -26,6 +28,8 @@ insttypes.c
 insttypeinst.h
 inst.c
 inst.h
+disptechs.h
+disptechs.c
 instappsup.c
 instappsup.h
 dtp20.c
@@ -58,10 +62,10 @@ hcfr.c
 hcfr.h
 spyd2.c
 spyd2.h
-spyd2setup.h
-spyd2PLD.h
 specbos.c
 specbos.h
+kleink10.c
+kleink10.h
 oemarch.h
 oemarch.c
 oeminst.c
@@ -74,6 +78,8 @@ huey.c
 huey.h
 colorhug.c
 colorhug.h
+ex1.c
+ex1.h
 spec2cie.c
 average.c
 conv.h
@@ -103,6 +109,8 @@ synthcal.c
 spotread.c
 fakeread.c
 synthread.c
+base64.h
+base64.c
 linear.sp
 SOtele.sp
 linear.cal

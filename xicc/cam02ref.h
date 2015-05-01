@@ -41,7 +41,7 @@ struct _cam02ref {
 		double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
-		double Yg,		/* Glare as a fraction of the ambient (range 0.0 .. 1.0) */
+		double Yg,		/* Glare as a fraction of the adapting/surround (range 0.0 .. 1.0) */
 		double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
@@ -158,7 +158,7 @@ double Yb,		/* Relative Luminence of Background to reference white */
 double Lv,		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-double Yg,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+double Yg,		/* Glare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
@@ -223,7 +223,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fsxyz[1] = s->Yf * s->Wxyz[1];
 	s->Fsxyz[2] = s->Yf * s->Wxyz[2];
 
-	/* Add in the Glare contribution from the ambient */
+	/* Add in the Glare contribution from the adapting/surround */
 	tt = s->Yg * s->La/s->Lv;
 	s->Fsxyz[0] += tt * s->Gxyz[0];
 	s->Fsxyz[1] += tt * s->Gxyz[1];

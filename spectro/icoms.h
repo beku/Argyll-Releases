@@ -152,7 +152,8 @@ typedef enum {
 	fc_nc = 0,			/* not configured/default */
 	fc_none,
 	fc_XonXOff,
-	fc_Hardware
+	fc_Hardware,		/* RTS CTS flow control */
+	fc_HardwareDTR		/* DTR DSR flow control */			
 } flow_control;
 
 /* baud rate available on all systems */
@@ -172,6 +173,8 @@ typedef enum {
 	baud_115200  = 12,
 	baud_921600  = 13
 } baud_rate;
+
+char *baud_rate_to_str(baud_rate br);
 
 /* Possible parity */
 typedef enum {
@@ -209,7 +212,7 @@ typedef enum {
 /* Type of port */
 typedef enum {
 	icomt_serial,		/* Serial port */
-	icomt_usbserial,	/* USB Serial port */
+	icomt_usbserial,	/* USB (fast) Serial port, i.e. FTDI */
 	icomt_usb,			/* USB port */
 	icomt_hid			/* HID (USB) port */
 } icom_type;
@@ -295,8 +298,10 @@ struct _icoms {
 	int nep;				/* Number of end points */
 	int wr_ep, rd_ep;		/* Default end points to use for "serial" read/write */
 	int rd_qa;				/* Read quanta size */
-	int ms_bytes;			/* No. Modem status bytes to strip from each read */
+	int ms_bytes;			/* No. of Modem status bytes to strip from each read */
 	int latmsec;			/* Latency timeout in msec for modem status bytes */
+	int (*interp_ms)(struct _icoms *p, unsigned char *msbytes);
+							/* return icom error from ms bytes, NULL if none */
 
 	usb_ep ep[32];			/* Information about each end point for general usb i/o */
 
@@ -364,7 +369,8 @@ struct _icoms {
 	/* return icom error */
 	int (*write)(
 		struct _icoms *p,
-		char *buf,
+		char *buf,			/* null terminated unless nch > 0 */
+		int nch,			/* if > 0, number of characters to write */
 		double tout);		/* Timeout in seconds */
 
 	/* "Serial" read characters into the buffer */
@@ -374,8 +380,10 @@ struct _icoms {
 		struct _icoms *p,
 		char *buf,			/* Buffer to store characters read */
 		int bsize,			/* Buffer size */
-		char *tc,			/* Terminating characters */
-		int ntc,			/* Number of terminating characters seen */
+		int *bread,			/* Bytes read (not including forced '\000') */
+		char *tc,			/* Terminating characters, NULL for none or char count mode */
+		int ntc,			/* Number of terminating characters or char count needed, */
+							/* if 0 use bsize. */
 		double tout);		/* Timeout in seconds */
 
 	/* "Serial" write and read */
@@ -383,10 +391,12 @@ struct _icoms {
 	int (*write_read)(
 		struct _icoms *p,
 		char *wbuf,			/* Write puffer */
+		int nwch,			/* if > 0, number of characters to write */
 		char *rbuf,			/* Read buffer */
 		int bsize,			/* Buffer size */
-		char *tc,			/* Terminating characers */
-		int ntc,			/* Number of terminating characters seen */
+		int *bread,			/* Bytes read (not including forced '\000') */
+		char *tc,			/* Terminating characers, NULL for none or char count mode */
+		int ntc,			/* Number of any terminating characters needed, or char count needed */
 		double tout);		/* Timeout in seconds */
 
 	/* For a USB device, do a control message */
@@ -467,7 +477,8 @@ extern icoms *new_icoms(icompath *ipath, a1log *log);
 /* - - - - - - - - - - - - - - - - - - -- */
 /* Utilities */
 
-/* Convert control chars to ^[A-Z] notation in a string */
+/* Convert control chars to ^[A-Z] notation in a string. */
+/* Returns a maximum of 1000 characters in static buffer. */
 char *icoms_fix(char *s);
 
 /* Convert a limited binary buffer to a list of hex */

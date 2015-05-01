@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="GENERATOR" content="Mozilla/4.73 [en] (WinNT; I)
       [Netscape]">
     <title>Argyll Compiling</title>
@@ -35,7 +35,7 @@
     &nbsp;&nbsp;&nbsp; X.Org X11 libXinerama development package<br>
     &nbsp;&nbsp;&nbsp; X.Org X11 libXrandr development package<br>
     &nbsp;&nbsp;&nbsp; X.Org X11 libXScrnSaver A.K.A. libxss-dev
-    development package
+    development package<br>
     <h5><span style="text-decoration: underline;">Setup JAM:</span><br>
     </h5>
     Argyll makes use of a build system called <a
@@ -90,7 +90,11 @@
       setup a jam shell script to invoke it something like this: "ajam
       -f~/src/argyll/Jambase $*", and to make sure that my script is
       ahead of Apples jam in my $PATH.&nbsp; The makeall.ksh script or
-      Makefile will run Jam with the -f flag.</p>
+      Makefile will run Jam with the -f flag.<br>
+    </p>
+    <p>Also on Linux and OSX you may have to make sure that certain
+      environment variables such as <b>HOSTTYPE</b> are exported, so
+      that other programs can see them.</p>
     <p>You may also have to set the appropriate environment variable to
       tell the Jambase which compiler you are using.<br>
     </p>
@@ -111,7 +115,8 @@
       remove everything that has been built, run <span
         style="font-weight: bold;">jam clean</span>. On Linux/OS X you
       could also just try running make, and the makefile will invoke
-      jam.<br>
+      jam, or the makeall.ksh shell script file or the makeall.bat file
+      can be used to invoke jam.<br>
     </p>
     <p>Something to watch on the Intel versions of OS X 10.4, is that
       your shell environment variable $MACHTYPE may be incorrect. On
@@ -149,22 +154,25 @@
       latter SDK to be able to incorporate the&nbsp; necessary function
       calls to access display and color profiles on Win2K and latter, so
       this may not work "out of the box".</p>
-    <p>I've also successfully compiled using Microsoft VC++ 8.0 and VC++
-      9.0 Express (the free Microsoft compiler) plus the Microsoft
-      Platform SDK February 2008. To get this to work though, I had to
-      create my own batch file to setup the SDK environment variables <span
-        style="font-weight: bold;">MSSdk</span> etc., because the batch
-      files provided with the SDK got confused by the presence of VC++6,
-      and didn't notice that VC++8 or 9 was configured.</p>
+    <p>I've also successfully compiled using Microsoft VC++ 8.0, VC++
+      9.0 and VC++ 10.0 Express (the free Microsoft compiler) plus the
+      Microsoft Platform SDK February 2008. To get this to work though,
+      I had to create my own batch file to setup the SDK environment
+      variables <span style="font-weight: bold;">MSSdk</span> etc.,
+      because the batch files provided with the SDK got confused by the
+      presence of VC++6, and didn't notice that VC++8, 9 or 10 was
+      configured.</p>
     <p>Note that for some hard to fathom reason VC++ 9.0 refused to
       install on my Win2K development machine, so I had to install it on
       a WinXP machine and then copy the installation back to Win2K, and
       manually complete the installation. There seems to be no reason
       for this limitation, since the VC++9&nbsp; compiler/linker etc.
       seems quite happy to run on Win2K.</p>
-    <p>I haven't attempted to compile for Win64, and currently the
-      Jambase isn't setup for cross compilation, nor have I tried to
-      setup a native build environment yet on Vista64.<br>
+    <p>I have succeeded in cross compiling for Win64 using
+      x86_64-w64-mingw32-gcc, but currently the Jambase isn't setup for
+      cross compilation and I used a hack to build the native
+      executables with a native compiler before invoking the usual Jam
+      compilation in the cross environment.<br>
       &nbsp; </p>
   </body>
 </html>

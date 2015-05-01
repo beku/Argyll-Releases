@@ -26,12 +26,12 @@
 #include "rspl.h"
 #include "numlib.h"
 #include "xicc.h"			/* For mpp support */
-#include "plot.h"
 #include "rspl_imp.h"
 #include "counters.h"		/* Counter macros */
+#include "plot.h"
+#include "ui.h"
 
-/* rspl flags */
-#define MXCHPARAMS 8
+#define MXCHPARAMS 10		/* Input channel curve parameters */
 
 #define PLOTRES 256
 
@@ -48,14 +48,15 @@ typedef struct {
 /* Setup a random function in the given dimensions */
 static void setup_func(funcp *p, int di) {
 	double mn,mx;
+	double ax[MXDI][2];
 	int i, j;
 
 	p->di = di;
 
-	/* Setup random input parameters */
+	/* Setup random input curve parameters */
 	/* (This is the one that effects smoothness of function the most) */
 	for (j = 0; j < di; j++) {
-		for (mx = 3.0, i = 0; i < MXCHPARAMS; i++, mx *= 0.6) {
+		for (mx = 4.0, i = 0; i < MXCHPARAMS; i++, mx *= 0.6) {
 			p->ip[j][i] = d_rand(-mx, mx);
 		}
 	}
@@ -63,15 +64,32 @@ static void setup_func(funcp *p, int di) {
 	/* Setup random shape parameters */
 	for (j = 0; j < di; j++) {
 		for (i = 0; i < (1 << di); i++) {	/* Initially random */
-			p->shape[j][i] = d_rand(-1.0, 1.0);
+			p->shape[j][i] = d_rand(-0.1, 0.1);
 		}
 	}
 
-	/* Setup the random output parameters */
-	mn = 2.0;
-	mx = -1.0;
+	/* Setup the random output value parameters */
+
+	/* First some axis dominant values */
+	for (i = 0; i < di; i++) {
+		ax[i][0] = d_rand(0.0, 1.0);
+		ax[i][1] = ax[i][0] + d_rand(-1.0, 1.0);
+	}
+
+	/* Sum them orthogonally and add indepent terms */
+	mn = 5.0;
+	mx = -5.0;
 	for (i = 0; i < (1 << di); i++) {	/* Initially random */
-		p->op[i] = d_rand(0.0, 1.0);
+		p->op[i] = 0.0;
+
+		for (j = 0; j < di; j++) { 
+			if ((1 << j) & i)
+				p->op[i] += ax[j][1];
+			else
+				p->op[i] += ax[j][0];
+		}
+		p->op[i] += d_rand(-0.3, 0.3);
+
 		if (p->op[i] < mn)
 			mn = p->op[i];
 		if (p->op[i] > mx)
@@ -100,7 +118,7 @@ static double lookup_func(funcp *p, double *v) {
 	for (m = 0; m < di; m++)
 		ww[m] = 0.0;
 
-	/* Lookup the shape values */
+	/* Interpolate the shape values */
 	for (k = 0; k < (1 << di); k++) {		/* For each interp vertex */
 		double vv;
  		for (vv = 1.0, m = 0; m < di; m++) {	/* Compute weighting */
@@ -156,8 +174,8 @@ static void do_test(
 	double noise,		/* Sample point noise volume */
 	int unif,			/* NZ if uniform rather than standard deistribution noise */
 	double smooth,		/* Smoothness to test */
-	int twopass,		/* Two pass flag */
-	int extra			/* Extra fit flag */
+	int autosm,			/* Use auto smoothing */
+	int seed			/* Random seed value offset */
 );
 
 /* Compute smoothness of function */
@@ -176,10 +194,10 @@ static double do_stest(
 /* Return the optimal smoothness value, based on the */
 /* minimum RMS value. */
 static double best(int n, double *rmse, double *smv) {
-	int i;
+	int i, bi;
 	rspl *curve;
 	co *tps = NULL;
-	int ns = 500;			/* Number of samples */
+	int ns = 2000;			/* Number of samples */
 	datai low,high;
 	int gres[1];
 	datai dlow,dhigh;
@@ -214,7 +232,7 @@ static double best(int n, double *rmse, double *smv) {
 	           n,					/* Number of test points */
 	           NULL, NULL, gres,	/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
-	           -0.00001,			/* Underlying smoothing */
+	           -0.0007,				/* Underlying smoothing */
 	           avgdev,				/* Average deviation */
 	           NULL);				/* iwidth */
 
@@ -228,6 +246,45 @@ static double best(int n, double *rmse, double *smv) {
 
 		printf("Point %d at %f, should be %f is %f\n",i,log10(smv[i]),rmse[i],tp.v[0]);
 	}
+#endif
+
+	/* Choose a solution */
+	brmse = 1e38;
+
+	/* Find lowest rms error point */
+	for (i = ns-1; i >= 0; i--) {
+		co tp;
+		double vi;
+
+		vi = i/(ns-1.0);
+		tp.p[0] = log10(smv[0]) + (log10(smv[n-1]) - log10(smv[0])) * vi;
+		curve->interp(curve, &tp);
+
+		if (tp.v[0] < brmse) {
+			blsmv = tp.p[0];
+			brmse = tp.v[0];
+			bi = i;
+		}
+	}
+
+	/* Then increase smoothness until fit error is 1% higher */
+	for (i = bi+1; i < ns; i++) {
+		co tp;
+		double vi;
+
+		vi = i/(ns-1.0);
+		tp.p[0] = log10(smv[0]) + (log10(smv[n-1]) - log10(smv[0])) * vi;
+		curve->interp(curve, &tp);
+
+		if (tp.v[0] >= (1.01 * brmse)) {
+			blsmv = tp.p[0];
+			brmse = tp.v[0];
+			break;
+		}
+	}
+	rv = pow(10.0, blsmv);
+
+#ifdef NEVER
 
 #define TPRES 100
 	/* Plot the result */
@@ -243,27 +300,11 @@ static double best(int n, double *rmse, double *smv) {
 			xx[i] = tp.p[0];
 			yy[i] = tp.v[0];
 		}
+		printf("Best at %f\n",blsmv);
 		do_plot(xx,yy,NULL,NULL,TPRES);
 	}
 #endif
 
-	/* Choose a solution */
-	brmse = 1e38;
-	for (i = 0; i < ns ; i++) {
-		co tp;
-		double vi;
-
-		vi = i/(ns-1.0);
-		tp.p[0] = log10(smv[0]) + (log10(smv[n-1]) - log10(smv[0])) * vi;
-		curve->interp(curve, &tp);
-
-		if (tp.v[0] < brmse) {
-			blsmv = tp.p[0];
-			brmse = tp.v[0];
-		}
-	}
-
-	rv = pow(10.0, blsmv);
 	return rv;
 }
 
@@ -274,7 +315,7 @@ static double best(int n, double *rmse, double *smv) {
 /* If tdi != 0, just do the given dimension */
 /* If tntps != 0, just do the given number of points */
 /* If tnlev != 0, just do the given noise level */
-static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, int extra) {
+static void do_series_1(int unif, int tdi, int tntps, int tnlev, int autosm, int seed) {
 	int verb = 0;
 	int plot = 0;
 	int sdi = 1, edi = 4, di;
@@ -288,10 +329,10 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 
 	/* Number of trials to do for each dimension */
 	int trials[4] = {
+		12,
+		10,
 		8,
-		6,
-		4,
-		3
+		5
 	};
 
 	/* Resolution of grid for each dimension */
@@ -302,33 +343,52 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 		{ 33, 17, 9, 5 }
 	};
 
+#ifndef NEVER
 	/* Set of sample points to explore */
 	int nset[4][20] = {
 		{
-			5, 10, 20, 50, 100, 200,											/* di = 1 */
+			5, 10, 20, 50, 100, 200, 400, 800				/* di = 1 */
 		},
 		{
-			25, 100, 400, 2500, 10000, 40000,									/* di = 2 */
+			10, 25, 50, 100, 200, 400, 1000, 2500, 10000, 40000		/* di = 2 */
 		},
 		{
-			25, 50, 75, 125, 250, 500, 1000, 2000, 8000, 125000,				/* di = 3 */
+			10, 25, 75, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 30000, 100000	/* di = 3 */
 		},
 		{
-			50, 100, 200, 450, 625, 900, 1800, 3600, 10000, 160000, 1000000,	/* di = 4 */
+			100, 200, 450, 625, 900, 1200, 1800, 3600, 10000, 200000, 500000	/* di = 4 */
 		}
 	};
+#else
+	/* Set of sample points to explore */
+	int nset[4][20] = {
+		{
+			20, 50, 100, 200											/* di = 1 */
+		},
+		{
+			100, 400, 2500, 10000											/* di = 2 */
+		},
+		{
+			500, 1000, 2000, 8000						/* di = 3 */
+		},
+		{
+			50, 900, 1800, 3600, 10000						/* di = 4 */
+		}
+	};
+#endif
 
 	/* Set of smoothnesses to explore */
 	double smset[4][20] = {
 		{
-			-0.0000001,
-			-0.0000010,
-			-0.0000100,
-			-0.0001000,
-			-0.0010000,
-			-0.0100000,
-			-0.1000000,
-			-1.0000000,
+			-0.00000001,
+			-0.00000010,
+			-0.00000100,
+			-0.00001000,
+			-0.00010000,
+			-0.00100000,
+			-0.01000000,
+			-0.10000000,
+			-1.00000000,
 			0.0
 		},
 		{
@@ -364,99 +424,79 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 		}
 	};
 	
-	/* Set of smoothnesses for twopass smoothing */
-	double smset2[4][20] = {
-		{
-			-0.0000001,
-			-0.0000010,
-			-0.0000100,
-			-0.0001000,
-			-0.0010000,
-			-0.0100000,
-			-0.1000000,
-			-1.0000000,
-			0.0
-		},
-		{
-			-0.0000001,
-			-0.0000010,
-			-0.0000100,
-			-0.0001000,
-			-0.0010000,
-			-0.0100000,
-			-0.1000000,
-			-1.0000000,
-			0.0
-		},
-		{
-			-0.0000010,
-			-0.0000100,
-			-0.0001000,
-			-0.0010000,
-			-0.0100000,
-			-0.1000000,
-			-1.0000000,
-			0.0
-		},
-		{
-			-0.0000100,
-			-0.0001000,
-			-0.0010000,
-			-0.0100000,
-			-0.1000000,
-			-1.0000000,
-			-10.000000,
-			0.0
-		}
-	};
-	
+#ifndef NEVER
 	/* Set of noise levels to explore (average deviation * 4) */
 	double noiseset[4][20] = {
 		{
 			0.0,		/* Perfect data */
+			0.005,		/* 0.5 % */
 			0.01,		/* 1.0 % */
 			0.02,		/* 2.0 % */
 			0.05,		/* 5.0 % */
 			0.10,		/* 10.0 % */
-			0.20,		/* 20.0 % */
-			-1.0,
+//			0.20,		/* 20.0 % */
+			-1.0
 		},
 		{
 			0.0,		/* Perfect data */
+			0.005,		/* 0.5 % */
 			0.01,		/* 1.0 % */
 			0.02,		/* 2.0 % */
 			0.05,		/* 5.0 % */
 			0.10,		/* 10.0 % */
-			0.20,		/* 20.0 % */
-			-1.0,
+//			0.20,		/* 20.0 % */
+			-1.0
 		},
 		{
 			0.0,		/* Perfect data */
+			0.005,		/* 0.5 % */
 			0.01,		/* 1.0 % */
 			0.02,		/* 2.0 % */
 			0.05,		/* 5.0 % */
 			0.10,		/* 10.0 % */
-			0.20,		/* 20.0 % */
-			-1.0,
+//			0.20,		/* 20.0 % */
+			-1.0
 		},
 		{
 			0.0,		/* Perfect data */
+			0.005,		/* 0.5 % */
 			0.01,		/* 1.0 % */
 			0.02,		/* 2.0 % */
-			0.03,		/* 3.0 % */
 			0.05,		/* 5.0 % */
 			0.10,		/* 10.0 % */
-			0.20,		/* 20.0 % */
-			-1.0,
+//			0.20,		/* 20.0 % */
+			-1.0
 		},
 	};
 
+#else
+
+	/* Set of noise levels to explore (average deviation * 4) */
+	double noiseset[4][20] = {
+		{
+			-1.0
+		},
+		{
+			-1.0
+		},
+		{
+			-1.0
+		},
+		{
+			0.0,		/* Perfect data */
+			0.005,		/* 0.2 % */
+			0.01,		/* 1.0 % */
+			0.02,		/* 2.0 % */
+			0.05,		/* 5.0 % */
+			0.10,		/* 10.0 % */
+//			0.20,		/* 20.0 % */
+			-1.0
+		},
+	};
+#endif
+
 
 	printf("Testing effect of underlying smoothness factors\n");
-	if (twopass)
-		printf("Two Pass smoothing\n");
-	if (extra)
-		printf("Extra fitting\n");
 
 	/* For dimensions */
 	if (tdi != 0)
@@ -472,50 +512,47 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 			printf("Dimensions %d\n",di);
 			printf("RSPL resolution %d\n",res);
 
-			/* For noise levels */
-			for (j = tnlev; j < 20; j++) {	// All noise levels
-				double smv[20];
-				double rmse[20];
-				double bfit;
+			/* For number of sample points */
+			for (i = 0; i < 20; i++) {	// All test points
+				int rpts;
+				ntps = nset[di-1][i]; 
 
-				if (tnlev != 0 && j != tnlev)
+				if (ntps == 0)
 					break;
 
-				noise = noiseset[di-1][j];
-				if (noise < 0.0)
-					break;
-				printf("\nNoise volume %f%%, average deviation %f%%\n",noise * 100.0, noise * 25.0);
+				if (tntps != 0 && ntps != tntps)		/* Skip any not requested */
+					continue;
 
-				/* For number of sample points */
-				for (i = 0; i < 20; i++) {	// All test points
-					int rpts;
-					ntps = nset[di-1][i]; 
+				/* Make sure at least 100 points are tested */
+				rpts = 1 + 100/ntps;
+				if (rpts > 5)
+					rpts = 5;
+
+				printf("\nNo. Sample points %d, norm %8.2f, total its %d\n",ntps, pow((double)ntps, 1.0/di),its * rpts);
+
+				/* For noise levels */
+				for (j = tnlev; j < 20; j++) {	// All noise levels
+					double smv[20];
+					double rmse[20];
+					double bfit;
 	
-					if (ntps == 0)
+					if (tnlev != 0 && j != tnlev)
 						break;
 	
-					if (tntps != 0 && ntps != tntps)		/* Skip any not requested */
-						continue;
-	
-					/* Make sure at least 100 points are tested */
-					rpts = 1 + 100/ntps;
-					if (rpts > 5)
-						rpts = 5;
-	
-					printf("\nNo. Sample points %d, norm %8.2f, total its %d\n",ntps, pow((double)ntps, 1.0/di),its * rpts);
+					noise = noiseset[di-1][j];
+					if (noise < 0.0)
+						break;
+					printf("\nNoise volume %f%%, average deviation %f%% Log ADev %f\n",noise * 100.0, noise * 25.0, noise > 0.0 ? log10(0.25 * noise) : -9.0);
 
 					/* For smooth factors */
 					for (k = 0; k < 20; k++) {	// All smoothing levels
-						if (twopass)
-							smooth = smset2[di-1][k];
-						else
-							smooth = smset[di-1][k];
+						smooth = smset[di-1][k];
 						if (smooth == 0.0)
 							break;
 					
 						printf("Underlying smooth %9.7f, ",-smooth); fflush(stdout);
 		
-						do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its * rpts, res, ntps, noise, unif,smooth, twopass, extra);
+						do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its * rpts, res, ntps, noise, unif, smooth, autosm, seed);
 						smv[k] = -smooth;
 						rmse[k] = trmse;
 						printf("maxerr %f%%, avgerr %f%%, rmserr %f%%\n",
@@ -523,7 +560,7 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 					}
 
 					bfit = best(k, rmse, smv);
-					printf("Best smoothness = %9.7f, log10 = %4.1f\n",bfit,log10(bfit));
+					printf("Best smoothness = %9.7f, log10 = %4.2f\n",bfit,log10(bfit));
 				}
 			}
 		}
@@ -532,7 +569,7 @@ static void do_series_1(int unif, int tdi, int tntps, int tnlev, int twopass, in
 }
 
 /* Explore performance of "optimised" smoothness over test point number and noise volume */
-static void do_series_2(int unif, int twopass, int extra) {
+static void do_series_2(int unif, int autosm, int seed) {
 	int verb = 0;
 	int plot = 0;
 	int di = 0;
@@ -643,7 +680,7 @@ static void do_series_2(int unif, int twopass, int extra) {
 				double bfit;
 
 				noise = noiseset[j];
-				printf("Noise volume %f%%, average deviation %f%%\n",noise * 100.0, noise * 25.0);
+				printf("Noise volume %f%%, average deviation %f%% Log ADev %f\n",noise * 100.0, noise * 25.0, noise > 0.0 ? log10(0.25 * noise) : -9.0);
 
 				/* For smooth factors */
 				for (k = 0; k < 5; k++) {
@@ -651,14 +688,14 @@ static void do_series_2(int unif, int twopass, int extra) {
 				
 					printf("Extra smooth %f, ",smooth); fflush(stdout);
 	
-					do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, smooth, twopass, extra);
+					do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, smooth, autosm, seed);
 	
 					rmse[k] = trmse;
 					printf("maxerr %f%%, avgerr %f%%, rmserr %f%%\n",
 				       tmaxe * 100.0, tavge * 100.0, trmse * 100.0);
 				}
 				bfit = best(5, rmse, smset);
-				printf("Best smoothness = %9.7f, log10 = %4.1f\n",bfit,log10(bfit));
+				printf("Best smoothness = %9.7f, log10 = %4.2f\n",bfit,log10(bfit));
 			}
 		}
 		printf("\n");
@@ -676,17 +713,17 @@ void usage(void) {
 	fprintf(stderr,"               1 = Underlying smoothness\n");
 	fprintf(stderr,"               2 = Verify optimised smoothness\n");
 	fprintf(stderr," -S            Compute smoothness factor instead\n");
-	fprintf(stderr," -u            Use uniformly distributed noise\n");
-	fprintf(stderr," -d n          Test ""d"" dimension, 1-4  (default 1)\n");
+	fprintf(stderr," -u            Use uniformly distributed noise rather than normal\n");
+	fprintf(stderr," -d n          Test ""d"" dimension only, 1-4  (default 1)\n");
 	fprintf(stderr," -t n          Test ""n"" random functions (default 1)\n");
 	fprintf(stderr," -r res        Rspl resolution (defaults 129, 65, 33, 17)\n");
 	fprintf(stderr," -n no         Test ""no"" sample points (default 20, 40, 80, 100)\n");
 	fprintf(stderr," -a amnt       Add total randomness to function value (default 0.0)\n");
 	fprintf(stderr," -A n          Just do the n'th noise level of series\n");
-	fprintf(stderr," -2            Use two pass smoothing\n");
-	fprintf(stderr," -x            Use extra fitting\n");
 	fprintf(stderr," -s smooth     RSPL extra smoothness factor to test (default 1.0)\n");
 	fprintf(stderr," -g smooth     RSPL underlying smoothness factor to test\n");
+	fprintf(stderr," -x            Use auto smoothing\n");
+	fprintf(stderr," -Z seed       Random seed value\n");
 	exit(1);
 }
 
@@ -695,7 +732,7 @@ int main(int argc, char *argv[]) {
 	int verb = 0;
 	int plot = 0;
 	int series = 0;
-	int unif = 0;
+	int unif = 0;			/* default normal noise distribution */
 	int di = 0;
 	int its = 1;
 	int res = -1;
@@ -704,10 +741,10 @@ int main(int argc, char *argv[]) {
 	int nlev = 0;
 	double smooth = 1.0;
 	double gsmooth = 0.0;
-	int twopass = 0;
-	int extra = 0;
+	int autosm = 0;
 	int smfunc = 0;
 	double trmse, tavge, tmaxe;
+	int seed = 0;
 
 	error_program = "smtnd";
 
@@ -747,17 +784,17 @@ int main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?') {
 				usage();
 
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v' ) {
 				verb = 1;
 
-			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			} else if (argv[fa][1] == 'p') {
 				plot = 1;
 
-			} else if (argv[fa][1] == 'u' || argv[fa][1] == 'U') {
+			} else if (argv[fa][1] == 'u') {
 				unif = 1;
 
 			/* Test series */
-			} else if (argv[fa][1] == 'z' || argv[fa][1] == 'Z') {
+			} else if (argv[fa][1] == 'z') {
 				fa = nfa;
 				if (na == NULL) usage();
 				series = atoi(na);
@@ -768,29 +805,28 @@ int main(int argc, char *argv[]) {
 				smfunc = 1;
 
 			/* Dimension */
-			} else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+			} else if (argv[fa][1] == 'd') {
 				fa = nfa;
 				if (na == NULL) usage();
 				di = atoi(na);
 				if (di <= 0 || di > 4) usage();
-printf("~1 Got -d %s = %d\n",na,di);
 
 			/* Number of tests */
-			} else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
+			} else if (argv[fa][1] == 't') {
 				fa = nfa;
 				if (na == NULL) usage();
 				its = atoi(na);
 				if (its <= 0) usage();
 
 			/* Resolution */
-			} else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+			} else if (argv[fa][1] == 'r') {
 				fa = nfa;
 				if (na == NULL) usage();
 				res = atoi(na);
 				if (res <= 0) usage();
 
 			/* Number of sample points */
-			} else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+			} else if (argv[fa][1] == 'n') {
 				fa = nfa;
 				if (na == NULL) usage();
 				ntps = atoi(na);
@@ -810,12 +846,6 @@ printf("~1 Got -d %s = %d\n",na,di);
 				nlev = atoi(na);
 				if (noise < 0) usage();
 
-			} else if (argv[fa][1] == '2') {
-				twopass = 1;
-
-			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
-				extra = 1;
-
 			/* Extra smooth factor */
 			} else if (argv[fa][1] == 's') {
 				fa = nfa;
@@ -827,8 +857,17 @@ printf("~1 Got -d %s = %d\n",na,di);
 			} else if (argv[fa][1] == 'g') {
 				fa = nfa;
 				if (na == NULL) usage();
-				smooth = atof(na);
+				gsmooth = atof(na);
 				if (gsmooth < 0.0) usage();
+
+			} else if (argv[fa][1] == 'x') {
+				autosm = 1;
+
+			/* Random seed offset */
+			} else if (argv[fa][1] == 'Z') {
+				fa = nfa;
+				if (na == NULL) usage();
+				seed = atoi(na);
 
 			} else 
 				usage();
@@ -838,9 +877,9 @@ printf("~1 Got -d %s = %d\n",na,di);
 
 	if (series > 0) {
 		if (series == 1)
-			do_series_1(unif, di, ntps, nlev, twopass, extra);
+			do_series_1(unif, di, ntps, nlev, autosm, seed);
 		else if (series == 2)
-			do_series_2(unif, twopass, extra);
+			do_series_2(unif, autosm, seed);
 		else
 			error("Unknown series %d\n",series);
 		return 0;
@@ -899,9 +938,9 @@ printf("~1 Got -d %s = %d\n",na,di);
 		}
 
 		if (gsmooth > 0.0)
-			do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, -gsmooth, twopass, extra);
+			do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, -gsmooth, autosm, seed);
 		else
-			do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, smooth, twopass, extra);
+			do_test(&trmse, &tmaxe, &tavge, verb, plot, di, its, res, ntps, noise, unif, smooth, autosm, seed);
 
 		printf("Results: maxerr %f%%, avgerr %f%%, rmserr %f%%\n",
 		       tmaxe * 100.0, tavge * 100.0, trmse * 100.0);
@@ -924,8 +963,8 @@ static void do_test(
 	double noise,		/* Sample point noise volume (total = 4 x average deviation) */
 	int unif,			/* NZ if uniform rather than standard deistribution noise */
 	double smooth,		/* Smoothness to test, +ve for extra, -ve for underlying */
-	int twopass,		/* Two pass flag */
-	int extra			/* Extra fit flag */
+	int autosm,			/* Use auto smoothing */
+	int seed			/* Random seed value offset */
 ) {
 	funcp fp;			/* Function parameters */
 	sobol *so;			/* Sobol sequence generator */
@@ -937,6 +976,9 @@ static void do_test(
 	int i, j, it;
 	int flags = RSPL_NOFLAGS;
 
+	if (autosm)
+		flags |=  RSPL_AUTOSMOOTH;
+
 	*trmse = 0.0;
 	*tmaxe = 0.0;
 	*tavge = 0.0;
@@ -947,20 +989,15 @@ static void do_test(
 		gres[j] = res;
 	}
 	
-	if (twopass)
-		flags |= RSPL_2PASSSMTH;
-
-	if (extra)
-		flags |= RSPL_EXTRAFIT2;
-
 	if ((so = new_sobol(di)) == NULL)
 		error("Creating sobol sequence generator failed");
 
 	for (it = 0; it < its; it++) {
 		double rmse, avge, maxe;
+		double tnoise = 0.0;
 
 		/* Make repeatable by setting random seed before a test set. */
-		rand32(0x12345678 + 0x1000 * it);
+		rand32(0x12345678 + seed + 0x1000 * it);
 
 		/* New function */
 		setup_func(&fp, di);
@@ -977,16 +1014,24 @@ static void do_test(
 		if (verb) printf("Generating the sample points\n");
 
 		for (i = 0; i < ntps; i++) {
+			double out, n;
 			so->next(so, tps[i].p);
-			tps[i].v[0] = lookup_func(&fp, tps[i].p);
+			out = lookup_func(&fp, tps[i].p);
 			if (unif)
-				tps[i].v[0] += d_rand(-0.5 * noise, 0.5 * noise);
+				n = d_rand(-0.5 * noise, 0.5 * noise);
 			else
-				tps[i].v[0] += noise * 0.25 * 1.2533 * norm_rand();
+				n = noise * 0.25 * 1.2533 * norm_rand();
+
+			tps[i].v[0] = out + n;
+//printf("~1 data %d: %f %f %f -> %f, inc noise %f\n", i, tps[i].p[0], tps[i].p[1], tps[i].p[2], out, tps[i].v[0]);
+
+			tnoise += fabs(n);
 		}
+		tnoise /= (double) ntps;
+		if (verb) printf("Measured noise average deviation = %f%%\n",tnoise * 100.0); 
 
 		/* Fit to scattered data */
-		if (verb) printf("Fitting the scattered data\n");
+		if (verb) printf("Fitting the scattered data, smooth = %f, avgdev = %f\n",smooth,avgdev != NULL ? avgdev[0] : 0.0);
 		avgdev[0] = 0.25 * noise;
 		rss->fit_rspl(rss,
 		           flags,				/* Non-mon and clip flags */
@@ -1026,6 +1071,7 @@ static void do_test(
 					printf("Slice along diagonal\n");
 				}
 
+				/* Start point and step increment */
 				for (j = 0; j < di; j++) {
 					ss[j] = (p2[j] - p1[j])/n;
 					pp[j] = p1[j];

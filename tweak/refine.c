@@ -79,6 +79,7 @@
 #include "rspl.h"
 #include "xicc.h"
 #include "xicc.h"
+#include "ui.h"
 
 #define COMPLOOKUP	/* Compound with previous in ICM lookup rather than rspl */
 #undef WARN_CLUT_CLIPPING   /* [Undef] Print warning if setting clut clips */

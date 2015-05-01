@@ -16,6 +16,7 @@
 #include "numlib.h"
 #include "imdi.h"
 #include "refi.h"
+#include "ui.h"
 
 /* Test parameters */
 #undef TEST1					/* Test just one combination */

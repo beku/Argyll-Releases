@@ -1,6 +1,8 @@
 /* 
  * Argyll Color Correction System
  * Average one or more .ti3 (or other CGATS like) file values together.
+ * If just one file is supplied, all patches within it with
+ * the same device value are averaged together. 
  *
  * Author: Graeme W. Gill
  * Date:   18/1/2011
@@ -85,7 +87,7 @@ int main(int argc, char *argv[]) {
 
 	error_program = "average";
 
-	if (argc <= 3)
+	if (argc < 2)
 		usage("Too few arguments (%d, minimum is 2)",argc-1);
 
 	/* Process the arguments */
@@ -147,7 +149,7 @@ int main(int argc, char *argv[]) {
 
 	ninps--;	/* Number of inputs */
 
-	/* Open and read each input file */
+	/* Open and read each input file, and create output file */
 	for (n = 0; n <= ninps; n++) {
 
 		if ((inps[n].c = new_cgats()) == NULL)
@@ -190,16 +192,18 @@ int main(int argc, char *argv[]) {
 			ocg->add_field(ocg, n, inps[0].c->t[n].fsym[i], inps[0].c->t[n].ftype[i]);
 		}
 
-		/* Duplicate all of the data */
-		if ((setel = (cgats_set_elem *)malloc(
-		     sizeof(cgats_set_elem) * inps[0].c->t[n].nfields)) == NULL)
-			error("Malloc failed!");
-
-		for (i = 0; i < inps[0].c->t[n].nsets; i++) {
-			inps[0].c->get_setarr(inps[0].c, n, i, setel);
-			ocg->add_setarr(ocg, n, setel);
+		if (ninps > 1) {
+			/* Duplicate all of the data */
+			if ((setel = (cgats_set_elem *)malloc(
+			     sizeof(cgats_set_elem) * inps[0].c->t[n].nfields)) == NULL)
+				error("Malloc failed!");
+	
+			for (i = 0; i < inps[0].c->t[n].nsets; i++) {
+				inps[0].c->get_setarr(inps[0].c, n, i, setel);
+				ocg->add_setarr(ocg, n, setel);
+			}
+			free(setel);
 		}
-		free(setel);
 	}
 
 	/* Figure out the indexes of the device channels */
@@ -295,44 +299,41 @@ int main(int argc, char *argv[]) {
 	     sizeof(cgats_set_elem) * inps[0].c->t[0].nfields)) == NULL)
 		error("Malloc failed!");
 
-	/* Process all the other input files */
-	for (n = 1; n < ninps; n++) {
+	/* If averaging values within the one file */
+	if (ninps == 1) {
+		int *valdone;
+		double npatches;
+		int k;
+		n = 0;		/* Output set index */
 
-		/* Check all the fields match */
-		if (inps[0].c->t[0].nfields != inps[n].c->t[0].nfields)
-			error ("File '%s' has %d fields, file '%s has %d",
-			       inps[n].name, inps[n].c->t[0].nfields, inps[0].name, inps[0].c->t[0].nfields);
-		for (j = 0; j < inps[0].c->t[0].nfields; j++) {
-			if (inps[0].c->t[0].ftype[j] != inps[n].c->t[0].ftype[j])
-				error ("File '%s' field no. %d named '%s' doesn't match file '%s' field '%s'",
-				       inps[n].name, j, inps[n].c->t[0].fsym[j], inps[0].name, inps[0].c->t[0].fsym[j]);
-		}
+		if ((valdone = (int *)calloc(inps[0].c->t[0].nsets, sizeof(int))) == NULL) 
+			error("Malloc failed!");
 
-		/* If merging, append all the values */
-		if (domerge) {
-			for (i = 0; i < inps[n].c->t[0].nsets; i++) {
-				inps[n].c->get_setarr(inps[n].c, 0, i, setel);
-				ocg->add_setarr(ocg, 0, setel);
-			}
+		for (i = 0; i < inps[0].c->t[0].nsets; i++) {
 
-		} else {	/* Averaging */
-			/* Check the number of values matches */
-			if (inps[0].c->t[0].nsets != inps[n].c->t[0].nsets)
-				error ("File '%s' has %d sets, file '%s has %d",
-				       inps[n].name, inps[n].c->t[0].nsets, inps[0].name, inps[0].c->t[0].nsets);
-	
-			/* Add the numeric field values to corresponding output */
-			for (i = 0; i < inps[n].c->t[0].nsets; i++) {
+			if (valdone[i])
+				continue;
 
-				/* Check that the device values match */
+			inps[0].c->get_setarr(inps[0].c, 0, i, setel);
+			ocg->add_setarr(ocg, 0, setel);
+			npatches = 1.0;
+
+			/* Locate and patches with matching device values */
+			for (k = i+1; k < inps[0].c->t[0].nsets; k++) {
+
+				/* Check if the device values match */
 				for (j = 0; j < nchan; j++) {
 					double diff;
-					diff = *((double *)inps[0].c->t[0].fdata[i][chix[j]])
-					     - *((double *)inps[n].c->t[0].fdata[i][chix[j]]);
 
-					if (diff > 0.001)
-						error ("File '%s' set %d has field '%s' value that differs from '%s'",
-				       inps[n].name, i+1, inps[n].c->t[0].fsym[j], inps[0].name);
+					diff = *((double *)inps[0].c->t[0].fdata[i][chix[j]])
+					     - *((double *)inps[0].c->t[0].fdata[k][chix[j]]);
+
+					if (fabs(diff) > 0.001) {
+						break;
+					}
+				}
+				if (j < nchan) {
+					continue;
 				}
 
 				/* Add all the non-device real field values */
@@ -351,18 +352,13 @@ int main(int argc, char *argv[]) {
 					if (jj < nchan)
 						continue;
 
-					*((double *)ocg->t[0].fdata[i][j])
-					+= *((double *)inps[n].c->t[0].fdata[i][j]);
+					*((double *)ocg->t[0].fdata[n][j])
+					            += *((double *)inps[0].c->t[0].fdata[k][j]);
 				}
+				npatches++;
+				valdone[k] = 1;
 			}
-		}
-	}
-
-	/* If averaging, divide out the number of files */
-	if (!domerge) {
-
-		for (i = 0; i < inps[n].c->t[0].nsets; i++) {
-
+			/* Average them out */
 			for (j = 0; j < inps[0].c->t[0].nfields; j++) {
 				int jj;
 
@@ -378,7 +374,101 @@ int main(int argc, char *argv[]) {
 				if (jj < nchan)
 					continue;
 
-				*((double *)ocg->t[0].fdata[i][j]) /= (double)ninps;
+				*((double *)ocg->t[0].fdata[n][j]) /= npatches;
+			}
+			n++;		/* One more output set */
+		}
+
+		free(valdone);
+
+	/* Averaging patches between identical files, */
+	/* or concatenating (merging) several files */
+	} else {
+		/* Process all the other input files */
+		for (n = 1; n < ninps; n++) {
+	
+			/* Check all the fields match */
+			if (inps[0].c->t[0].nfields != inps[n].c->t[0].nfields)
+				error ("File '%s' has %d fields, file '%s has %d",
+				       inps[n].name, inps[n].c->t[0].nfields, inps[0].name, inps[0].c->t[0].nfields);
+			for (j = 0; j < inps[0].c->t[0].nfields; j++) {
+				if (inps[0].c->t[0].ftype[j] != inps[n].c->t[0].ftype[j])
+					error ("File '%s' field no. %d named '%s' doesn't match file '%s' field '%s'",
+					       inps[n].name, j, inps[n].c->t[0].fsym[j], inps[0].name, inps[0].c->t[0].fsym[j]);
+			}
+	
+			/* If merging, append all the values */
+			if (domerge) {
+				for (i = 0; i < inps[n].c->t[0].nsets; i++) {
+					inps[n].c->get_setarr(inps[n].c, 0, i, setel);
+					ocg->add_setarr(ocg, 0, setel);
+				}
+	
+			} else {	/* Averaging */
+				/* Check the number of values matches */
+				if (inps[0].c->t[0].nsets != inps[n].c->t[0].nsets)
+					error ("File '%s' has %d sets, file '%s has %d",
+					       inps[n].name, inps[n].c->t[0].nsets, inps[0].name, inps[0].c->t[0].nsets);
+		
+				/* Add the numeric field values to corresponding output */
+				for (i = 0; i < inps[n].c->t[0].nsets; i++) {
+	
+					/* Check that the device values match */
+					for (j = 0; j < nchan; j++) {
+						double diff;
+						diff = *((double *)inps[0].c->t[0].fdata[i][chix[j]])
+						     - *((double *)inps[n].c->t[0].fdata[i][chix[j]]);
+	
+						if (fabs(diff) > 0.001)
+							error ("File '%s' set %d has field '%s' value that differs from '%s'",
+					       inps[n].name, i+1, inps[n].c->t[0].fsym[j], inps[0].name);
+					}
+	
+					/* Add all the non-device real field values */
+					for (j = 0; j < inps[0].c->t[0].nfields; j++) {
+						int jj;
+	
+						/* Only real types */
+						if (inps[0].c->t[0].ftype[j] != r_t)
+							continue;
+	
+						/* Not device channels */
+						for (jj = 0; jj < nchan; jj++) {
+							if (chix[jj] == j)
+								break;
+						}
+						if (jj < nchan)
+							continue;
+	
+						*((double *)ocg->t[0].fdata[i][j])
+						+= *((double *)inps[n].c->t[0].fdata[i][j]);
+					}
+				}
+			}
+		}
+	
+		/* If averaging, divide out the number of files */
+		if (!domerge) {
+	
+			for (i = 0; i < inps[n].c->t[0].nsets; i++) {
+	
+				for (j = 0; j < inps[0].c->t[0].nfields; j++) {
+					int jj;
+	
+					/* Only real types */
+					if (inps[0].c->t[0].ftype[j] != r_t)
+						continue;
+	
+					/* Not device channels */
+					for (jj = 0; jj < nchan; jj++) {
+						if (chix[jj] == j)
+							break;
+					}
+					if (jj < nchan)
+						continue;
+	
+					*((double *)ocg->t[0].fdata[i][j]) /= (double)ninps;
+				}
 			}
 		}
 	}

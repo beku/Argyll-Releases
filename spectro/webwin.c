@@ -24,7 +24,7 @@
 # include <ifaddrs.h>
 # include <netinet/in.h> 
 # include <arpa/inet.h>
-# ifdef __FreeBSD__
+# if defined(__FreeBSD__) || defined(__OpenBSD__)
 #  include <sys/socket.h>
 # endif /* __FreeBSD__ */
 #endif
@@ -220,8 +220,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	int j;
 	double orgb[3];		/* Previous RGB value */
 	double kr, kf;
-	int update_delay = p->update_delay; 
-	double xdelay = 0.0;		/* Extra delay for response time */
+	int update_delay = 0;
 
 	debugr("webwin_set_color called\n");
 
@@ -256,60 +255,18 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		msec_sleep(50);
 	}
 
-	/* Don't want extra delay if we're measuring update delay */
-	if (update_delay != 0 && p->do_resp_time_del) {
-		/* Compute am expected response time for the change in level */
-		kr = DISPLAY_RISE_TIME/log(1 - 0.9);	/* Exponent constant */
-		kf = DISPLAY_FALL_TIME/log(1 - 0.9);	/* Exponent constant */
-//printf("~1 k2 = %f\n",k2);
-		for (j = 0; j < 3; j++) {
-			double el, dl, n, t;
-	
-			el = pow(p->rgb[j], 2.2);
-			dl = el - pow(orgb[j], 2.2);	/* Change in level */
-			if (fabs(dl) > 0.01) {		/* More than 1% change in level */
-				n = DISPLAY_SETTLE_AIM * el;
-				if (n < DISPLAY_ABS_AIM)
-					n = DISPLAY_ABS_AIM;
-//printf("~1 sl %f, el %f, log (%f / %f)\n",sl,el,n,fabs(sl - el));
-				if (dl > 0.0)
-					t = kr * log(n/dl);
-				else
-					t = kf * log(n/-dl);
-	
-				if (t > xdelay)
-					xdelay = t;
-			}
-		}
-//printf("~1 xdelay = %f secs\n",xdelay);
-		xdelay *= 1000.0;		/* To msec */
-		/* This is kind of a fudge since update delay is after latency, */
-		/* but displays with long delay (ie. CRT) have short latency, and visa versa */
-		if ((int)xdelay > update_delay)
-			update_delay = (int)xdelay;
-	}
-
-	/* Allow some time for the display to update before */
-	/* a measurement can take place. This allows for CRT */
-	/* refresh, or LCD processing/update time, + */
-	/* display settling time (quite long for smaller LCD changes). */
+	/* Allow for display update & instrument delays */
+	update_delay = dispwin_compute_delay(p, orgb);
+	debugr2((errout, "webwin_set_color delaying %d msec\n",update_delay));
 	msec_sleep(update_delay);
 
 	return 0;
 }
 
-/* ----------------------------------------------- */
-/* Set an update delay, and return the previous value */
-/* Value can be set to zero, but othewise will be forced */
-/* to be >= min_update_delay */
-static int webwin_set_update_delay(
-dispwin *p,
-int update_delay) {
-	int cval = p->update_delay;
-	p->update_delay = update_delay;
-	if (update_delay != 0 && p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
-	return cval;
+/* Set/unset the blackground color flag */
+/* Return nz on error */
+static int webwin_set_bg(dispwin *p, int blackbg) {
+	return 1;		/* Setting black BG not supported */
 }
 
 /* ----------------------------------------------- */
@@ -371,6 +328,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	struct mg_context *mg;
 	const char *options[3];
 	char port[50];
+	char *url;
 
 	debug("new_webwin called\n");
 
@@ -381,20 +339,25 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 	/* !!!! Make changes in dispwin.c & madvrwin.c as well !!!! */
 	p->name = strdup("Web Window");
+	p->width = width;
+	p->height = height;
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = out_tvenc;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
-	p->get_ramdac        = webwin_get_ramdac;
-	p->set_ramdac        = webwin_set_ramdac;
-	p->install_profile   = webwin_install_profile;
-	p->uninstall_profile = webwin_uninstall_profile;
-	p->get_profile       = webwin_get_profile;
-	p->set_color         = webwin_set_color;
-	p->set_update_delay  = webwin_set_update_delay;
-	p->set_callout       = webwin_set_callout;
-	p->del               = webwin_del;
+	p->get_ramdac          = webwin_get_ramdac;
+	p->set_ramdac          = webwin_set_ramdac;
+	p->install_profile     = webwin_install_profile;
+	p->uninstall_profile   = webwin_uninstall_profile;
+	p->get_profile         = webwin_get_profile;
+	p->set_color           = webwin_set_color;
+	p->set_bg              = webwin_set_bg;
+	p->set_update_delay    = dispwin_set_update_delay;
+	p->set_settling_delay  = dispwin_set_settling_delay;
+	p->enable_update_delay = dispwin_enable_update_delay;
+	p->set_callout         = webwin_set_callout;
+	p->del                 = webwin_del;
 
 	if (noramdac != NULL)
 		*noramdac = 1;
@@ -405,21 +368,8 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->native &= ~2;
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
-
-	p->min_update_delay = 20;
-
-	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
-		p->min_update_delay = atoi(cp);
-		if (p->min_update_delay < 20)
-			p->min_update_delay = 20;
-		if (p->min_update_delay > 60000)
-			p->min_update_delay = 60000;
-		debugr2((errout, "new_webwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
-	}
-
-	p->update_delay = DISPLAY_UPDATE_DELAY;		/* Default update delay */
-	if (p->update_delay < p->min_update_delay)
-		p->update_delay = p->min_update_delay;
+	
+	dispwin_set_default_delays(p);
 
 	p->ncix = 1;
 
@@ -438,74 +388,19 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 //printf("Domain = %s'\n",mg_get_option(mg, "authentication_domain"));
 
-	/* Create a suitable description */
-#if NT
+	/* Create a suitable description/url */
 	{
-		char szHostName[255];
-		struct hostent *host_entry;
-		char *localIP;
-		char buf[1000];
+		char buf[100], *url;
 
-		/* We assume WinSock has been started by mongoose */
-
-		// Get the local hostname
-		gethostname(szHostName, 255);
-		host_entry=gethostbyname(szHostName);
-		/* Get first entry */
-		localIP = inet_ntoa(*(struct in_addr *)*host_entry->h_addr_list);
-
-		sprintf(buf,"Web Window at http://%s:%d",localIP,webdisp);
+		if ((url = mg_get_url(mg)) == NULL)
+			error("Failed to get Web server URL");
+		sprintf(buf,"Web Window at '%s'",url);
 		p->description = strdup(buf);
 
-		if (verb)
-			printf("Created web server at 'http://%s:%d', now waiting for browser to connect\n",localIP,webdisp);
-	}
-#else
-	{
-		struct ifaddrs * ifAddrStruct=NULL;
-		struct ifaddrs * ifa=NULL;
-		void *tmpAddrPtr=NULL;
-		char abuf[INET_ADDRSTRLEN] = "";
-		char abuf6[INET6_ADDRSTRLEN] = "";
-		char *addr = abuf;
-		char buf[1000];
-	
-		getifaddrs(&ifAddrStruct);
-	
-		/* Stop at the first non local adderss */
-		for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
-#ifdef AF_INET6
-			if (ifa->ifa_addr->sa_family==AF_INET) { /* IP4 ? */
-#endif
-				if (strncmp(ifa->ifa_name, "lo",2) == 0 || abuf[0] != '\000')
-					continue;
-				tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-				inet_ntop(AF_INET, tmpAddrPtr, abuf, INET_ADDRSTRLEN);
-//				printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
-#ifdef AF_INET6
-			} else if (ifa->ifa_addr->sa_family==AF_INET6) { /* IP6 ? */
-				if (strncmp(ifa->ifa_name, "lo",2) == 0 || abuf6[0] != '\000')
-					continue;
-				tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
-				inet_ntop(AF_INET6, tmpAddrPtr, abuf6, INET6_ADDRSTRLEN);
-//				printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
-			} 
-#endif
-		}
-		if (ifAddrStruct!=NULL)
-			freeifaddrs(ifAddrStruct);
-		if (addr[0] == '\000')
-			addr = abuf6;
-		if (addr[0] == '\000')
-			addr = "Unknown";
+		printf("Created web server at '%s', now waiting for browser to connect\n",url);
 
-		sprintf(buf,"Web Window at http://%s:%d",addr,webdisp);
-		p->description = strdup(buf);
-
-		if (verb)
-			printf("Created web server at 'http://%s:%d', now waiting for browser to connect\n",addr,webdisp);
+		free(url);
 	}
-#endif
 
 	/* Wait for the web server to connect */
 	debugr("new_webwin: waiting for web browser to connect\n");

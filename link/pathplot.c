@@ -33,6 +33,7 @@
 #include "icc.h"
 #include "xicc.h"
 #include "plot.h"
+#include "ui.h"
 
 #define PRES 100
 

@@ -50,10 +50,11 @@ HDRS += ../icc ../rspl ../gamut ../cgats ../spectro ;
 LINKLIBS = $(LINKLIBS) libimdi ../icc/libicc ../numlib/libnum ;
 
 # imdi test code
-Main itest : itest.c refi.c : : : ../rspl : : ../rspl/librspl ../plot/libvrml ;
+Main itest : itest.c refi.c : : : ../rspl : : ../rspl/librspl ../plot/libplot
+                                              ../plot/libvrml ../numlib/libui ;
 
 # TIFF file color correction utlity
-Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) $(JPEGINC) : : ../xicc/libxicc ../rspl/librspl ../cgats/libcgats ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
+Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) $(JPEGINC) : : ../xicc/libxicc ../rspl/librspl ../cgats/libcgats ../plot/libplot ../plot/libvrml ../numlib/libui $(TIFFLIB) $(JPEGLIB) ;
 
 # Old TIFF file color correction utlity
 #Main cctiffo : cctiffo.c : : : $(TIFFINC) : : $(TIFFLIB) ;
@@ -62,7 +63,7 @@ Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) $(JPEGINC) : : ../xicc/libxicc .
 #Main greytiff : greytiff.c ;
 Main greytiff : greytiff.c : : : ../spectro ../xicc ../gamut ../rspl ../cgats $(TIFFINC)
               : : ../xicc/libxicc ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
-                  ../plot/libplot ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
+                  ../plot/libplot ../plot/libvrml ../numlib/libui $(TIFFLIB) $(JPEGLIB) ;
 
 # ssort generation code
 #Main ssort : ssort.c ;

@@ -99,6 +99,73 @@ static int gcc_bug_fix(int i) {
 /* Dummy "no illuminant" illuminant spectra used to signal an emmission */
 /* or equal energy 'E' illuminant */
 static xspect il_none = {
+	531, 300.0, 830.0,	/* 531 bands from 300 to 830 in 1nm steps */
+	1.0,				/* Scale factor */
+	{
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+		1.0
+	}
+};
+ 
+#ifdef NEVER
+static xspect il_none = {
 	54, 300.0, 830.0,	/* 54 bands from 300 to 830 in 10nm steps */
 	1.0,				/* Scale factor */
 	{
@@ -110,6 +177,7 @@ static xspect il_none = {
 		1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
 	}
 };
+#endif /* NEVER */
  
 
 /* CIE 15.2-1986 Table 1.1 */
@@ -478,9 +546,13 @@ double temp					/* Optional temperature in degrees kelvin, for Dtemp and Ptemp *
 				uv_filter(&il_D50M2, &il_D50);
 			*sp = il_D50M2;
 			return 0;
+	    case icxIT_D55:
+			return daylight_il(sp, 5500.0);
 	    case icxIT_D65:
 			*sp = il_D65;
 			return 0;
+	    case icxIT_D75:
+			return daylight_il(sp, 7500.0);
 	    case icxIT_E:
 			*sp = il_none;
 			return 0;
@@ -3427,6 +3499,7 @@ void xspect_denorm(xspect *sp) {
 }
 
 #ifndef SALONEINSTLIB
+
 /* Convert from one xspect type to another (targ type) */
 /* Linear or polinomial interpolation will be used as appropriate */
 /* (converted to targ norm too) */
@@ -3455,6 +3528,54 @@ void xspect2xspect(xspect *dst, xspect *targ, xspect *src) {
 			dd.spec[i] *= targ->norm/src->norm;
 	}
 	*dst = dd;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Plot up to 3 spectra */
+void xspect_plot(xspect *sp1, xspect *sp2, xspect *sp3) {
+	double xx[XSPECT_MAX_BANDS];
+	double y1[XSPECT_MAX_BANDS];
+	double y2[XSPECT_MAX_BANDS];
+	double y3[XSPECT_MAX_BANDS];
+	int j;
+	double wl, wlshort, wllong;
+
+	if (sp1 == NULL)
+		return;
+
+	wlshort = sp1->spec_wl_short;
+	wllong = sp1->spec_wl_long;
+
+	if (sp2 != NULL) {
+		if (sp2->spec_wl_short < wlshort)
+			wlshort = sp2->spec_wl_short;
+		if (sp2->spec_wl_long > wllong)
+			wllong = sp2->spec_wl_long;
+	}
+	
+	if (sp3 != NULL) {
+		if (sp3->spec_wl_short < wlshort)
+			wlshort = sp3->spec_wl_short;
+		if (sp3->spec_wl_long > wllong)
+			wllong = sp3->spec_wl_long;
+	}
+	
+	wlshort = floor(wlshort + 0.5);
+	wllong = floor(wllong + 0.5);
+
+	/* Compute at 1nm intervals over the whole range covered */
+	for (j = 0, wl = wlshort; j < XSPECT_MAX_BANDS && wl < wllong; j++, wl += 1.0) {
+#if defined(__APPLE__) && defined(__POWERPC__)
+		gcc_bug_fix(j);
+#endif
+		xx[j] = wl;
+		y1[j] = value_xspect(sp1, wl);
+		if (sp2 != NULL)
+			y2[j] = value_xspect(sp2, wl);
+		if (sp3 != NULL)
+			y3[j] = value_xspect(sp3, wl);
+	}
+	do_plot(xx, y1, sp2 != NULL ? y2 : NULL, sp3 != NULL ? y3 : NULL, j);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -3625,6 +3746,13 @@ static int xsp2cie_fwa_apply(xsp2cie *p, xspect *out, xspect *in);
 	FWA spectrum and the actual spectrum under the illuminant to
 	create the correction model. This could be fine tuned by doing
 	similar measurements of neutral patches.
+
+	Other possible limitations:
+
+	Instrument illuminant spectrum shape:
+	It is assumed it is stable and 'A' like. Aging of
+	the lamp may invalidate this assumption ?
+	
  */
 
 /*
@@ -3659,11 +3787,12 @@ static int xsp2cie_set_fwa_imp(xsp2cie *p) {
 
 	DBG("set_fwa started\n");
 
-	p->bw = 1.0;		/* Intergrate over 1nm bands */
+	p->bw = 1.0;				/* Intergrate over 1nm bands */
 	p->oillum = p->illuminant;	/* Take copy of observer illuminant */
 	xspect_denorm(&p->oillum);
-	if (p->tillum.spec_n == 0) {	/* If not set by set_fwa(), use observer illuminant */
+	if (p->tillum.spec_n == 0) {	/* If not set by set_fwa(), copy observer illuminant */
 		p->tillum = p->oillum;		/* as target/simulated instrument illuminant. */
+		DBG("using observer illum as FWA target\n");
 	}
 
 	/* Compute Y = 1 normalised instrument illuminant spectrum */
@@ -4026,7 +4155,7 @@ static int xsp2cie_set_fwa_imp(xsp2cie *p) {
 static int xsp2cie_set_fwa(xsp2cie *p,	/* this */
 xspect *iillum,		/* Spectrum of instrument illuminent */
 xspect *tillum,		/* Spectrum of target/simulated instrument illuminant */
-					/* NULL to use observer illuminant. */
+					/* NULL to use observer model illuminant. */
 xspect *media		/* Spectrum of plain media measured under that instrument */
 ) {
 	p->iillum = *iillum;			/* Take copy of instrument illuminant */
@@ -4035,26 +4164,32 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		p->tillum = *tillum;		/* Take copy of target/simulated instrument illuminant */
 		xspect_denorm(&p->tillum);	/* Remove normalisation factor */
 	} else {
-		p->tillum.spec_n = 0;
+		p->tillum.spec_n = 0;		/* Use observer model illum. as FWA source */
 	}
 	p->imedia = *media;		/* Take copy of measured media */
 
 	return xsp2cie_set_fwa_imp(p);
 }
 
-/* Set FWA given updated conversion illuminant. */
+/* Set FWA given updated conversion illuminants. */
 /* We assume that xsp2cie_set_fwa has been called first. */
 static int xsp2cie_update_fwa_custillum(
 xsp2cie *p,	/* this */
 xspect *tillum,		/* Spectrum of target/simulated instrument illuminant, */
                     /* NULL to use previous set_fwa() value. */
-xspect *custIllum	/* Spectrum of observer illuminant */
+xspect *custIllum	/* Spectrum of observer model illuminant */
+					/* NULL to use previous new_xsp2cie() value. */
 ) {
 	if (tillum != NULL) {
 		p->tillum = *tillum;		/* Take copy of target/simulated instrument illuminant */
 		xspect_denorm(&p->tillum);	/* Remove normalisation factor */
+	} else {
+		p->tillum.spec_n = 0;		/* Use observer model illum. as FWA source */
 	}
-	p->illuminant = *custIllum;
+
+	if (custIllum != NULL) {
+		p->illuminant = *custIllum;		/* Updated observer model illuminant */
+	}
 
 	return xsp2cie_set_fwa_imp(p);
 }
@@ -4655,6 +4790,17 @@ void xsp2cie_convert(xsp2cie *p, double *out, xspect *in) {
 	xsp2cie_sconvert(p, NULL, out, in);
 }
 
+/* Return the illuminant XYZ being used in the CIE XYZ/Lab conversion. */ 
+/* Note that this will returne the 'E' illuminant XYZ for emissive. */
+void xsp2cie_get_cie_il(xsp2cie *p, double *xyz) {
+	xspect sp;
+
+	standardIlluminant(&sp, icxIT_E, 0.0); 
+	p->convert(p, xyz, &sp);
+	if (p->doLab)
+		icmLab2XYZ(&icmD50, xyz, xyz);
+}
+
 void xsp2cie_del(
 xsp2cie *p
 ) {
@@ -4684,7 +4830,7 @@ icxClamping clamp				/* NZ to clamp XYZ/Lab to be +ve */
 			p->isemis = 1;
 			break;
 	    case icxIT_custom:
-			p->illuminant = *custIllum;
+			p->illuminant = *custIllum;			/* Struct copy */
 			break;
 	    case icxIT_A:
 			p->illuminant = il_A;
@@ -4701,9 +4847,14 @@ icxClamping clamp				/* NZ to clamp XYZ/Lab to be +ve */
 				uv_filter(&il_D50M2, &il_D50);
 			p->illuminant = il_D50M2;
 			break;
+	    case icxIT_D55:
+			daylight_il(&p->illuminant, 5500.0);
+			break;
 	    case icxIT_D65:
 			p->illuminant = il_D65;
 			break;
+	    case icxIT_D75:
+			daylight_il(&p->illuminant, 7500.0);
 	    case icxIT_E:
 			p->illuminant = il_none;
 			break;
@@ -4789,6 +4940,7 @@ icxClamping clamp				/* NZ to clamp XYZ/Lab to be +ve */
 
 	p->convert      = xsp2cie_convert;
 	p->sconvert     = xsp2cie_sconvert;
+	p->get_cie_il   = xsp2cie_get_cie_il;
 #ifndef SALONEINSTLIB
 	p->set_mw       = xsp2cie_set_mw;		/* Default no media white */
 	p->set_fwa      = xsp2cie_set_fwa;		/* Default no FWA compensation */
@@ -4848,7 +5000,8 @@ int icx_spectrum_locus(double xyz[3], double wl, icxObserverType obType) {
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Pre-calculated spectral locuses of Daylight and Plankian at 5 Mired intervals */
+/* Pre-calculated spectral locuses of Daylight and Plankian at 5 Mired intervals, */
+/* created using illlocus.c */
 /* These aren't actually spectrum, they are XYZ values */
 /* indexed by temperature in Mired */
 
@@ -5256,7 +5409,6 @@ typedef struct {
 	xspect *iloc;			/* Locus to match to */
 	double xyz[3];			/* Target XYZ */
 	icmXYZNumber XYZ;		/* Target as XYZ number for DE wp */
-	xsp2cie *conv;			/* Means of converting spectrum to XYZ */
 	int viscct;				/* nz to use visual best match color temperature */
 } cct2ctx;
 
@@ -5264,7 +5416,6 @@ static double cct2_func(void *fdata, double tp[]) {
 	cct2ctx *x = (cct2ctx *)fdata;
 	double xyz[3];		/* Current value */
 	double lab1[3], lab2[3];
-	xspect sp;
 	double rv = 0.0;
 	icmXYZNumber *wp = &x->XYZ;
 
@@ -5289,6 +5440,13 @@ static double cct2_func(void *fdata, double tp[]) {
 		rv = icmLabDEsq(lab1, lab2);
 	}
 	
+	/* Discourage going beyond ends of locus */
+	if (tp[0] < x->iloc->spec_wl_short ) {
+		rv += 5000.0 * (x->iloc->spec_wl_short - tp[0]);
+	} else if (tp[0] > x->iloc->spec_wl_long) {
+		rv += 5000.0 * (tp[0] - x->iloc->spec_wl_long);
+	} 
+
 //a1logd(g_log, 1, " cct2_func returning %f for temp = %f\n",rv,1e6/tp[0]);
 //DBGF((DBGA,"returning %f for temp = %f\n",rv,tp[0]));
 	return rv;
@@ -5362,7 +5520,6 @@ int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 
 	/* Locate the CCT in Mired */
 	if (powell(&rv, 1, cp, s, 0.01, 1000, cct2_func, (void *)&x, NULL, NULL) != 0) {
-		x.conv->del(x.conv);
 		return -1.0;
 	}
 
@@ -5377,6 +5534,60 @@ int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 //a1logd(g_log, 1, " returning %f with error %f delta E94 %f\n",1e6/cp[0],sqrt(rv));
 //DBGF((DBGA,"returning %f with error %f delta E94 %f\n",cp[0],sqrt(rv)));
 	return 1e6/cp[0];
+}
+
+/* Given a choice of temperature dependent illuminant (icxIT_Dtemp or icxIT_Ptemp), */
+/* a color temperature and a Y value, return the corresponding XYZ */
+/* An observer type can be chosen for interpretting the spectrum of the input and */
+/* the illuminant. */
+/* Return xyz[0] = -1.0 on erorr */
+void icx_ill_ct2XYZ(
+double xyz[3],			/* Return the XYZ value */
+icxIllumeType ilType,	/* Type of illuminant, icxIT_Dtemp or icxIT_Ptemp */
+icxObserverType obType,	/* Observer, CIE_1931_2 or CIE_1964_10 */
+int viscct,				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
+double tin,				/* Input temperature */
+double Yin				/* Input Y value */
+) {
+	xspect *iloc;			/* Locus to match to */
+
+	double cp[1], s[1];
+	
+	if (ilType != icxIT_Dtemp && ilType != icxIT_Ptemp) {
+		xyz[0] = -1.0;
+		return;
+	}
+	if (obType != icxOT_CIE_1931_2 && obType != icxOT_CIE_1964_10) {
+		xyz[0] = -1.0;
+		return;
+	}
+
+	/* Locus to use */
+	if (obType == icxOT_CIE_1931_2) {
+		if (ilType == icxIT_Dtemp) {
+			iloc = illoc_Daylight_CIE_1931_2;
+		} else {
+			iloc = illoc_Plankian_CIE_1931_2;
+		}
+	} else {
+		if (ilType == icxIT_Dtemp) {
+			iloc = illoc_Daylight_CIE_1964_10;
+		} else {
+			iloc = illoc_Plankian_CIE_1964_10;
+		}
+	}
+
+	/* Convert temperature to mired */
+	tin =  1e6/tin;
+
+	/* Get XYZ for given temp in Mired. */
+	/* Will clip to limits of locus */
+	getval_raw_xspec3_lin(iloc, xyz, tin);
+
+	/* Scale by Yin */
+	xyz[0] *= Yin/xyz[1];
+	xyz[2] *= Yin/xyz[1];
+	xyz[1] = Yin;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -5792,7 +6003,7 @@ static xslpoly illo_P_CIE_1931_2_uv       = { 2, icxOT_CIE_1931_2,     1, 0 };
 static xslpoly illo_P_CIE_1964_10_xy      = { 2, icxOT_CIE_1964_10,    0, 0 };
 static xslpoly illo_P_CIE_1964_10_uv      = { 2, icxOT_CIE_1964_10,    1, 0 };
 
-/* Return a pointer to the chromaticity locus poligon */
+/* Return a pointer to the (static) chromaticity locus poligon */
 /* return NULL on failure. */
 xslpoly *chrom_locus_poligon(
 icxLocusType loty,			/* Locus type, 1 = spectral, 2 = Daylight, 3 = Plankian */
@@ -6060,8 +6271,8 @@ double *in				/* Input XYZ values */
 /* Given an XYZ value, return sRGB values. */
 /* This is a little slow if wp used */
 void icx_XYZ2sRGB(
-double *out,			/* Return approximate sRGB values */
-double *wp,				/* Input XYZ white point (may be NULL) */
+double *out,			/* Return sRGB values */
+double *wp,				/* Input XYZ white point (D65 used if NULL) */
 double *in				/* Input XYZ values */
 ) {
 	int i, j;
@@ -6106,6 +6317,50 @@ double *in				/* Input XYZ values */
 			if (out[j] > 1.0)
 				out[j] = 1.0;
 		}
+	}
+}
+
+/* Given an RGB value, return XYZ values. */
+/* This is a little slow */
+void icx_sRGB2XYZ(
+double *out,			/* Return XYZ values */
+double *wp,				/* Output XYZ white point (D65 used if NULL, othewise Bradford) */
+double *in				/* Input sRGB values */
+) {
+	int i, j;
+	double tmp[3];
+	double d65[3] = { 0.950543, 1.0, 1.089303 };	/* D65 */
+	double imat[3][3] = {				/* sRGB absolute XYZ->RGB */
+		{ 0.4124, 0.3576, 0.1805 },
+		{ 0.2126, 0.7152, 0.0722 },
+		{ 0.0193, 0.1192, 0.9505 }
+	};
+
+	/* Undo gamma */
+	for (j = 0; j < 3; j++) {
+		if (in[j] < 0.04045)
+			tmp[j] = in[j]/12.92;
+		else
+			tmp[j] = pow((in[j] + 0.055)/1.055, 2.4);
+	}
+
+	/* Convert to XYZ cromaticities */
+	for (i = 0; i < 3; i++) {
+		out[i] = 0.0;
+		for (j = 0; j < 3; j++) {
+			out[i] += tmp[j] * imat[i][j];
+		}
+	}
+
+	/* Do a simple Bradford between D65 and wp */
+	if (wp != NULL) {
+		icmXYZNumber dst, src;
+		double vkmat[3][3];
+
+		icmAry2XYZ(src, d65);
+		icmAry2XYZ(dst, wp);
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, dst, src, vkmat);
+		icmMulBy3x3(out, vkmat, out);
 	}
 }
 

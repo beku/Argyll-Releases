@@ -1,6 +1,7 @@
 
 /* 
  * Extract a CGATS file from an ICC profile tag.
+ * (Can also extract a tag of unknown format as a binary lump).
  *
  * Author:  Graeme W. Gill
  * Date:    2008/5/18
@@ -14,6 +15,9 @@
 
 /*
  * TTBD:
+ *
+ * Should uncompress ZXML type tag using zlib.
+ *
  */
 
 
@@ -28,6 +32,7 @@
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
+#include "ui.h"
 
 #define MXTGNMS 30
 
@@ -60,6 +65,7 @@ main(int argc, char *argv[]) {
 	icc *icco;
 	icTagSignature sig;
 	icmText *ro;
+	icmUnknown *uro;
 	icmFile *ifp, *ofp;
 	int verb = 0;
 	int  size = 0;
@@ -135,11 +141,14 @@ main(int argc, char *argv[]) {
 
 	sig = str2tag(tag_name);
 
-	if ((ro = (icmText *)icco->read_tag(icco, sig)) == NULL)
+	if ((ro = (icmText *)icco->read_tag_any(icco, sig)) == NULL) {
 		error("%d, %s",icco->errc, icco->err);
+	}
 
-	if (ro->ttype != icSigTextType) {
-		error("Tag isn't TextType");
+	if (ro->ttype == icmSigUnknownType) {
+		uro = (icmUnknown *)ro;
+	} else if (ro->ttype != icSigTextType) {
+		error("Tag isn't TextType or UnknownType");
 	}
 
 	if (docal) {
@@ -187,8 +196,14 @@ main(int argc, char *argv[]) {
 			error("unable to open output file '%s'",out_name);
 		}
 	
-		if (ofp->write(ofp, ro->data, 1, ro->size-1) != (ro->size-1)) {
-			error("writing to file '%s' failed",out_name);
+		if (ro->ttype == icmSigUnknownType) {
+			if (ofp->write(ofp, uro->data, 1, uro->size) != (uro->size)) {
+				error("writing to file '%s' failed",out_name);
+			}
+		} else {
+			if (ofp->write(ofp, ro->data, 1, ro->size-1) != (ro->size-1)) {
+				error("writing to file '%s' failed",out_name);
+			}
 		}
 	
 		if (ofp->del(ofp) != 0) {

@@ -28,7 +28,7 @@ CCFLAGS = $(CCFLAGSDEF) $(CCOPTFLAG) $(CCDEFINES)
 STDHDRS = $(STDHDRSDEF)
 LINKFLAGS = $(LINKFLAGSDEF) $(LINKDEBUGFLAG)
 
-all:: libicc$(SUFLIB) icctest$(SUFEXE) lutest$(SUFEXE) icclu$(SUFEXE) iccdump$(SUFEXE) iccrw$(SUFEXE)
+all:: libicc$(SUFLIB) icctest$(SUFEXE) lutest$(SUFEXE) icclu$(SUFEXE) iccdump$(SUFEXE) iccrw$(SUFEXE) mkDispProf$(SUFEXE)
 
 
 icc$(SUFOBJ): icc.c icc.h
@@ -77,6 +77,13 @@ iccrw$(SUFOBJ): iccrw.c icc.h
 
 iccrw$(SUFEXE): iccrw$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
 	$(LINK) $(LINKOF)iccrw$(SUFEXE) iccrw$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
+
+
+mkDispProf$(SUFOBJ): mkDispProf.c icc.h
+	$(CC) $(CCOF)mkDispProf$(SUFOBJ) mkDispProf.c
+
+mkDispProf$(SUFEXE): mkDispProf$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
+	$(LINK) $(LINKOF)mkDispProf$(SUFEXE) mkDispProf$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
 
 
 

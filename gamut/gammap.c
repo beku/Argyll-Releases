@@ -45,20 +45,23 @@
 #define VERBOSE			/* [Def] Print out extra interesting information when verbose is set */
 #undef PLOT_DIAG_WRL	/* [Und] Always plot "gammap.wrl" */
 
-	/* What do display when user requests disgnostic .wrl */
+	/* What do display when user requests disgnostic VRML/X3D */
 #define PLOT_SRC_GMT	/* [Def] Plot the source surface to "gammap.wrl" as well */
 #define PLOT_DST_GMT	/* [Def] Plot the dest surface to "gammap.wrl" as well */
 #undef PLOT_SRC_CUSPS	/* [Und] Plot the source surface cusps to "gammap.wrl" as well */
 #undef PLOT_DST_CUSPS	/* [Und] Plot the dest surface cusps to "gammap.wrl" as well */
 #undef PLOT_TRANSSRC_CUSPS	/* [Und] Plot the gamut mapped source surface cusps to "gammap.wrl" */
-#undef PLOT_AXES		/* [Und] Plot the axes to "gammap.wrl" as well */
+#define PLOT_AXES		/* [Und] Plot the axes to "gammap.wrl" as well */
 #undef SHOW_VECTOR_INDEXES	/* [Und] Show the mapping vector index numbers */
-#define SHOW_MAP_VECTORS	/* [Def] Show the mapping vectors */
-#undef SHOW_SUB_SURF	/* [Und] Show the sub-surface mapping vector */
+#define SHOW_MAP_VECTORS	/* [Def] Show the mapping vectors - yellow to red, green to red */
+							/*       if no clear direction. */
+#undef SHOW_SUB_SURF	/* [Und] Show the sub-surface mapping vector - grey to purple. */
+#undef SHOW_SUB_PNTS	/* [Und] Show the sub-surface sv2 (red), div2 (green), sd3 (yellow) pnts */
 #undef SHOW_CUSPMAP		/* [Und] Show the cusp mapped vectors rather than final vectors */
-#undef SHOW_ACTUAL_VECTORS		/* [Und?] Show how the source vectors actually map thought xform */
+#undef SHOW_ACTUAL_VECTORS		/* [Und] Show how the source vectors actually map thought xform */
 #undef SHOW_ACTUAL_VEC_DIFF		/* [Und] Show how the difference between guide and actual vectors */
 
+	/* Other diagnostics */
 #undef PLOT_LMAP		/* [Und] Plot L map */
 #undef PLOT_GAMUTS		/* [Und] Save (part mapped) input and output gamuts as */
 						/* src.wrl, img.wrl, dst.wrl, gmsrc.wrl */
@@ -75,7 +78,11 @@
 #undef PLOT_DIGAM		/* [Und] Rather than DST_GMT - don't free it (#def in nearsmth.c too) */
 
 
-#define XRES 100		/* Res of plots */
+#define XRES 100		/* [100] Res of plots */
+
+/* The locus.ts file can contain source locus(es) that will be plotted */
+/* as cones in red, with the destination plotted in white. They can */
+/* be created from .tif files using xicc/tiffgmts utility. */
 
 /* Optional marker points for gamut mapping diagnosotic */
 struct {
@@ -85,6 +92,7 @@ struct {
 	double col[3];	/* RGB color */
 } markers[] = {
 	{ 0, },								/* End marker */
+	{ 1, { 37.18, 17.78, 20.28 }, { 0.545, 0.357, 0.256 } },	/* Dark Baby skin */
 	{ 1, { 12.062, -0.87946, 0.97008 }, { 1.0, 0.3, 0.3 } },	/* Black point */
 	{ 1, { 67.575411, -37.555250, -36.612862 }, { 1.0, 0.3, 0.3 } },	/* bad source in red (Red) */
 	{ 1, { 61.003078, -44.466554, 1.922585 }, { 0.0, 1.0, 0.3 } },	/* good source in green */
@@ -169,7 +177,7 @@ static void inv_grey_func(void *pp, double *out, double *in);
 static void adjust_wb_func(void *pp, double *out, double *in);
 static void adjust_sat_func(void *pp, double *out, double *in);
 
-#define XVRA 4.0	/* Extra mapping vertex ratio over no. tri verts from gamut */
+#define XVRA 3.0	/* [3.0] Extra mapping vertex ratio over no. tri verts from gamut */
 
 /* The smoothed near weighting control values. */
 /* These weightings setup the detailed behaviour of the */
@@ -186,16 +194,17 @@ gammapweights pweights[] = {
 				0.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
 				0.3		/* Cusp hue alignment weighting       0 = none, 1 = full */
 			},
+			2.0,		/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
 			1.00		/* Chroma expansion 1 = none */
 		},
-		{			/* Radial weighting */
+		{			/* Radial weighting (currently broken - need to fix) */
 			0.0,	/* Radial error overall weight, 0 + */
 			0.5,	/* Radial hue dominance vs l+c, 0 - 1 */
 			0.5		/* Radial l dominance vs, c, 0 - 1 */
 		},
 		{			/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
-			0.6,	/* Hue dominance vs l+c, 0 - 1 */
+			0.8,	/* Hue dominance vs l+c, 0 - 1 */
 
 			0.8,	/* White l dominance vs, c, 0 - 1 */
 			0.5,	/* Grey l dominance vs, c, 0 - 1 */
@@ -221,6 +230,50 @@ gammapweights pweights[] = {
 			0.0			/* Fine tuning expansion weight, 0 - 1 */
 		}
 	},
+	{
+		gmm_light_yellow,		/* Treat yellow differently, to get purer result. */
+		{
+			{
+				0.9,	/* Cusp luminance alignment weighting 0 = none, 1 = full */
+				0.8,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
+				0.7		/* Cusp hue alignment weighting       0 = none, 1 = full */
+			},
+			4.0,		/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
+			1.20		/* Chroma expansion 1 = none */
+		},
+		{			/* Radial weighting */
+			-1.0,	/* Radial error overall weight, 0 + */
+			-1.0,	/* Radial hue dominance vs l+c, 0 - 1 */
+			-1.0	/* Radial l dominance vs, c, 0 - 1 */
+		},
+		{			/* Weighting of absolute error of destination from source */
+			-1.0,	/* Absolute error overall weight */
+			-1.0,	/* Hue dominance vs l+c, 0 - 1 */
+
+			-1.0,	/* White l dominance vs, c, 0 - 1 */
+			-1.0,	/* Grey l dominance vs, c, 0 - 1 */
+			-1.0,	/* Black l dominance vs, c, 0 - 1 */
+
+			-1.0,	/* White l threshold ratio to grey distance, 0 - 1 */
+			-1.0,	/* Black l threshold ratio to grey distance, 0 - 1 */
+
+			-1.0,	/* L error extra power, none = 1.0 */
+			-1.0	/* L error xover threshold in DE */
+		},
+		{			/* Relative error preservation using smoothing */
+			20.0, 10.0	/* Relative Smoothing radius L* H* */
+		},
+		{		/* Weighting of excessive compression error, which is */
+				/* the src->dst vector length over the available dst depth. */
+				/* The depth is half the distance to the intersection of the */
+				/* vector to the other side of the gamut. (doesn't get triggered much ?) */
+			-1.0,		/* Compression depth weight */
+			-1.0		/* Expansion depth weight */
+		},
+		{
+			0.5			/* Fine tuning expansion weight, 0 - 1 */
+		}
+	},
 #ifdef NEVER
 	{
 		gmm_l_d_blue,		/* Increase maintaining hue importance for blue */
@@ -230,6 +283,7 @@ gammapweights pweights[] = {
 				-1.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
 				 0.0	/* Cusp hue alignment weighting       0 = none, 1 = full */
 			},
+			-1.0,		/* 2.0 Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
 			-1.0		/* Chroma expansion 1 = none */
 		},
 		{			/* Radial weighting */
@@ -252,7 +306,7 @@ gammapweights pweights[] = {
 			-1.0	/* L error xover threshold in DE */
 		},
 		{			/* Relative error preservation using smoothing */
-			-1.0, 25.0	/* Relative Smoothing radius L* H* */
+			-1.0, 15.0	/* Relative Smoothing radius L* H* */
 		},
 		{		/* Weighting of excessive compression error, which is */
 				/* the src->dst vector length over the available dst depth. */
@@ -267,53 +321,10 @@ gammapweights pweights[] = {
 	},
 #endif /* NEVER */
 	{
-		gmm_light_yellow,		/* Treat yellow differently, to get purer result. */
-		{
-			{
-				0.9,	/* Cusp luminance alignment weighting 0 = none, 1 = full */
-				0.8,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
-				0.7		/* Cusp hue alignment weighting       0 = none, 1 = full */
-			},
-			1.15		/* Chroma expansion 1 = none */
-		},
-		{			/* Radial weighting */
-			-1.0,	/* Radial error overall weight, 0 + */
-			-1.0,	/* Radial hue dominance vs l+c, 0 - 1 */
-			-1.0	/* Radial l dominance vs, c, 0 - 1 */
-		},
-		{			/* Weighting of absolute error of destination from source */
-			-1.0,	/* Absolute error overall weight */
-			-1.0,	/* Hue dominance vs l+c, 0 - 1 */
-
-			-1.0,	/* White l dominance vs, c, 0 - 1 */
-			-1.0,	/* Grey l dominance vs, c, 0 - 1 */
-			-1.0,	/* Black l dominance vs, c, 0 - 1 */
-
-			-1.0,	/* White l threshold ratio to grey distance, 0 - 1 */
-			-1.0,	/* Black l threshold ratio to grey distance, 0 - 1 */
-
-			-1.0,	/* L error extra power, none = 1.0 */
-			-1.0	/* L error xover threshold in DE */
-		},
-		{			/* Relative error preservation using smoothing */
-			20.0, 20.0	/* Relative Smoothing radius L* H* */
-		},
-		{		/* Weighting of excessive compression error, which is */
-				/* the src->dst vector length over the available dst depth. */
-				/* The depth is half the distance to the intersection of the */
-				/* vector to the other side of the gamut. (doesn't get triggered much ?) */
-			-1.0,		/* Compression depth weight */
-			-1.0		/* Expansion depth weight */
-		},
-		{
-			0.5			/* Fine tuning expansion weight, 0 - 1 */
-		}
-	},
-	{
 		gmm_end,
 	}
 };
-double psmooth = 5.0;		/* [5.0] Level of RSPL smoothing for perceptual, 1 = nominal */
+double psmooth = 4.0;		/* [5.0] Level of RSPL smoothing for perceptual, 1 = nominal */
 
 /* Saturation mapping weights, where saturation has priority over smoothness */
 gammapweights sweights[] = {
@@ -325,6 +336,7 @@ gammapweights sweights[] = {
 				0.5,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
 				0.6		/* Cusp hue alignment weighting       0 = none, 1 = full */
 			},
+			1.0,		/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
 			1.05		/* Chroma expansion 1 = none */
 		},
 		{			/* Radial weighting */
@@ -347,7 +359,7 @@ gammapweights sweights[] = {
 			10.0	/* L error extra xover threshold in DE */
 		},
 		{			/* Relative vector  smoothing */
-			15.0, 20.0	/* Relative Smoothing radius L* H* */
+			20.0, 25.0	/* Relative Smoothing radius L* H* */
 		},
 		{		/* Weighting of excessive compression error, which is */
 				/* the src->dst vector length over the available dst depth. */
@@ -368,6 +380,7 @@ gammapweights sweights[] = {
 				1.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
 				1.0		/* Cusp hue alignment weighting       0 = none, 1 = full */
 			},
+			1.0,		/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
 			1.20		/* Chroma expansion 1 = none */
 		},
 		{			/* Radial weighting */
@@ -428,6 +441,7 @@ static void domap(gammap *s, double *out, double *in);
 static void dopartialmap1(gammap *s, double *out, double *in);
 static void dopartialmap2(gammap *s, double *out, double *in);
 static gamut *parttransgamut(gammap *s, gamut *src);
+static void invdomap1(gammap *s, double *out, double *in);
 #ifdef PLOT_GAMUTS
 static void map_trans(void *cntx, double out[3], double in[3]);
 #endif
@@ -487,7 +501,7 @@ gammap *new_gammap(
 	int j;
 
 #if defined(PLOT_LMAP) || defined(PLOT_GAMUTS) || defined(PLOT_3DKNEES)
-	fprintf(stderr,"##### A gammap.c PLOT is #defined ####\n");
+# pragma message("################ A gammap.c PLOT is #defined #########################")
 #endif
 
 	if (verb) {
@@ -504,6 +518,7 @@ gammap *new_gammap(
 	/* Setup methods */
 	s->del = del_gammap;
 	s->domap = domap;
+	s->invdomap1 = invdomap1;
 
 	/* Now create everything */
 
@@ -898,98 +913,12 @@ glumknf	= 1.0;
 			}
 		}
 
-		/* To ensure symetry between compression and expansion, always create RSPL */
-		/* for compression and its inverse, and then swap grey and igrey rspl to compensate. */
-		if ((dwL - dbL) > (swL - sbL))
-			revrspl = 1;
-
-		/* White point end */
-		lpnts[ngreyp].p[0] = swL;
-		lpnts[ngreyp].v[0] = dwL;
-		lpnts[ngreyp++].w  = 10.0;		/* Must go through here */
-
-		/* Black point end */
-		lpnts[ngreyp].p[0] = sbL;
-		lpnts[ngreyp].v[0] = dbL;
-		lpnts[ngreyp++].w  = 10.0;		/* Must go through here */
-
-//printf("~1 white loc %f, val %f\n",swL,dwL);
-//printf("~1 black loc %f, val %f\n",sbL,dbL);
-
-#ifdef USE_GLUMKNF
-		if (gmi->glumknf < 0.05)
-#endif /* USE_GLUMKNF */
-		{			/* make sure curve is firmly anchored */
-			lpnts[ngreyp].p[0] = 0.3 * lpnts[ngreyp-1].p[0] + 0.7 * lpnts[ngreyp-2].p[0];
-			lpnts[ngreyp].v[0] = 0.3 * lpnts[ngreyp-1].v[0] + 0.7 * lpnts[ngreyp-2].v[0];
-			lpnts[ngreyp++].w  = 1.0;	
-
-			lpnts[ngreyp].p[0] = 0.7 * lpnts[ngreyp-2].p[0] + 0.3 * lpnts[ngreyp-3].p[0];
-			lpnts[ngreyp].v[0] = 0.7 * lpnts[ngreyp-2].v[0] + 0.3 * lpnts[ngreyp-3].v[0];
-			lpnts[ngreyp++].w  = 1.0;	
-		}
-#ifdef USE_GLUMKNF
-		else {		/* There is at least some weight in knee points */
-			double cppos = 0.50;		/* Center point ratio between black and white */
-			double cplv;				/* Center point location and value */
-			double kppos = 0.30;		/* Knee point ratio between white/black & center */
-			double kwl, kbl, kwv, kbv;	/* Knee point values and locations */
-			double kwx, kbx;			/* Knee point extra  */
-			
-
-//printf("sbL = %f, swL = %f\n",sbL,swL);
-//printf("dbL = %f, dwL = %f\n",dbL,dwL);
-
-			/* Center point */
-			cplv = cppos * (swL - sbL) + sbL;
-//printf("~1 computed cplv = %f\n",cplv);
-
-#ifdef NEVER	/* Don't use a center point */
-			lpnts[ngreyp].p[0] = cplv;
-			lpnts[ngreyp].v[0] = cplv;
-			lpnts[ngreyp++].w  = 0.5;	
+#ifdef PLOT_LMAP
+		printf("sbL = %f, swL = %f\n",sbL,swL);
+		printf("dbL = %f, dwL = %f\n",dbL,dwL);
 #endif
-	
-//printf("~1 black half diff = %f\n",dbL - sbL); 
-//printf("~1 white half diff = %f\n",dwL - swL); 
 
-			/* Knee point locations */
-			kwl = kppos * (cplv - swL) + swL;
-			kbl = kppos * (cplv - sbL) + sbL;
-			
-			/* Extra compression for white and black knees */
-			kwx = 0.6 * (dbL - sbL) + 1.0 * (swL - dwL);
-			kbx = 1.0 * (dbL - sbL) + 0.6 * (swL - dwL);
-
-//kwx = 0.0;
-//kbx = 0.0;
-//glumknf = 0.0;
-
-			/* Knee point values */
-			kwv = (dwL + kwx - cplv) * (kwl - cplv)/(swL - cplv) + cplv;
-			if (kwv > dwL)		/* Sanity check */
-				kwv = dwL;
-
-			kbv = (dbL - kbx - cplv) * (kbl - cplv)/(sbL - cplv) + cplv;
-			if (kbv < dbL)		/* Sanity check */
-				kbv = dbL;
-
-
-//printf("~1 kbl = %f, kbv = %f\n",kbl, kbv);
-//printf("~1 kwl = %f, kwv = %f\n",kwl, kwv);
-
-			/* Emphasise points to cause "knee" curve */
-			lpnts[ngreyp].p[0] = kwl;
-			lpnts[ngreyp].v[0] = kwv;
-			lpnts[ngreyp++].w  = gmi->glumknf * gmi->glumknf;	
-		
-			lpnts[ngreyp].p[0] = kbl;
-			lpnts[ngreyp].v[0] = kbv;
-			lpnts[ngreyp++].w  = 1.5 * gmi->glumknf * 1.5 * gmi->glumknf;	
-		}
-#endif /* USE_GLUMKNF */
-
-		/* Remember our source and destinatio mapping targets */
+		/* Remember our source and destination mapping targets */
 		/* so that we can use them for fine tuning later. */
 
 		/* We scale the source and target white and black */
@@ -1016,6 +945,113 @@ glumknf	= 1.0;
 
 		for (j = 0; j < 3; j++)
 			d_mt_bp[j] = dr_cs_wp[j] + t * (dr_cs_bp[j] - dr_cs_wp[j]);
+
+		/* To ensure symetry between compression and expansion, always create RSPL for */
+		/* overall compression and its inverse, and then swap grey and igrey rspl to compensate. */
+		/* We swap the source and desitination white and black points to achieve this. */
+		/* Note that we could still have expansion at one end or the other, depending */
+		/* on the center point location, so we need to allow for this in the rspl setup. */
+		if ((dwL - dbL) > (swL - sbL)) {
+			double tt;
+			tt = swL; swL = dwL; dwL = tt;
+			tt = sbL; sbL = dbL; dbL = tt;
+			revrspl = 1;
+		}
+
+		/* White point end */
+		lpnts[ngreyp].p[0] = swL;
+		lpnts[ngreyp].v[0] = dwL;
+		lpnts[ngreyp++].w  = 10.0;		/* Must go through here */
+
+		/* Black point end */
+		lpnts[ngreyp].p[0] = sbL;
+		lpnts[ngreyp].v[0] = dbL;
+		lpnts[ngreyp++].w  = 10.0;		/* Must go through here */
+
+#ifdef USE_GLUMKNF
+		if (gmi->glumknf < 0.05)
+#endif /* USE_GLUMKNF */
+		{			/* make sure curve is firmly anchored */
+			lpnts[ngreyp].p[0] = 0.3 * lpnts[ngreyp-1].p[0] + 0.7 * lpnts[ngreyp-2].p[0];
+			lpnts[ngreyp].v[0] = 0.3 * lpnts[ngreyp-1].v[0] + 0.7 * lpnts[ngreyp-2].v[0];
+			lpnts[ngreyp++].w  = 1.0;	
+
+			lpnts[ngreyp].p[0] = 0.7 * lpnts[ngreyp-2].p[0] + 0.3 * lpnts[ngreyp-3].p[0];
+			lpnts[ngreyp].v[0] = 0.7 * lpnts[ngreyp-2].v[0] + 0.3 * lpnts[ngreyp-3].v[0];
+			lpnts[ngreyp++].w  = 1.0;	
+		}
+#ifdef USE_GLUMKNF
+		else {		/* There is at least some weight in knee points */
+			double cppos = 0.50;		/* Center point ratio between black and white */
+			double cpll, cplv;			/* Center point location and value */
+			double kpwpos = 0.30;		/* White knee point location prop. towards center */
+			double kpbpos = 0.20;		/* Black knee point location prop. towards center */
+			double kwl, kbl, kwv, kbv;	/* Knee point values and locations */
+			double kwx, kbx;			/* Knee point extra  */
+			
+#ifdef PLOT_LMAP
+			printf("%ssbL = %f, swL = %f\n", revrspl ? "(swapped) ": "", sbL,swL);
+			printf("%sdbL = %f, dwL = %f\n", revrspl ? "(swapped) ": "", dbL,dwL);
+#endif
+
+			/* Center point location */
+			cpll = cppos * (swL - sbL) + sbL;
+			// ~~?? would this be better if the output
+			// was scaled by dwL/swL ?
+			cplv = cppos * (swL - sbL) + sbL;
+#ifdef PLOT_LMAP
+			printf("cpll = %f, cplv = %f\n",cpll, cplv);
+#endif
+
+#ifdef NEVER	/* Don't use a center point */
+			lpnts[ngreyp].p[0] = cpll;
+			lpnts[ngreyp].v[0] = cplv;
+			lpnts[ngreyp++].w  = 5.0;	
+#endif
+	
+//printf("~1 black half diff = %f\n",dbL - sbL); 
+//printf("~1 white half diff = %f\n",dwL - swL); 
+
+			/* Knee point locations */
+			kwl = kpwpos * (cplv - swL) + swL;
+			kbl = kpbpos * (cplv - sbL) + sbL;
+			
+			/* Extra compression for white and black knees */
+			// ~~ ie move knee point level beyond 45 degree line
+			// ~~ weigting of black point and white point differences
+			kwx = 0.6 * (dbL - sbL) + 1.0 * (swL - dwL);
+			kbx = 1.0 * (dbL - sbL) + 0.6 * (swL - dwL);
+
+//kwx = 0.0;
+//kbx = 0.0;
+//glumknf = 0.0;
+
+			/* Knee point values */
+			kwv = (dwL + kwx - cplv) * (kwl - cplv)/(swL - cplv) + cplv;
+			if (kwv > dwL)		/* Sanity check */
+				kwv = dwL;
+
+			kbv = (dbL - kbx - cplv) * (kbl - cplv)/(sbL - cplv) + cplv;
+			if (kbv < dbL)		/* Sanity check */
+				kbv = dbL;
+
+
+#ifdef PLOT_LMAP
+			printf("using kbl = %f, kbv = %f\n",kbl, kbv);
+			printf("using kwl = %f, kwv = %f\n",kwl, kwv);
+#endif
+
+			/* Emphasise points to cause white "knee" curve */
+			lpnts[ngreyp].p[0] = kwl;
+			lpnts[ngreyp].v[0] = kwv;
+			lpnts[ngreyp++].w  = gmi->glumknf * gmi->glumknf;	
+		
+			/* Emphasise points to cause black "knee" curve */
+			lpnts[ngreyp].p[0] = kbl;
+			lpnts[ngreyp].v[0] = kbv;
+			lpnts[ngreyp++].w  = 1.5 * gmi->glumknf * 1.5 * gmi->glumknf;	
+		}
+#endif /* USE_GLUMKNF */
 	}
 
 	/* We now create the 1D rspl L map, that compresses or expands the luminence */
@@ -1030,15 +1066,6 @@ glumknf	= 1.0;
 		datao ol, oh;
 		double avgdev[MXDO];
 		int gres = 256;
-
-		if (revrspl) {		/* Invert creation and usage for symetry between compress and exp. */
-			int i;
-			for (i = 0; i < ngreyp; i++) {
-				double tt = lpnts[i].p[0];			/* Swap source and dest */
-				lpnts[i].p[0] = lpnts[i].v[0];
-				lpnts[i].v[0] = tt;
-			}
-		}
 
 		/* Create a 1D rspl, that is used to */
 		/* form the overall L compression mapping. */
@@ -1076,7 +1103,7 @@ glumknf	= 1.0;
 		/* Create it from inverse lookups of s->grey */
 		s->igrey->set_rspl(s->igrey, 0, (void *)s->grey, inv_grey_func, il, ih, &gres, ol, oh);
 
-		if (revrspl) {		/* Swap to compensate for expansion */
+		if (revrspl) {		/* Swap to compensate for swapping of white and black points */
 			rspl *tt = s->grey;
 			s->grey = s->igrey;
 			s->igrey = tt;
@@ -1140,6 +1167,7 @@ glumknf	= 1.0;
 	/* if there is any compression or expansion to do. */
 	if (gmi->gamcpf > 1e-6 || gmi->gamexf > 1e-6) {
 		cow *gpnts = NULL;	/* Mapping points to create gamut mapping */
+		int max_gpnts;
 		int nspts;		/* Number of source gamut surface points */
 		int rgridpts;	/* Number of range surface grid points */
 		int i, j;
@@ -1175,7 +1203,8 @@ typedef struct {
 		}
 #endif
 
-		if ((gpnts = (cow *)malloc((nres + 3 * nspts + rgridpts) * sizeof(cow))) == NULL) { 
+		max_gpnts = nres + 3 * nspts + rgridpts;
+		if ((gpnts = (cow *)malloc(max_gpnts * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of mapping setup points failed\n");
 			s->grey->del(s->grey);
 			s->igrey->del(s->igrey);
@@ -1275,6 +1304,8 @@ typedef struct {
 			gpnts[ngamp].w);
 #endif
 			ngamp++;
+			if (ngamp >= max_gpnts)
+				error("gammap: internal, not enough space for mapping points A (%d > %d)\n",ngamp, max_gpnts); 
 		}
 #endif /* USE_GREYMAP */
 
@@ -1436,10 +1467,10 @@ typedef struct {
 			doaxes = 1;
 #endif
 			if (diagname != NULL)
-				wrl = new_vrml(diagname, doaxes, 0);
+				wrl = new_vrml(diagname, doaxes, vrml_lab);
 #ifdef PLOT_DIAG_WRL
 			else
-				wrl = new_vrml("gammap.wrl", doaxes, 0);
+				wrl = new_vrml("gammap", doaxes, vrml_lab);
 #endif
 		}
 
@@ -1513,30 +1544,50 @@ typedef struct {
 			}
 			gpnts[ngamp++].w = 1.01;		/* Main gamut surface mapping point */
 											/* (Use 1.01 as a marker value) */
+			if (ngamp >= max_gpnts)
+				error("gammap: internal, not enough space for mapping points B (%d > %d)\n",ngamp, max_gpnts); 
 
 #ifdef USE_GAMKNF
 			/* Add sub surface mapping point if available */
 			if (nsm[i].vflag != 0) {	/* Sub surface point is available */
 
 				/* Compute destination value which is a blend */
-				/* between the source value and the fully mapped destination value. */
+				/* between the source value and the knee adjusted destination */
 				icmBlend3(nsm[i].div2, nsm[i].sv2, nsm[i].dv2, cpexf);
 
 #ifdef NEVER
 				printf("Src2 point = %f %f %f radius %f\n",nsm[i].sv2[0], nsm[i].sv2[1], nsm[i].sv2[2], nsm[i].sr);
 				printf("Dst2 point = %f %f %f radius %f\n",nsm[i].dv2[0], nsm[i].dv2[1], nsm[i].dv2[2], nsm[i].dr);
 				printf("Blended dst2 point = %f %f %f\n",nsm[i].div2[0], nsm[i].div2[1], nsm[i].div2[2]);
+				printf("Src/Dst3 point = %f %f %f w %f\n",nsm[i].sd2[0], nsm[i].sd2[1], nsm[i].sd2[2]);
 				printf("\n");
 #endif	/* NEVER */
+
 				/* Set the sub-surface gamut hull mapping point */
 				for (j = 0; j < 3; j++) {
 					gpnts[ngamp].p[j] = nsm[i].sv2[j];
 					gpnts[ngamp].v[j] = nsm[i].div2[j];
 				}
 				gpnts[ngamp++].w = nsm[i].w2;		/* Sub-suface mapping points */
+
+				if (ngamp >= max_gpnts)
+					error("gammap: internal, not enough space for mapping points C (%d > %d)\n",ngamp, max_gpnts); 
+
+				/* Set the sub-surface gamut hull mapping point */
+				for (j = 0; j < 3; j++) {
+					gpnts[ngamp].p[j] = nsm[i].sd3[j];
+					gpnts[ngamp].v[j] = nsm[i].sd3[j];
+				}
+				gpnts[ngamp++].w = nsm[i].w3;		/* Sub-suface mapping points */
+
+				if (ngamp >= max_gpnts)
+					error("gammap: internal, not enough space for mapping points D (%d > %d)\n",ngamp, max_gpnts); 
 			}
 #endif /* USE_GAMKNF */
 		}
+
+		if (ngamp >= max_gpnts)
+			error("gammap: internal, not enough space for mapping points (%d > %d)\n",ngamp, max_gpnts); 
 
 		/* Create preliminary gamut mapping rspl, without grid boundary values. */
 		/* We use this to lookup the mapping for points on the source space gamut */
@@ -1601,6 +1652,9 @@ typedef struct {
 					/* A low weight seems to be enough ? */
 					/* the lower the better in terms of geting best hull mapping fidelity */
 					gpnts[ngamp++].w = 0.05 * ww;
+
+					if (ngamp >= max_gpnts)
+						error("gammap: internal, not enough space for mapping points E (%d > %d)\n",ngamp, max_gpnts); 
 				}
 				DC_INC(gc);
 				if (DC_DONE(gc))
@@ -1833,11 +1887,11 @@ typedef struct {
 
 			/* Add the source and dest gamut surfaces */
 #ifdef PLOT_SRC_GMT
-			wrl->make_gamut_surface_2(wrl, sil_gam, 0.6, 0, cc);
+			wrl->make_gamut_surface_2(wrl, sil_gam, 0.6, 0, cc);	/* Grey */
 #endif /* PLOT_SRC_GMT */
 #ifdef PLOT_DST_GMT
 			cc[0] = -1.0;
-			wrl->make_gamut_surface(wrl, d_gam, 0.2, cc);
+			wrl->make_gamut_surface(wrl, d_gam, 0.3, cc);			/* Natural color */
 #endif /* PLOT_DST_GMT */
 #ifdef PLOT_DIGAM
 			if (nsm[0].dgam == NULL)
@@ -1918,7 +1972,6 @@ typedef struct {
 
 # ifdef SHOW_SUB_SURF
 				if (nsm[i].vflag != 0) {	/* Sub surface point is available */
-
 					wrl->add_col_vertex(wrl, 0, nsm[i].sv2, lgrey); /* Subs-surf Source value */
 					wrl->add_col_vertex(wrl, 0, nsm[i].div2, purp); /* Blended destination value */
 				}
@@ -1928,14 +1981,29 @@ typedef struct {
 			wrl->make_lines(wrl, 0, 2);			/* Guide vectors */
 #endif	/* Show vectors */
 
-#ifdef SHOW_VECTOR_INDEXES
+#if defined(SHOW_VECTOR_INDEXES) || defined(SHOW_SUB_PNTS)
 			for (i = 0; i < nnsm; i++) {
-				double cream[3] = { 0.7, 0.7, 0.5 };
-				char buf[100];
-				sprintf(buf, "%d", i);
-				wrl->add_text(wrl, buf, nsm[i].sv, cream, 0.5);
-			}
+#ifdef SHOW_VECTOR_INDEXES
+				{
+					double cream[3] = { 0.7, 0.7, 0.5 };
+					char buf[100];
+					sprintf(buf, "%d", i);
+					wrl->add_text(wrl, buf, nsm[i].sv, cream, 0.5);
+				}
 #endif /* SHOW_VECTOR_INDEXES */
+# ifdef SHOW_SUB_PNTS
+				if (nsm[i].vflag != 0) {	/* Sub surface point is available */
+					double red[3]    = { 1.0, 0.0, 0.0 };
+					double green[3]  = { 0.0, 1.0, 0.0 };
+					double yellow[3] = { 1.0, 1.0, 0.0 };
+
+					wrl->add_marker(wrl, nsm[i].sv2, red, 1.0); /* Subs-surf Source value */
+					wrl->add_marker(wrl, nsm[i].div2, green, 1.0); /* Blended destination value */
+					wrl->add_marker(wrl, nsm[i].sd3, yellow, 1.0); /* Deep sub-surface point */
+				}
+# endif /* SHOW_SUB_PNTS */
+			}
+#endif
 
 			/* add the locus from locus.ts file */ 
 			if (locus != NULL) {
@@ -2184,10 +2252,10 @@ typedef struct {
 	}
 
 #ifdef PLOT_GAMUTS
-	scl_gam->write_vrml(scl_gam, "src.wrl", 1, 0);
-	sil_gam->write_vrml(sil_gam, "img.wrl", 1, 0);
-	d_gam->write_vrml(d_gam, "dst.wrl", 1, 0);
-	sc_gam->write_trans_vrml(sc_gam, "gmsrc.wrl", 1, 0, map_trans, s);
+	scl_gam->write_vrml(scl_gam, "src", 1, 0);
+	sil_gam->write_vrml(sil_gam, "img", 1, 0);
+	d_gam->write_vrml(d_gam, "dst", 1, 0);
+	sc_gam->write_trans_vrml(sc_gam, "gmsrc", 1, 0, map_trans, s);
 #endif
 
 	if (sil_gam != scl_gam)
@@ -2221,6 +2289,8 @@ gammap *s
 
 	free(s);
 }
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Apply the gamut mapping to the given color value */
 static void domap(
@@ -2335,6 +2405,51 @@ double *in
 		icmCpy3(out, in);
 	}
 }
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* powell function - minimise error to target */
+static double invgmfunc(
+void *fdata,
+double *tp
+) {
+	gammap *s = (gammap *)fdata;
+	int i;
+	double gmv[3];
+	double tt, rv = 0.0;
+
+	domap(s, gmv, tp);
+	for (i = 0; i < 3; i++) {
+		double tt = gmv[i] - s->tv[i];
+		rv += tt * tt;
+	}
+
+	return rv;
+}
+
+/* Invert a gamut mapping using powell */
+static void invdomap1(
+gammap *s,
+double *out,
+double *in
+) {
+	double ss[3] = { 20.0, 20.0, 20.0 };		/* search area */
+	double tp[3], rv;
+
+	s->tv[0] = tp[0] = in[0];
+	s->tv[1] = tp[1] = in[1];
+	s->tv[2] = tp[2] = in[2];
+
+	if (powell(&rv, 3, tp, ss, 1e-7, 5000, invgmfunc, (void *)s, NULL, NULL) != 0) {
+		warning("gamut invdomap1 failed on %f %f %f\n", in[0], in[1], in[2]);
+	}
+
+	out[0] = tp[0];
+	out[1] = tp[1];
+	out[2] = tp[2];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Function to pass to rspl to invert grey curve */
 static void inv_grey_func(

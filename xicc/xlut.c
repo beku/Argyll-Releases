@@ -6,7 +6,7 @@
  * Date:    2/7/00
  * Version: 1.00
  *
- * Copyright 2000, 2001 Graeme W. Gill
+ * Copyright 2000, 2001, 2014 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -155,6 +155,8 @@
 #undef REPORT_LOCUS_SEGMENTS    /* [Undef[ Examine how many segments there are in aux inversion */
 
 #define XYZ_EXTRA_SMOOTH 20.0		/* Extra smoothing factor for XYZ profiles */
+									/* !!! Note this is mainly due to smoothing being */
+									/* scaled by data range in rspl code !!! */
 #define SHP_SMOOTH 1.0	/* Input shaper curve smoothing */
 #define OUT_SMOOTH1 1.0	/* Output shaper curve smoothing for L*, X,Y,Z */
 #define OUT_SMOOTH2 1.0	/* Output shaper curve smoothing for a*, b* */
@@ -176,13 +178,6 @@
  *       Some of the error handling is crude. Shouldn't use
  *       error(), should return status.
  */
-
-#ifndef _CAT2
-#define _CAT2(n1,n2)  n1 ## n2
-#define CAT2(n1,n2) _CAT2(n1,n2)
-#endif
-
-
 
 static double icxLimitD(icxLuLut *p, double *in);		/* For input' */
 #define icxLimitD_void ((double (*)(void *, double *))icxLimitD)	/* Cast with void 1st arg */
@@ -2855,6 +2850,7 @@ cow                *ipoints,		/* Array of input points (Lab or XYZ normalized to
 icxMatrixModel     *skm,    		/* Optional skeleton model (used for input profiles) */
 double             dispLuminance,	/* > 0.0 if display luminance value and is known */
 double             wpscale,			/* > 0.0 if white point is to be scaled */
+//double            *bpo,				/* != NULL for XYZ black point override dev & XYZ */
 double             smooth,			/* RSPL smoothing factor, -ve if raw */
 double             avgdev,			/* reading Average Deviation as a prop. of the input range */
 double             demph,			/* dark emphasis factor for cLUT grid res. */
@@ -2878,6 +2874,7 @@ int                quality			/* Quality metric, 0..3 */
 	double oavgdev[MXDO];	/* Average output value deviation */
 	int gres[MXDI];			/* RSPL/CLUT resolution */
 	xfit *xf = NULL;		/* Curve fitting class instance */
+//	co bpop;				/* bpo dev + XYZ value */
 
 	if (flags & ICX_VERBOSE)
 		rsplflags |= RSPL_VERBOSE;
@@ -2933,6 +2930,9 @@ int                quality			/* Quality metric, 0..3 */
 	/* very "straight", and the lack of tension reduces any noise reduction effect. */
 	/* !!! This probably means that we should switch to 3rd order smoothness criteria !! */
 	/* We apply an arbitrary correction here */
+	/* !!!! There is also a bug in the rspl code, where smoothness is */
+	/* scaled by data range. This is making Lab smoothing ~100 times */
+	/* more than XYZ smoothing. Fix this with SMOOTH2 changes ?? */
 	if (p->pcs == icSigXYZData) {
 		oavgdev[0] = XYZ_EXTRA_SMOOTH * 0.70 * avgdev;
 		oavgdev[1] = XYZ_EXTRA_SMOOTH * 1.00 * avgdev;
@@ -3176,6 +3176,8 @@ int                quality			/* Quality metric, 0..3 */
 							nw++;
 						}
 					}
+					/* Setup bpo device value in case we need it */
+//					bpop.p[0] = bpop.p[1] = bpop.p[2] = 0.0;
 					break;
 	
 				case icSigGrayData: {	/* Could be additive or subtractive */
@@ -3207,6 +3209,7 @@ int                quality			/* Quality metric, 0..3 */
 						nw = nminwp;
 						if (minwp[pcsy]/nminwp < (0.5 * pcsymax))
 							nw = 0;					/* Looks like a mistake */
+//						bpop.p[0] = 1.0;
 					}
 					if (nmaxwp > 0				/* Additive */
 					 && (nminwp == 0 || maxwp[pcsy]/nmaxwp > minwp[pcsy]/nminwp)) {
@@ -3216,6 +3219,7 @@ int                quality			/* Quality metric, 0..3 */
 						nw = nmaxwp;
 						if (maxwp[pcsy]/nmaxwp < (0.5 * pcsymax))
 							nw = 0;					/* Looks like a mistake */
+//						bpop.p[0] = 0.0;
 					}
 					break;
 				}
@@ -3240,6 +3244,12 @@ int                quality			/* Quality metric, 0..3 */
 			wp[2] /= (double)nw;
 			if (p->pcs != icSigXYZData) 	/* Convert white point to XYZ */
 				icmLab2XYZ(&icmD50, wp, wp);
+
+//			if (bpo != NULL) {			/* Copy black override XYZ value */
+//				bpop.v[0] = bpo[0];
+//				bpop.v[1] = bpo[1];
+//				bpop.v[2] = bpo[2];
+//			}
 		}
 
 		if (flags & ICX_VERBOSE) {
@@ -3274,7 +3284,7 @@ int                quality			/* Quality metric, 0..3 */
 
 		optcomb tcomb = oc_ipo;	/* Create all by default */
 
-		if ((xf = CAT2(new_, xfit)()) == NULL) {
+		if ((xf = new_xfit(icco)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of xfit object failed");
 			p->del((icxLuBase *)p);
@@ -3374,6 +3384,7 @@ int                quality			/* Quality metric, 0..3 */
 		if (xf->fit(xf, xfflags, p->inputChan, p->outputChan,
 			rsplflags, wp, dwhite, wpscale, dgwhite, 
 		    ipoints, nodp, skm, in_min, in_max, gres, out_min, out_max,
+//			bpo != NULL ? &bpop : NULL,
 		    smooth, oavgdev, demph, iord, sord, oord, shp_smooth, out_smooth, tcomb,
 		   (void *)p, xfit_to_de2, xfit_to_dde2) != 0) {
 			p->pp->errc = 2;
@@ -3533,7 +3544,7 @@ int                quality			/* Quality metric, 0..3 */
 				/* to use for the rich black. */
 				for (e = 0; e < p->inputChan; e++)
 					bcc.p[e] = 0.0;
-				if (p->ink.klimit < 0.0)
+				if (p->ink.klimit <= 0.0)
 					bcc.p[kch] = 1.0;
 				else
 					bcc.p[kch] = p->ink.klimit;		/* K value */
@@ -3552,10 +3563,6 @@ int                quality			/* Quality metric, 0..3 */
 				if (flags & ICX_VERBOSE)
 					printf("K only black direction (Lab) =                      %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
 #endif
-				/* Start with the K only as the current best value */
-				brv = bfindfunc((void *)&bfs, bcc.p);
-//printf("~1 initial brv for K only = %f\n",brv);
-
 				/* Set the random start 0 location as 000K */
 				/* and the random start 1 location as CMY0 */
 				{
@@ -3563,12 +3570,12 @@ int                quality			/* Quality metric, 0..3 */
 
 					for (e = 0; e < p->inputChan; e++)
 						rs0[e] = 0.0;
-					if (p->ink.klimit < 0.0)
+					if (p->ink.klimit <= 0.0)
 						rs0[kch] = 1.0;
 					else
 						rs0[kch] = p->ink.klimit;		/* K value */
 
-					if (p->ink.tlimit < 0.0)
+					if (p->ink.tlimit <= 0.0)
 						tv = 1.0;
 					else
 						tv = p->ink.tlimit/(p->inputChan - 1.0);
@@ -3576,6 +3583,12 @@ int                quality			/* Quality metric, 0..3 */
 						rs1[e] = tv;
 					rs1[kch] = 0.0;		/* K value */
 				}
+
+				/* Start with the K only as the current best value */
+				for (e = 0; e < p->inputChan; e++)
+					bcc.p[e] = rs0[e];
+				brv = bfindfunc((void *)&bfs, bcc.p);
+//printf("~1 initial brv for K only = %f\n",brv);
 
 				/* Find the device black point using optimization */
 				/* Do several trials to avoid local minima. */
@@ -3697,6 +3710,13 @@ int                quality			/* Quality metric, 0..3 */
 				wp[i] *= scale;
 				bp[i] *= scale;
 			}
+
+//			if (bpo != NULL) {
+//				bp[0] = bpo[0];
+//				bp[1] = bpo[1];
+//				bp[2] = bpo[2];
+//				printf("Overide Black point XYZ = %s, Lab = %s\n", icmPdv(3,bp),icmPLab(bp));
+//			}
 		}
 
 		if (h->deviceClass == icSigDisplayClass

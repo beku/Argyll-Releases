@@ -66,7 +66,7 @@
 #undef PLOT_EVECTS		/* [Und] Create VRML of error correction vectors */
 #undef VERB  			/* [Und] [0] If <= 1, print progress headings */
 						/* if  > 1, print information about everything */
-#undef SHOW_NEIGB_WEIGHTS	/* [Und] Show the weighting for each point of neighbours */
+#undef SHOW_NEIGB_WEIGHTS	/* [Und] Show the weighting for each point of neighbours in turn */
 
 #undef DIAG_POINTS		/* [Und] Short circuite mapping and show vectors of various */
 						/* intermediate points (see #ifdef DIAG_POINTS) */
@@ -81,8 +81,8 @@
 #define VECSMOOTHING	/* [Def] Enable vector smoothing */
 #define VECADJPASSES 3	/* [3] Adjust vectors after smoothing to be on dest gamut */
 #define RSPLPASSES 4	/* [4] Number of rspl adjustment passes */
-#define RSPLSCALE 1.8	/* [1.8] Offset within gamut for rspl smoothingto aim for */
-#define SHRINK 5.0		/* Shrunk destination evect surface factor */
+#define RSPLSCALE 1.8	/* [1.8] Offset within gamut for rspl smoothing to aim for */
+#define SHRINK 5.0		/* [5.0] Shrunk destination evect surface factor */
 #define CYLIN_SUBVEC	/* [Def] Make sub-vectors always cylindrical direction */
 #define SUBVEC_SMOOTHING	/* [Def] Smooth the sub-vectors */
 
@@ -95,6 +95,8 @@
 #undef EMPH_THR	    //10.0		/* delta C threshold above which it kicks in */
 
 #undef LINEAR_HUE_SUM	/* Make delta^2 = (sqrt(l^2 + c^2) + h)^2 */
+
+#undef DEBUG_POWELL_FAILS	/* [Und] On a powell fail, re-run it with debug on */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #if defined(VERB)
@@ -313,14 +315,14 @@ struct _smthopt {
 	gamut *sgam;			/* Source colorspace gamut */
 
 	/* Cusp alignment mapping */
-	/* 0 = src, 1 = dst, then cusp then value(s) */
-	double cusps[2][9][3];	/* raw cusp values - red .. magenta,  white [6], black [7] & grey [8] */
+	/* [2] 0 = src, 1 = dst, then cusp then value(s) */
+	double cusps[2][9][3];	/* raw cusp values - R Y G C B M, white [6], black [7] & grey [8] */
 	double rot[2][3][4];	/* Rotation to align to black/white center */
 	double irot[2][3][4];	/* Inverse rotation */
 	double cusp_lab[2][9][3];	/* Cusp + B&W + grey rotated Lab value */ 
 	double cusp_lch[2][6][3];	/* Cusp LCH value */ 
 	double cusp_pe[2][6][4];	/* L direction plane equations per segment */
-	double cusp_bc[2][6][2][3][3];	/* light/dark to/from 3x3 baricentic transform matrix */
+	double cusp_bc[2][6][2][3][3];	/* [light/dark][Hex][to/from] 3x3 baricentic transform matrix */
 
 	/* Inversion support */
 	double tv[3];
@@ -382,9 +384,9 @@ double *_dv
 
 	if (p->swap) {
 		/* This is actually a point on the real source gamut, so */
-		/* convert to cusp mapped rotated, elevated source gamut value */
+		/* convert to cusp mapped rotated source gamut value */
 		comp_ce(s, ddv, ddv, &p->wt);
-// printf("~1 after rot & elevate got %f %f %f\n",ddv[0],ddv[1],ddv[2]);
+//printf("~1 after cusp rot got %f %f %f\n",ddv[0],ddv[1],ddv[2]);
 	}
 
 #ifdef NEVER
@@ -840,10 +842,11 @@ double out[3],
 double in[3],
 gammapweights *wt	/* If NULL, assume 100% */
 ) {
-	double cw_l = 1.0;
+	double cw_l = 1.0;		/* Cusp adapation weighting */
 	double cw_c = 1.0;
 	double cw_h = 1.0;
-	double ccx  = 1.0;
+	double ctw  = 1.0;		/* Twist power */
+	double ccx  = 1.0;		/* Expansion ratio */
 	
 	out[0] = in[0];
 	out[1] = in[1];
@@ -853,24 +856,27 @@ gammapweights *wt	/* If NULL, assume 100% */
 		cw_l = wt->c.w.l;
 		cw_c = wt->c.w.c;
 		cw_h = wt->c.w.h;
+		ctw  = wt->c.tw;
 		ccx  = wt->c.cx;
 	}
 
 	/* Compute source changes due to any cusp mapping */
-	if (s->docusp && (cw_l > 0.0 || cw_c > 0.0 || cw_h > 0.0)) {
+	if (s->docusp && (cw_l > 0.0 || cw_c > 0.0 || cw_h > 0.0 || ccx > 0.0)) {
 		double lab[3], lch[3];		/* Normalized source values */
-		double bb[3];				/* Baricentric coords */
+		double bb[3];				/* Baricentric coords: cusp0, cusp1, w/b weight. */
 		double olch[3];				/* Destination transformed LCh source value */
 		double mlab[3], mlch[3];	/* Fully mapped value */
 		int c0, c1;					/* Cusp indexes */
 		int ld;						/* light/dark index */
+		double tww, tpw;			/* Base twist weighting, twist power weightign */
 
-//printf("\n~1 in = %f %f %f, ccx = %f\n",in[0],in[1],in[2],ccx);
+//printf("\n~1 in = %f %f %f, cw_l %f, cw_c %f cw_h %f ctw %f ccx %f\n",in[0],in[1],in[2], cw_l, cw_c, cw_h, ctw, ccx);
 
-		/* Compute src cusp normalized LCh */ 
+		/* Compute src white/black aligned input Lab & LCh */ 
 		icmMul3By3x4(lab, s->rot[0], in);
 		icmLab2LCh(lch, lab);
-//printf("~1 lab = %f %f %f, lch = %f %f %f\n",lab[0],lab[1],lab[2],lch[0],lch[1],lch[2]);
+//printf("~1 aligned lab = %f %f %f\n",lab[0],lab[1],lab[2]);
+//printf("~1 aligned lch = %f %f %f\n",lch[0],lch[1],lch[2]);
 
 		/* Locate the source cusps that this point lies between */ 
 		for (c0 = 0; c0 < 6; c0++) {
@@ -900,34 +906,59 @@ gammapweights *wt	/* If NULL, assume 100% */
 		/* Compute baricentric for input point in simplex */
 		icmSub3(bb, lab, s->cusp_lab[0][8]); 
 		icmMulBy3x3(bb, s->cusp_bc[0][c0][ld], bb);
+//printf("~1 bb %f %f %f sum %f\n",bb[0],bb[1],bb[2], bb[0] + bb[1]);
 
-//printf("~1 bb %f %f %f\n",bb[0],bb[1],bb[2]);
+		/* bb[0] + bb[1] is close to C value */
+		tww = fabs(bb[0] + bb[1]);
+		if (tww > 1.0)
+			tww = 1.0;
+		
+		ccx = 1.0 + ((ccx - 1.0) * tww);	/* Scale expansion by C anyway */
+
+		/* Twist power weighting */
+		if (ctw <= 0.0)
+			tpw = 1.0;		/* Linear cusp alignmen mapping */
+		else
+			tpw = pow(tww, ctw);		/* Less mapping near neutral, full at cusps */
+
+//printf("~1 ccx %f, tww %f, tpw %f\n", ccx, tww, tpw);
+
+		/* Scale size of mapping down near neutral with higher twist power */
+		cw_l *= tpw;
+		cw_h *= tpw;
+		cw_c *= tpw;
 
 		/* Then compute value for output from baricentric */
 		icmMulBy3x3(mlab, s->cusp_bc[1][c0][ld], bb);
 		icmAdd3(mlab, mlab, s->cusp_lab[1][8]); 
 		icmLab2LCh(mlch, mlab);
 
-//printf("~1 fully cusp mapped point %f %f %f\n", mlab[0], mlab[1], mlab[2]);
+//printf("~1 full mapped point lch %f %f %f\n", mlch[0], mlch[1], mlch[2]);
 
-		/* Compute the  unchanged source in dest space */
+		/* Compute the  unchanged source in dest black/white aligned space */
 		icmMul3By3x4(olch, s->rot[1], in);
 		icmLab2LCh(olch, olch);
+
+//printf("~1 un mappedpoint lch %f %f %f\n", olch[0], olch[1], olch[2]);
 
 		/* Then compute weighted output */
 		mlch[0] = cw_l * mlch[0] + (1.0 - cw_l) * olch[0];
 		mlch[1] = cw_c * mlch[1] + (1.0 - cw_c) * olch[1];
-		mlch[1] *= ccx;			/* Chroma expansion */
-		
-		if (lch[2] > mlch[2] && (lch[2] - mlch[2]) > 180.0)
-			mlch[2] += 360.0;
-		else if (mlch[2] > lch[2] && (mlch[2] - lch[2]) > 180.0)
-			lch[2] += 360.0;
-		mlch[2] = cw_c * mlch[2] + (1.0 - cw_c) * lch[2];
+		if (fabs(olch[2] - mlch[2]) > 180.0) {	/* Put them on the same side */
+			if (olch[2] < mlch[2])
+				olch[2] += 360.0;
+			else
+				mlch[2] += 360.0;
+		}
+		mlch[2] = cw_c * mlch[2] + (1.0 - cw_c) * olch[2];
 		if (mlch[2] >= 360.0)
 			mlch[2] -= 360.0;
 
-//printf("~1 weighted cusp mapped point %f %f %f\n", mlch[0], mlch[1], mlch[2]);
+		mlch[1] *= ccx;			/* Add chroma expansion */
+
+//printf("~1 weighted cusp mapped lch %f %f %f\n", mlch[0], mlch[1], mlch[2]);
+
+		/* Align to destination white/black axis */
 		icmLCh2Lab(mlch, mlch);
 		icmMul3By3x4(out, s->irot[1], mlch);
 //printf("~1 returning %f %f %f\n", out[0], out[1], out[2]);
@@ -970,7 +1001,7 @@ double in[3]		/* Non-cusp mapped source value */
 	return ll;
 }
 
-/* Return a value suitable for blending between the wl, gl and bl L dominance values */
+/* Return a value suitable for blending between the wl, gl and bl L dominance values. */
 /* The value is a linear blend value, 0.0 at cusp local grey, 1.0 at white L value */
 /* and -1.0 at black L value. */
 static double comp_lvc(
@@ -1114,6 +1145,7 @@ gammapweights *src
 	NSCOPY(c.w.l);
 	NSCOPY(c.w.c);
 	NSCOPY(c.w.h);
+	NSCOPY(c.tw);
 	NSCOPY(c.cx);
 
 	NSCOPY(l.o);
@@ -1154,6 +1186,7 @@ gammapweights *src2, double wgt2
 	NSBLEND(c.w.l);
 	NSBLEND(c.w.c);
 	NSBLEND(c.w.h);
+	NSBLEND(c.tw);
 	NSBLEND(c.cx);
 
 	NSBLEND(l.o);
@@ -1183,7 +1216,7 @@ gammapweights *src2, double wgt2
 }
 
 /* Expand the compact form of weights into the explicit form. */
-/* The explicit form is light and dark of red, yellow, green, cyan, blue, magenta & neutral*/
+/* The explicit form is light and dark of red, yellow, green, cyan, blue, magenta & neutral */
 /* Return nz on error */
 int expand_weights(gammapweights out[14], gammapweights *in) {
 	int i, j;
@@ -1299,7 +1332,7 @@ int expand_weights(gammapweights out[14], gammapweights *in) {
 	return 0;
 }
 
-/* Tweak weights acording to extra cmy cusp flags or rel override */
+/* Tweak weights acording to extra cmy cusp mapping flags or rel override */
 void tweak_weights(gammapweights out[14], int dst_cmymap, int rel_oride)  {
 	int i;
 
@@ -1311,6 +1344,7 @@ void tweak_weights(gammapweights out[14], int dst_cmymap, int rel_oride)  {
 			out[i].c.w.l = 1.0;		/* 100% mapping */
 			out[i].c.w.c = 1.0;
 			out[i].c.w.h = 1.0;
+			out[i].c.tw = 1.0;		/* Moderate twist */
 			out[i].c.cx = 1.0;		/* No expansion */
 		}
 
@@ -1364,7 +1398,7 @@ static void comp_iweight(iweight *iw, double o, double h, double l) {
 }
 
 /* Given a point location, return the interpolated weighting values at that point. */
-/* (Typically non-cusp mapped source location assumed, and source gamut cusps used) */
+/* (Typically non-cusp mapped source location assumed, and source gamut cusps used.) */
 /* (Assume init_ce() has been called to setip smthopt!) */
 void interp_xweights(gamut *gam, gammapweights *out, double pos[3], 
                      gammapweights in[14], smthopt *s, int cvec) {
@@ -1787,13 +1821,18 @@ datao map_oh
 	if (si_gam != sc_gam) {
 		if ((sci_gam = new_gamut(0.0, 0, 0)) == NULL) {
 			fprintf(stderr,"gamut map: new_gamut failed\n");
+			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
 		}
 		sci_gam->intersect(sci_gam, sc_gam, si_gam);
 #ifdef SAVE_VRMLS
-		printf("###### gamut/nearsmth.c: writing diagnostic sci_gam.wrl and di_gam.wrl\n");
-		sci_gam->write_vrml(sci_gam, "sci_gam.wrl", 1, 0);
+		{
+			char sci_gam_name[40] = "sci_gam";
+			strcat(sci_gam_name, vrml_ext());
+			printf("###### gamut/nearsmth.c: writing diagnostic sci_gam%s and di_gam%s\n",vrml_ext(),vrml_ext());
+			sci_gam->write_vrml(sci_gam, sci_gam_name, 1, 0);
+		}
 #endif
 	}
 
@@ -1803,6 +1842,7 @@ datao map_oh
 			fprintf(stderr,"gamut map: new_gamut failed\n");
 			if (si_gam != sc_gam)
 				sci_gam->del(sci_gam);
+			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
 		}
@@ -1813,6 +1853,7 @@ datao map_oh
 				di_gam->del(di_gam);
 				if (si_gam != sc_gam)
 					sci_gam->del(sci_gam);
+				free_nearsmth(smp, nmpts);
 				*npp = 0;
 				return NULL;
 			}
@@ -1828,7 +1869,11 @@ datao map_oh
 	}
 
 #ifdef SAVE_VRMLS
-	di_gam->write_vrml(di_gam, "di_gam.wrl", 1, 0);
+	{
+		char di_gam_name[30] = "di_gam";
+		strcat(di_gam_name, vrml_ext());
+		di_gam->write_vrml(di_gam, di_gam_name, 1, 0);
+	}
 #endif
 
 	/* Create a list of the mapping guide points, setup for a null mapping */
@@ -1868,6 +1913,7 @@ datao map_oh
 		smp[i].dv[2] = smp[i].sv[2] = smp[i]._sv[2] = imv[2];
 		smp[i].sgam = sci_gam;
 		smp[i].dgam = sci_gam;
+		smp[i].mapres = mapres;	
 
 		VB(("In Src %d = %f %f %f\n",i,smp[i].sv[0],smp[i].sv[1],smp[i].sv[2]));
 
@@ -1952,7 +1998,6 @@ datao map_oh
 		imv[2] = smp[i]._sv[2];
 
 		/* Compute the cusp rotated version of the cspace/image points */
-		/* Note that we're not elevating yet! */
 		comp_ce(&opts, rimv, imv, &smp[i].wt);
 		VB(("%f de, ix %d: cusp mapped %f %f %f -> %f %f %f\n", icmNorm33(rimv,imv), i, imv[0], imv[1], imv[2], rimv[0], rimv[1], rimv[2]));
 		rimr = icmNorm33(rimv, sci_gam->cent);
@@ -1976,7 +2021,7 @@ datao map_oh
 		smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);
 
 		/* Re-lookup radialy equivalent point on destination gamut, */
-		/* to match rotated/elevated source */
+		/* to match rotated source */
 		smp[i].drr = smp[i].dgam->radial(smp[i].dgam, smp[i].drv, smp[i].sv);
 
 		/* A default average neighbour value */
@@ -2086,7 +2131,7 @@ datao map_oh
 			for (i = 0; i < nmpts; i++) {
 				double x, y, z, tv[3];
 
-				/* compute rotated location */
+				/* compute tangent alignment rotated location */
 				icmNormalize33(tt, smp[i].sv, smp[ix].sgam->cent, 1.0);
 				icmMul3By3x4(tv, mm, tt);
 				icmMulBy2x2(&tv[1], m2, &tv[1]);
@@ -2203,8 +2248,8 @@ datao map_oh
 		for (i = 0; i < nmpts; i++) {
 			double maxw;
 
-			if ((wrl = new_vrml("weights.wrl", 1)) == NULL)
-				error("New vrml failed");
+			if ((wrl = new_vrml("weights", 1, vrml_lab)) == NULL)
+				error("New %s failed for '%s%s'",vrml_format(),"weights",vrml_ext());
 
 			maxw = 0.0;
 			for (j = 0; j < smp[i].nnd; j++) {
@@ -2219,7 +2264,7 @@ datao map_oh
 			wrl->make_lines(wrl, 0, 2);
 
 			wrl->del(wrl);
-			printf("Waiting for input after writing 'weights.wrl' for point %d:\n",i);
+			printf("Waiting for input after writing 'weights%s' for point %d:\n",vrml_ext(),i);
 			getchar();
 		}
 	}
@@ -2296,8 +2341,8 @@ datao map_oh
 				nv[1] = iv[1] + d_rand(-20.0, 20.0);
 			}
 			if (brv == 1e38) {		/* We failed to get a result */
-				VB(("multiple powells failed to get a result\n"));
-#ifdef NEVER
+				fprintf(stderr, "multiple powells failed to get a result (1)\n");
+#ifdef DEBUG_POWELL_FAILS
 				/* Optimise the point with debug on */
 				opts.debug = 1;
 				icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
@@ -2305,12 +2350,12 @@ datao map_oh
 				nv[1] = iv[1] = iv[2];
 				powell(NULL, 2, nv, s, 0.01, 1000, optfunc1, (void *)(&opts), NULL, NULL);
 #endif
-				free_nearsmth(smp, nmpts);
-				*npp = 0;
 				if (si_gam != sc_gam)
 					sci_gam->del(sci_gam);
 				if (di_gam != sci_gam && di_gam != sci_gam)
 					di_gam->del(di_gam);
+				free_nearsmth(smp, nmpts);
+				*npp = 0;
 				return NULL;
 			}
 		
@@ -2401,8 +2446,8 @@ datao map_oh
 				nv[1] = iv[1] + d_rand(-20.0, 20.0);
 			}
 			if (brv == 1e38) {		/* We failed to get a result */
-				VB(("multiple powells failed to get a result\n"));
-#ifdef NEVER
+				fprintf(stderr, "multiple powells failed to get a result (2)\n");
+#ifdef DEBUG_POWELL_FAILS
 				/* Optimise the point with debug on */
 				opts.debug = 1;
 				icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
@@ -2410,12 +2455,12 @@ datao map_oh
 				nv[1] = iv[1] = iv[2];
 				powell(NULL, 2, nv, s, 0.01, 1000, optfunc2, (void *)(&opts), NULL, NULL);
 #endif
-				free_nearsmth(smp, nmpts);
-				*npp = 0;
 				if (si_gam != sc_gam)
 					sci_gam->del(sci_gam);
 				if (di_gam != sci_gam && di_gam != sci_gam)
 					di_gam->del(di_gam);
+				free_nearsmth(smp, nmpts);
+				*npp = 0;
 				return NULL;
 			}
 		
@@ -2481,12 +2526,13 @@ datao map_oh
 
 		if ((shgam = new_gamut(di_gam->getsres(di_gam), di_gam->getisjab(di_gam),
 		                                           di_gam->getisrast(di_gam))) == NULL) {
-			free_nearsmth(smp, nmpts);
-			*npp = 0;
+			fprintf(stderr, "new_gamut failed\n");
 			if (si_gam != sc_gam)
 				sci_gam->del(sci_gam);
 			if (di_gam != sci_gam && di_gam != sci_gam)
 				di_gam->del(di_gam);
+			free_nearsmth(smp, nmpts);
+			*npp = 0;
 			return NULL;
 		}
 
@@ -2521,13 +2567,13 @@ datao map_oh
 
 		if ((gpnts = (cow *)malloc(nmpts * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
-			free_nearsmth(smp, nmpts);
-			*npp = 0;
 			shgam->del(shgam);
 			if (si_gam != sc_gam)
 				sci_gam->del(sci_gam);
 			if (di_gam != sci_gam && di_gam != sci_gam)
 				di_gam->del(di_gam);
+			free_nearsmth(smp, nmpts);
+			*npp = 0;
 			return NULL;
 		}
 
@@ -2569,14 +2615,22 @@ datao map_oh
 				nv[1] = iv[1] + d_rand(-20.0, 20.0);
 			}
 			if (brv == 1e38) {		/* We failed to get a result */
-				VB(("multiple powells failed to get a result\n"));
+				fprintf(stderr, "multiple powells failed to get a result (3)\n");
+#ifdef DEBUG_POWELL_FAILS
+				/* Optimise the point with debug on */
+				opts.debug = 1;
+				icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
+				nv[0] = iv[0] = iv[1];
+				nv[1] = iv[1] = iv[2];
+				powell(NULL, 2, nv, s, 0.01, 1000, optfunc1a, (void *)(&opts), NULL, NULL);
+#endif
 				shgam->del(shgam);		/* Done with this */
-				free_nearsmth(smp, nmpts);
-				*npp = 0;
 				if (si_gam != sc_gam)
 					sci_gam->del(sci_gam);
 				if (di_gam != sci_gam && di_gam != sci_gam)
 					di_gam->del(di_gam);
+				free_nearsmth(smp, nmpts);
+				*npp = 0;
 				return NULL;
 			}
 		
@@ -2628,12 +2682,14 @@ datao map_oh
 			double green[3]  = { 0.0, 1.0, 0.0 };
 			double tmp[3];
 			co cp;
+
 #ifdef PLOT_AXES
             doaxes = 1;
 #endif
 
-			printf("###### gamut/nearsmth.c: writing diagnostic evects.wrl\n");
-			wrl = new_vrml("evects.wrl", doaxes);
+			printf("###### gamut/nearsmth.c: writing diagnostic evects%s\n",vrml_ext());
+			if ((wrl = new_vrml("evects", doaxes, vrml_lab)) == NULL)
+				error("new_vrml failed for '%s%s'","evects",vrml_ext());
 			wrl->make_gamut_surface_2(wrl, di_gam, 0.6, 0, cc);
 			cc[0] = -1.0;
 			wrl->make_gamut_surface(wrl, shgam, 0.2, cc);
@@ -2890,14 +2946,14 @@ datao map_oh
 
 		if ((gpnts = (cow *)malloc(nmpts * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
-			free_nearsmth(smp, nmpts);
-			*npp = 0;
 			if (evectmap != NULL)
 				evectmap->del(evectmap);
 			if (si_gam != sc_gam)
 				sci_gam->del(sci_gam);
 			if (di_gam != sci_gam && di_gam != sci_gam)
 				di_gam->del(di_gam);
+			free_nearsmth(smp, nmpts);
+			*npp = 0;
 			return NULL;
 		}
 
@@ -3131,7 +3187,7 @@ datao map_oh
 
 	VB(("Final guide points:\n"));
 
-	/* Restore the actual non elevated and cust rotated source point */
+	/* Restore the actual non cusp rotated source point */
 	for (i = 0; i < nmpts; i++) {
 
 		VB(("Src %d = %f %f %f\n",i,smp[i].sv[0],smp[i].sv[1],smp[i].sv[2]));
@@ -3152,7 +3208,10 @@ datao map_oh
 	/* Create sub-surface points. */
 	for (i = 0; i < nmpts; i++) {
 
-		/* Create a sub-surface mapping point too. */
+		/* Create sub-surface mapping points too. We control the degree */
+		/* of knee with a extrapolated destination point dv2, where */
+		/* the degree of extrapolation is inversly related to the sharpness of the knee. */
+		/* A third point maps 1:1 with a weight that is related the sharpness. */
 		/* Note that not every mapping point has a sub-surface point, */
 		/* and that the gflag and vflag will be nz if it does. */
 		/* We're assuming here that the dv is close to being on the */
@@ -3160,7 +3219,7 @@ datao map_oh
 		/* close to 1.0 at the intended destination gamut. */
 		{
 			double mv[3], ml, nv[3];		/* Mapping vector & length, noralized mv */ 
-			double minv[3], maxv[3];
+			double minv[3], maxv[3];		/* (Not used) */
 			double mint, maxt;
 			gtri *mintri, *maxtri;
 
@@ -3174,7 +3233,9 @@ datao map_oh
 
 //if (PFCOND) printf("~1 mapping %d = %f %f %f -> %f %f %f\n", i, smp[i].sv[0],smp[i].sv[1],smp[i].sv[2],smp[i].dv[0],smp[i].dv[1],smp[i].dv[2]);
 //if (PFCOND) printf("~1 vector %f %f %f, len %f\n",  mv[0], mv[1], mv[2],ml);
+
 				/* Compute actual depth of ray into destination gamut */
+				/* to determine if this is expansion or contraction. */
 				if (di_gam->vector_isect(di_gam, smp[i].sv, smp[i].dv,
 				                    minv, maxv, &mint, &maxt, &mintri, &maxtri) != 0) {
 					double wp[3], bp[3];		/* Gamut white and black points */
@@ -3190,22 +3251,41 @@ datao map_oh
 					/* a sanity check on the available depth. */
 					if (d_gam->getwb(d_gam, NULL, NULL, NULL, wp, dst_kbp ? NULL : bp, dst_kbp ? bp : NULL) == 0) {
 						if (icmLineLineClosest(napoint, NULL, &p1, NULL, bp, wp,
-						                       smp[i].sv,smp[i].dv) == 0) {
-							/* Clip it */
-							if (p1 < 0.0)
-								icmCpy3(napoint, bp);
-							else if (p1 > 1.0)
-								icmCpy3(napoint, wp);
+						                       smp[i].sv, smp[i].dv) == 0) {
+							double nalev[3];
+							icmCpy3(nalev, napoint);
 
 //if (PFCOND) printf("~1 neutral axis point = %f %f %f\n", napoint[0], napoint[1], napoint[2]);
 							/* Compute a normalized available depth from distance */
 							/* to closest to neautral axis point */
 							if ((mint > 1e-8 && maxt > -1e-8)		/* G. & V. Compression */
 							 || ((mint < -1e-8 && maxt > -1e-8)		/* G. Exp & V. comp. */
-							  && (fabs(mint) < (fabs(maxt) - 1e-8))))
+							  && (fabs(mint) < (fabs(maxt) - 1e-8)))) {
+								/* Compression */
+
+								/* Moderate the neutral axis point to be half way */
+								/* between sv->dv direction, and horizontal. */
+								nalev[0] = smp[i].dv[0];
+								icmBlend3(napoint, napoint, nalev, 0.5);
+								/* Clip it to be between black and white point */
+								if (napoint[0] < bp[0])
+									icmCpy3(napoint, bp);
+								else if (napoint[0] > wp[0])
+									icmCpy3(napoint, wp);
 								adepth2 = icmNorm33(napoint, smp[i].dv);
-							else				/* Expansion */
+							} else {
+								/* Expansion */
+								/* Moderate the neutral axis point to be half way */
+								/* between sv->dv direction, and horizontal. */
+								nalev[0] = smp[i].sv[0];
+								icmBlend3(napoint, napoint, nalev, 0.5);
+								/* Clip it to be between black and white point */
+								if (napoint[0] < bp[0])
+									icmCpy3(napoint, bp);
+								else if (napoint[0] > wp[0])
+									icmCpy3(napoint, wp);
 								adepth2 = icmNorm33(napoint, smp[i].sv);
+							}
 						}
 #ifdef VERB
 						  else {
@@ -3232,10 +3312,11 @@ datao map_oh
 						if (fabs(mint - 1.0) < fabs(maxt) - 1.0
 						 && smp[i].dgam->radial(smp[i].dgam, NULL, smp[i].dv)
 						  < smp[i].sgam->radial(smp[i].sgam, NULL, smp[i].dv)) {
+							double sgamcknf = gamcknf * 0.6;	/* [0.7] Scale to limit overshoot */
 
 //if (PFCOND) printf("~1 point is gamut comp & vect comp.\n");
 //if (PFCOND) printf("~1 point is gamut comp & vect comp. mint %f maxt %f\n",mint,maxt);
-							adepth1 = ml * 0.5 * (maxt + mint - 2.0);
+							adepth1 = ml * 0.5 * (maxt + mint - 2.0);	/* Average depth */
 #ifdef CYLIN_SUBVEC
 							adepth = adepth2;		/* Always cylindrical depth */
 #else
@@ -3243,36 +3324,45 @@ datao map_oh
 #endif
 							if (adepth1 < (0.5 * adepth2))
 								continue;
+
 //if (PFCOND) printf("~1 dir adepth %f, radial adapeth %f\n",adepth1,adepth2);
-							adepth *= 0.9;				/* Can't use 100% */
+							adepth *= 0.9;			/* Can't use 100% */
 							smp[i].gflag = 1;		/* Gamut compression and */
 							smp[i].vflag = 1;		/* vector compression */
 
 							/* Compute available depth and knee factor adjusted sub-vector */
 							icmCpy3(smp[i].sv2, smp[i].dv);		/* Sub source is guide dest */
-							ml *= (1.0 - gamcknf);				/* Scale by knee */
-							adepth *= (1.0 - gamcknf);
+							ml *= (1.0 - sgamcknf);				/* Scale by knee */
+							adepth *= (1.0 - sgamcknf);
 							sml = ml < adepth ? ml : adepth;	/* Smaller of two */
 //if (PFCOND) printf("~1 adjusted subvec len %f\n",sml);
 							icmNormalize3(mv2, mv, sml);		/* Full sub-surf disp. == no knee */
 							icmAdd3(mv2, smp[i].sv2, mv2);		/* Knee adjusted destination */
 	
 //if (PFCOND) printf("~1 before blend sv2 %f %f %f, dv2 %f %f %f\n", smp[i].sv2[0], smp[i].sv2[1], smp[i].sv2[2], mv2[0], mv2[1], mv2[2]);
-							/* Blend towards n.axis as length of sub vector approaches */
-							/* distance to neutral axis. */
+							/* Compute point at sml depth from sv2 towards napoint */
 							icmSub3(natarg, napoint, smp[i].sv2);
 							icmNormalize3(natarg, natarg, sml);		/* Sub vector towards n.axis */
 							icmAdd3(natarg, natarg, smp[i].sv2);	/* n.axis target */
 #ifdef CYLIN_SUBVEC
 							icmCpy3(mv2, natarg);			/* cylindrical direction vector */
 #else
+							/* Blend towards n.axis as length of sub vector approaches */
+							/* distance to neutral axis. */
 							icmBlend3(mv2, mv2, natarg, sml/adepth2);
 #endif /* CYLIN_SUBVEC */
 //if (PFCOND) printf("~1 after blend sv2 %f %f %f, dv2 %f %f %f\n", smp[i].sv2[0], smp[i].sv2[1], smp[i].sv2[2], mv2[0], mv2[1], mv2[2]);
 							
 							icmCpy3(smp[i].dv2, mv2);				/* Destination */
 							icmCpy3(smp[i].temp, smp[i].dv2);		/* Save a copy to temp */
-							smp[i].w2 = 0.8;
+							smp[i].w2 = 0.7;						/* De-weight due to density */
+
+							icmBlend3(mv2, mv2, napoint, 0.6);		/* Half way to na */
+							icmCpy3(smp[i].sd3, mv2);
+
+							smp[i].w3 = 0.4 * gamcknf;		/* [0.3] Weight with knee factor */
+															/* and to control overshoot */
+
 						} else {
 //if (PFCOND) printf("~1 point is gamut exp & vect exp. mint %f maxt %f\n",mint,maxt);
 							smp[i].gflag = 2;		/* Gamut expansion and */
@@ -3322,6 +3412,10 @@ datao map_oh
 						icmCpy3(smp[i].sv2, mv2); 			/* Source */
 						icmCpy3(smp[i].temp, smp[i].dv2);	/* Save a copy to temp */
 						smp[i].w2 = 0.8;
+
+						icmBlend3(mv2, mv2, napoint, 0.5);		/* Half way to na */
+						icmCpy3(smp[i].sd3, mv2);
+						smp[i].w3 = 0.3 * gamcknf;			/* Weight with knee fact */
 
 					/* Conflicted case */
 					} else {
@@ -3421,9 +3515,11 @@ void free_nearsmth(nearsmth *smp, int nmpts) {
 /* =================================================================== */
 
 #if defined(SAVE_VRMLS) && defined(PLOT_MAPPING_INFLUENCE)
+
 /* Create a plot indicating how the source mapping has been guided by the */
-/* various weighting forces */
+/* various weighting forces. */
 static void create_influence_plot(nearsmth *smp, int nmpts) {
+	int i, j, k;
 	gamut *gam;
 	int src = 0;			/* 1 = src, 0 = dst gamuts */
 	vrml *wrl = NULL;
@@ -3440,20 +3536,14 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 	int ix;
 
 	if (src)
-		gam = sci_gam;
+		gam = smp->sgam;
 	else
-		gam = di_gam;
+		gam = smp->dgam;
 
 	/* Setup the scattered data points */
 	if ((fpnts = (co *)malloc((nmpts) * sizeof(co))) == NULL) { 
 		fprintf(stderr,"gamut map: Malloc of diagnostic mapping setup points failed\n");
-		if (si_gam != sc_gam)
-			sci_gam->del(sci_gam);
-		if (di_gam != sci_gam && di_gam != sci_gam)
-			di_gam->del(di_gam);
-		free_nearsmth(smp, nmpts);
-		*npp = 0;
-		return NULL;
+		return;
 	}
 
 	/* Compute error values and diagnostic color */
@@ -3465,7 +3555,7 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 		/* Source value location */
 		if (src) {
 			for (j = 0; j < 3; j++)
-				fpnts[i].p[j] = smp[i]._sv[j];		/* Non rotated and elevated */
+				fpnts[i].p[j] = smp[i]._sv[j];		/* Non cusp rotated */
 		} else {		/* Dest value location */
 			for (j = 0; j < 3; j++)
 				fpnts[i].p[j] = smp[i].dv[j];
@@ -3502,7 +3592,7 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 
 	/* Create the diagnostic color rspl */
 	for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
-		gres[j] = mapres;
+		gres[j] = smp->mapres;
 		avgdev[j] = 0.001;
 	}
 	swdiag = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
@@ -3510,19 +3600,11 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 
 	/* Now create a plot of the sci_gam with the vertexes colored acording to the */
 	/* diagnostic map. */
-	if ((wrl = new_vrml("sci_gam_wt.wrl", 1)) == NULL) {
-		fprintf(stderr,"gamut map: new_vrml failed\n");
-		if (fpnts != NULL)
-			free(fpnts);
-		if (swdiag != NULL)
-			swdiag->del(swdiag);
-		if (si_gam != sc_gam)
-			sci_gam->del(sci_gam);
-		if (di_gam != sci_gam && di_gam != sci_gam)
-			di_gam->del(di_gam);
-		free_nearsmth(smp, nmpts);
-		*npp = 0;
-		return NULL;
+	if ((wrl = new_vrml("sci_gam_wt", 1, vrml_lab)) == NULL) {
+		fprintf(stderr,"gamut map: new_vrml failed for '%s%s'\n","sci_gam_wt",vrm_ext());
+		swdiag->del(swdiag);
+		free(fpnts);
+		return;
 	}
 
 	/* Plot the gamut triangle vertexes */
@@ -3532,6 +3614,7 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 
 		ix = gam->getvert(gam, NULL, pp.p, ix);
 		swdiag->interp(swdiag, &pp);
+		icmClip3(pp.v, pp.v);
 		wrl->add_col_vertex(wrl, 0, pp.p, pp.v);
 	}
 	gam->startnexttri(gam);
@@ -3543,7 +3626,7 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 	}
 	wrl->make_triangles_vc(wrl, 0, 0.0);
 
-	printf("Writing sci_gam_wt.wrl file\n");
+	printf("Writing sci_gam_wt%s file\n",vrml_ext());
 	wrl->del(wrl);		/* Write file */
 	free(fpnts);
 	swdiag->del(swdiag);

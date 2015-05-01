@@ -30,20 +30,16 @@ Recent suggestions:
 
 	Add flat field support to scanin
 
-	Add "dynamic range" option to targen to concentrate
-	samples near black, + tweak colprof to skew grid
-	in that direction too.
-
 	Add DICOM support to dispcal.
 
 	Change CIECAM02 to simplified & improved version
 
-	add filtered mode for tiffgamut
+	add filtered mode for tiffgamut (done ?)
 
 	add dispcal option to set white point to closest point
 	on the white locus to RBB 1 1 1
 
-	add option to dark cal spectro's evern N readings in dispsup.
+	add option to dark cal spectro's every N readings in dispsup.
 
 	Add some i1pro RevE UV support for improved FWA
 

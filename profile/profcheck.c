@@ -27,6 +27,8 @@
 
 #undef DEBUG
 
+#undef HACK					/* Print per patch XYZ differences */
+
 #define IMP_MONO			/* Turn on development code */
 
 #define verbo stdout
@@ -42,6 +44,9 @@
 #include "xicc.h"
 #include "insttypes.h"
 #include "sort.h"
+#include "plot.h"
+#include "vrml.h"
+#include "ui.h"
 
 void
 usage(void) {
@@ -51,10 +56,13 @@ usage(void) {
 	fprintf(stderr," -v [level]      Verbosity level (default 1), 2 to print each DE\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
-	fprintf(stderr," -w              create VRML visualisation (iccprofile.wrl)\n");
-	fprintf(stderr," -x              Use VRML axes\n");
-	fprintf(stderr," -m              Make VRML lines a minimum of 0.5\n");
+	fprintf(stderr," -w              create %s visualisation (iccprofile%s)\n",vrml_format(),vrml_ext());
+	fprintf(stderr," -x              Use %s axes\n",vrml_format());
+	fprintf(stderr," -m              Make %s lines a minimum of 0.5\n",vrml_format());
 	fprintf(stderr," -e              Color vectors acording to delta E\n");
+	fprintf(stderr," -h              Plot a histogram of delta E's\n");
+	fprintf(stderr," -s              Sort output by delta E\n");
+	fprintf(stderr," -P N.NN         Create a pruned .ti3 with points less or equal to N.NN delta E\n");
 	fprintf(stderr," -d devval1,deval2,devvalN\n");
 	fprintf(stderr,"                 Specify a device value to sort against\n");
 	fprintf(stderr," -p              Sort device value by PCS (Lab) target\n");
@@ -70,12 +78,7 @@ usage(void) {
 	exit(1);
 	}
 
-FILE *start_vrml(char *name, int doaxes);
-void start_line_set(FILE *wrl);
-void add_vertex(FILE *wrl, double pp[3]);
-void make_lines(FILE *wrl, int ppset);
-void make_de_lines(FILE *wrl);
-void end_vrml(FILE *wrl);
+static void DE2RGB(double *out, double in);
 
 /* Patch value type */
 typedef struct {
@@ -83,9 +86,20 @@ typedef struct {
 	char slo[50];		/* sample location, "" if not known */
 	double p[MAX_CHAN];	/* Device value */
 	double v[3];		/* CIE value */
-	double dp;			/* Delta from target value */
-	double dv;			/* Delta from CIE value */
+
+	double pv[3];		/* Profile CIE value */
+	double de;			/* Delta E to profile CIE value */
+
+	double dp;			/* Delta p[] from target device value */
+	double dv;			/* Delta E from CIE value */
 } pval;
+
+/* Histogram bin type */
+typedef struct {
+	int count;			/* Raw count */
+	double val;			/* Normalized value */
+	double min, max;	/* Bin range */
+} hbin;
 
 int main(int argc, char *argv[])
 {
@@ -104,8 +118,8 @@ int main(int argc, char *argv[])
 	icRenderingIntent intent = icAbsoluteColorimetric;
 	icc *rd_icco;
 	icmLuBase *luo;
-	char out_name[MAXNAMEL+1], *xl;		/* VRML name */
-	FILE *wrl = NULL;
+	char out_name[MAXNAMEL+1], *xl;		/* VRML/X3D name */
+	vrml *wrl = NULL;
 
 	int fwacomp = 0;			/* FWA compensation */
 	int isdisp = 0;				/* nz if this is a display device, 0 if output */
@@ -117,12 +131,18 @@ int main(int argc, char *argv[])
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
 
+	int sortbyde = 0;			/* Sort by delta E */
+
 	int ddevv = 0;				/* Do device value sort */
 	double devval[MAX_CHAN];	/* device value to sort on */
-	int sortbypcs = 0;			/* Sort by PCS */
+	int sortbypcs = 0;			/* Sort by PCS error to device target */
+
+	int dohisto = 0;			/* Plot histogram of delta E's */
+	double prune = 0.0;			/* If > 0.0, created a pruned .ti3 file */
 
 	int npat;					/* Number of patches */
 	pval *tpat;					/* Patch input values */
+	pval **stpat;				/* Pointers to internal sorted tpat[] */
 	int i, j, rv = 0;
 	icColorSpaceSignature devspace = 0;	/* The device colorspace */
 	int isAdditive = 0;			/* 0 if subtractive, 1 if additive colorspace */
@@ -168,7 +188,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			/* VRML */
+			/* VRML/X3D */
 			else if (argv[fa][1] == 'w')
 				dovrml = 1;
 
@@ -192,6 +212,23 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'k') {
 				cie94 = 0;
 				cie2k = 1;
+			}
+
+			/* Plot histogram */
+			else if (argv[fa][1] == 'h')
+				dohisto = 1;
+
+			/* Sort by delta E */
+			else if (argv[fa][1] == 's')
+				sortbyde = 1;
+
+			/* Create a pruned .ti3 */
+			else if (argv[fa][1] == 'P') {
+				fa = nfa;
+				if (na == NULL) usage();
+				prune = atof(na);
+				if (prune <= 0.0)
+					usage();
 			}
 
 			/* Device sort value */
@@ -354,7 +391,7 @@ int main(int argc, char *argv[])
 	strncpy(out_name,iccname,MAXNAMEL-4); out_name[MAXNAMEL-4] = '\000';
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
-	strcpy(xl,".wrl");
+	xl[0] = '\000';			/* Remove extension */
 
 	if (fwacomp && spec == 0)
 		error ("FWA compensation only works when viewer and/or illuminant selected");
@@ -503,6 +540,12 @@ int main(int argc, char *argv[])
 	/* Allocate arrays to hold test patch input and output values */
 	if ((tpat = (pval *)malloc(sizeof(pval) * npat)) == NULL)
 		error("Malloc failed - tpat[]");
+
+	if ((stpat = (pval **)malloc(sizeof(pval *) * npat)) == NULL)
+		error("Malloc failed - stpat[]");
+
+	for (i = 0; i < npat; i++)
+		stpat[i] = &tpat[i];
 
 	/* Read in the CGATs fields */
 	{
@@ -840,11 +883,212 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		icg->del(icg);		/* Clean up */
 	}	/* End of reading in CGATs file */
 
 	/* - - - - - - - - - - */
-	/* Check the forward profile accuracy against the data points */
+	/* Compute the delta E of each point against the profile value */
+
+	/* Open up the file for reading */
+	if ((rd_fp = new_icmFileStd_name(iccname,"r")) == NULL)
+		error("Write: Can't open file '%s'",iccname);
+
+	if ((rd_icco = new_icc()) == NULL)
+		error("Read: Creation of ICC object failed");
+
+	/* Read the header and tag list */
+	if ((rv = rd_icco->read(rd_icco,rd_fp,0)) != 0)
+		error("Read: %d, %s",rv,rd_icco->err);
+
+	/* Get the Fwd table, absolute with Lab override */
+	if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, intent,
+	                              icSigLabData, icmLuOrdNorm)) == NULL) {
+		error("%d, %s",rd_icco->errc, rd_icco->err);
+	}
+
+	for (i = 0; i < npat; i++) {
+
+		/* Lookup the patch value in the profile */
+		if (luo->lookup(luo, tpat[i].pv, tpat[i].p) > 1)
+			error("%d, %s",rd_icco->errc,rd_icco->err);
+
+		if (cie2k)
+			tpat[i].de = icmCIE2K(tpat[i].v, tpat[i].pv);
+		else if (cie94)
+			tpat[i].de = icmCIE94(tpat[i].v, tpat[i].pv);
+		else
+			tpat[i].de = icmLabDE(tpat[i].v, tpat[i].pv);
+	}
+
+	/* - - - - - - - - - - */
+	/* Sort by delta E */
+	if (sortbyde) {
+		/* Sort the dE's */
+#define HEAP_COMPARE(A,B) (A.de > B.de)
+		HEAPSORT(pval, tpat, npat);
+#undef HEAP_COMPARE
+	}
+
+	/* - - - - - - - - - - */
+	/* Plot a dE histogram */
+	if (dohisto) {
+		double demax = -1e6, demin = 1e6;
+		int maxbins = 50;		/* Maximum bins */
+		int minbins = 20;		/* Target minimum bins (depends on distribution) */ 
+		int mincount = 10;		/* Minimum number of points in a bin */
+		double mbwidth;
+		int nbins = 0;
+		hbin *bins = NULL;
+		double tval;
+		double *x, *y;
+		
+		/* Figure out the range of dE's */
+		for (i = 0; i < npat; i++) {
+			double de = tpat[i].de;
+
+			if (de > demax)
+				demax = de;
+			if (de < demin)
+				demin = de;
+		}
+
+		if (demax < 1e-6)
+			error("histogram: dE range is too small to plot");
+
+		/* Bin width that gives maxbins */
+		mbwidth = demax / maxbins;
+		
+		/* Reduce mincount if needed to get minbins */
+		if (npat/minbins < mincount)
+			mincount = npat/minbins;
+
+		if ((bins = (hbin *)calloc(maxbins, sizeof(hbin))) == NULL)
+			error("malloc of histogram bins failed");
+
+		/* Sort the dE's */
+#define HEAP_COMPARE(A,B) (A->de < B->de)
+		HEAPSORT(pval *, stpat, npat);
+#undef HEAP_COMPARE
+
+		/* Create bins and add points */
+		bins[0].min = 0.0;
+		for (nbins = i = 0; i < npat && nbins < maxbins; i++) {
+			double de = stpat[i]->de;
+
+			/* Move on to next bin ? */
+			if (bins[nbins].count >= mincount
+			 && (de - bins[nbins].min) >= mbwidth) {
+				if (i > 0)
+					bins[nbins].max = 0.5 * (de + stpat[i-1]->de);
+				else
+					bins[nbins].max = de;
+				nbins++;
+				bins[nbins].min = bins[nbins-1].max; 
+			} 
+			bins[nbins].count++;
+			bins[nbins].max = de;
+		}
+		if (bins[nbins].count != 0)
+			nbins++;
+
+		/* Compute value */
+		tval = 0.0;
+		for (i = 0; i < nbins; i++) {
+			bins[i].val = bins[i].count/(bins[i].max - bins[i].min);
+			tval += bins[i].val;
+		}
+
+		tval /= 100.0;		/* Make it % */
+		for (i = 0; i < nbins; i++) {
+			bins[i].val /= tval;
+			if (verb) fprintf(verbo,"Bin %d, %f - %f, % 2.4f%%, count %d\n",
+			             i,bins[i].min,bins[i].max,bins[i].val,bins[i].count);
+		}
+
+		/* Plot it */
+		if ((x = (double *)calloc(nbins+1, sizeof(double))) == NULL)
+			error("malloc of histogram x array");
+		if ((y = (double *)calloc(nbins+1, sizeof(double))) == NULL)
+			error("malloc of histogram y array");
+
+		for (i = 0; i < nbins; i++) {
+			x[i] = 0.5 * (bins[i].min + bins[i].max);
+			y[i] = bins[i].val;
+		}
+		x[i] = demax;
+		y[i] = 0.0;
+		do_plot(x, y, NULL, NULL, nbins+1);
+
+		free(y);
+		free(x);
+		free(bins);
+	}
+
+	/* - - - - - - - - - - */
+	/* Create a pruned .ti3 file */
+	if (prune > 0.0) {
+		char *cp, outname[MAXNAMEL+31];
+		cgats *ocg;
+		cgats_set_elem *setel;		/* Array of set value elements */
+
+		strcpy(outname, ti3name);
+		if ((cp = strrchr(outname, '.')) == NULL)
+			cp = outname + strlen(outname);
+		sprintf(cp, "_p%.2f.ti3",prune);
+		
+		if (verb) fprintf(verbo,"Created pruned file '%s'\n",outname);
+
+		/* Create the output files */
+		if ((ocg = new_cgats()) == NULL)
+			error("Failed to create cgats object");
+	
+		/* Duplicate the type of the file */
+		if (icg->t[0].tt == cgats_X) {
+			ocg->add_other(ocg, icg->cgats_type);
+			ocg->add_table(ocg, tt_other, 0);
+		} else if (icg->t[0].tt == tt_other) {
+			ocg->add_other(ocg, icg->others[icg->t[0].oi]);
+			ocg->add_table(ocg, tt_other, 0);
+		} else {
+			ocg->add_table(ocg, icg->t[0].tt, 0);
+		}
+	
+		/* Duplicate all the keywords */
+		for (i = 0; i < icg->t[0].nkwords; i++) {
+			ocg->add_kword(ocg, 0, icg->t[0].ksym[i], icg->t[0].kdata[i], NULL);
+		}
+	
+		/* Duplicate all of the fields */
+		for (i = 0; i < icg->t[0].nfields; i++) {
+			ocg->add_field(ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
+		}
+	
+		if ((setel = (cgats_set_elem *)malloc(
+		     sizeof(cgats_set_elem) * icg->t[0].nfields)) == NULL)
+			error("Malloc failed!");
+	
+		/* Copy them approproately */
+		for (i = 0; i < icg->t[0].nsets; i++) {
+
+			if (tpat[i].de <= prune) {
+				icg->get_setarr(icg, 0, i, setel);
+				ocg->add_setarr(ocg, 0, setel);
+			}
+		}
+	
+		if (verb) {
+			double acc;
+
+			acc = (double)ocg->t[0].nsets/(double)icg->t[0].nsets * 100.0;
+			fprintf(verbo,"%.2f%% accepted, %.3f%% rejected\n",acc, 100.0-acc);
+		}
+
+		/* Write out the file */
+		if (ocg->write_name(ocg, outname))
+			error("CGATS file '%s' write error : %s",outname,ocg->err);
+	}
+
+	/* - - - - - - - - - - */
+	/* Display various results */
 	{
 		double merr = 0.0;		/* Max */
 		double aerr = 0.0;		/* Avg */
@@ -853,58 +1097,57 @@ int main(int argc, char *argv[])
 		int inn, outn;			/* Chanells for input and output spaces */
 
 		if (dovrml) {
-			wrl = start_vrml(out_name, doaxes);
-			start_line_set(wrl);
-		}
-
-		/* Open up the file for reading */
-		if ((rd_fp = new_icmFileStd_name(iccname,"r")) == NULL)
-			error("Write: Can't open file '%s'",iccname);
-
-		if ((rd_icco = new_icc()) == NULL)
-			error("Read: Creation of ICC object failed");
-
-		/* Read the header and tag list */
-		if ((rv = rd_icco->read(rd_icco,rd_fp,0)) != 0)
-			error("Read: %d, %s",rv,rd_icco->err);
-
-		/* Get the Fwd table, absolute with Lab override */
-		if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, intent,
-		                              icSigLabData, icmLuOrdNorm)) == NULL) {
-			error("%d, %s",rd_icco->errc, rd_icco->err);
+			wrl = new_vrml(out_name, doaxes, vrml_lab);
+			wrl->start_line_set(wrl, 0);
 		}
 
 		/* Get details of conversion (Arguments may be NULL if info not needed) */
 		luo->spaces(luo, NULL, &inn, NULL, &outn, NULL, NULL, NULL, NULL, NULL);
 
 		for (i = 0; i < npat; i++) {
-			double out[3];
-			double mxd;
+			double de, *out;
 
-			/* Lookup the patch value in the profile */
-			if (luo->lookup(luo, out, tpat[i].p) > 1)
-				error("%d, %s",rd_icco->errc,rd_icco->err);
+			de = tpat[i].de;
+			out = tpat[i].pv;
 
 			if (verb > 1) {
+#ifdef HACK		// Print XYZ
+#pragma message("!!!!!!!!!!!!!!!!!! profile/profcheck.c HACK enabled !!!!!!!!!!!!!!!")
+				double outxyz[3], vxyz[3];
+				icmLab2XYZ(&icmD50, outxyz, out);
+				icmLab2XYZ(&icmD50, vxyz, tpat[i].v);
+
 				printf("[%f] %s%s%s: %s -> %f %f %f should be %f %f %f\n",
-				       cie2k ? icmCIE2K(tpat[i].v, out) : 
-				               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
+				       de,
+				       tpat[i].sid,
+				       tpat[i].slo[0] != '\000' ? " @ " : "",
+				       tpat[i].slo,
+				       icmPdv(devchan, tpat[i].p),
+				       outxyz[0],outxyz[1],outxyz[2],
+				       vxyz[0],vxyz[1],vxyz[2]);
+#else
+				printf("[%f] %s%s%s: %s -> %f %f %f should be %f %f %f\n",
+				       de,
 				       tpat[i].sid,
 				       tpat[i].slo[0] != '\000' ? " @ " : "",
 				       tpat[i].slo,
 				       icmPdv(devchan, tpat[i].p),
 				       out[0],out[1],out[2],
 				       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);
+#endif
 			}
 			if (dovrml) {
-				if (dominl && icmLabDE(tpat[i].v, out) < 0.5) {
+				int ix[2];
+				double p1[3], p2[3];
+
+				/* Add the vertexes */
+				if (dominl && de < 0.5) {		/* Make a minimum length */
 					double cent[3], vec[3], vlen;
-					double p1[3], p2[3];
 
 					/* Compute center */
 					icmAdd3(cent, tpat[i].v, out);
 					icmScale3(cent, cent, 0.5);
-					if ((vlen = icmLabDE(tpat[i].v, out)) < 1e-6) {
+					if ((vlen = de) < 1e-6) {
 						vec[0] = 0.25; vec[1] = 0.0; vec[2] = 0.0;
 					} else {
 						icmSub3(vec, tpat[i].v, out);
@@ -912,36 +1155,36 @@ int main(int argc, char *argv[])
 					}
 					icmSub3(p1, cent, vec);
 					icmAdd3(p2, cent, vec);
-					add_vertex(wrl, p1);
-					add_vertex(wrl, p2);
 				} else {
-					add_vertex(wrl, tpat[i].v);
-					add_vertex(wrl, out);
+					icmCpy3(p1, tpat[i].v);
+					icmCpy3(p2, out);
+				}
+				ix[0] = wrl->add_vertex(wrl, 0, p1);
+				ix[1] = wrl->add_vertex(wrl, 0, p2);
+
+				/* Add the line */
+				if (dodecol) {		/* Lines with color determined by length */
+					double rgb[3];
+					DE2RGB(rgb, icmNorm33(p1, p2));
+					wrl->add_col_line(wrl, 0, ix, rgb);
+
+				} else {	/* Natural color */
+					wrl->add_line(wrl, 0, ix);
 				}
 			}
 
-			/* Check the result */
-			if (cie2k)
-				mxd = icmCIE2K(tpat[i].v, out);
-			else if (cie94)
-				mxd = icmCIE94(tpat[i].v, out);
-			else
-				mxd = icmLabDE(tpat[i].v, out);
-
-			aerr += mxd;
-			rerr += mxd * mxd;
+			/* Stats */
+			aerr += de;
+			rerr += de * de;
 
 			nsamps++;
-			if (mxd > merr)
-				merr = mxd;
+			if (de > merr)
+				merr = de;
 
 		}
 		if (dovrml) {
-			if (dodecol)
-				make_de_lines(wrl);
-			else
-				make_lines(wrl, 2);
-			end_vrml(wrl);
+			wrl->make_lines_vc(wrl, 0, 0.0);
+			wrl->del(wrl);
 		}
 		printf("Profile check complete, errors%s: max. = %f, avg. = %f, RMS = %f\n",
             cie2k ? "(CIEDE2000)" : cie94 ? " (CIE94)" : "", merr, aerr/nsamps, sqrt(rerr/nsamps));
@@ -975,13 +1218,13 @@ int main(int argc, char *argv[])
 
 			if (sortbypcs) {
 				/* Sort by pcs delta */
-#define HEAP_COMPARE(A,B) (A.dv < B.dv)
-				HEAPSORT(pval, tpat, npat);
+#define HEAP_COMPARE(A,B) (A->dv < B->dv)
+				HEAPSORT(pval *, stpat, npat);
 #undef HEAP_COMPARE
 			} else {
 				/* Sort by device delta */
-#define HEAP_COMPARE(A,B) (A.dp < B.dp)
-				HEAPSORT(pval, tpat, npat);
+#define HEAP_COMPARE(A,B) (A->dp < B->dp)
+				HEAPSORT(pval *, stpat, npat);
 #undef HEAP_COMPARE
 			}
 
@@ -1000,18 +1243,18 @@ int main(int argc, char *argv[])
 			for (i = 0; i < npat; i++) {
 				if (devspace == icSigCmykData) {
 					printf("%s: %f %f %f %f [%f] -> %f %f %f [%f]\n",
-					       tpat[i].sid,
-					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],tpat[i].p[3],
-					       tpat[i].dp,
-					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2],
-					       tpat[i].dv);
+					       stpat[i]->sid,
+					       stpat[i]->p[0],stpat[i]->p[1],stpat[i]->p[2],stpat[i]->p[3],
+					       stpat[i]->dp,
+					       stpat[i]->v[0],stpat[i]->v[1],stpat[i]->v[2],
+					       stpat[i]->dv);
 				} else {	/* Assume RGB/CMY */
 					printf("%s: %f %f %f [%f] -> %f %f %f [%f]\n",
-					       tpat[i].sid,
-					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],
-					       tpat[i].dp,
-					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2],
-					       tpat[i].dv);
+					       stpat[i]->sid,
+					       stpat[i]->p[0],stpat[i]->p[1],stpat[i]->p[2],
+					       stpat[i]->dp,
+					       stpat[i]->v[0],stpat[i]->v[1],stpat[i]->v[2],
+					       stpat[i]->dv);
 				}
 			}
 		}
@@ -1024,292 +1267,13 @@ int main(int argc, char *argv[])
 		rd_fp->del(rd_fp);
 	}
 
+	icg->del(icg);		/* Clean up */
+
 	return 0;
 }
 
 
 /* ------------------------------------------------ */
-/* Some simple functions to do basix VRML work */
-/* !!! Should change to plot/vrml lib !!! */
-
-#define GAMUT_LCENT 50.0
-static int npoints = 0;
-static int paloc = 0;
-static struct { double pp[3]; } *pary;
-
-static void Lab2RGB(double *out, double *in);
-static void DE2RGB(double *out, double in);
-
-FILE *start_vrml(char *name, int doaxes) {
-	FILE *wrl;
-
-	/* Define the axis boxes */
-	struct {
-		double x, y, z;			/* Box center */
-		double wx, wy, wz;		/* Box size */
-		double r, g, b;			/* Box color */
-	} axes[5] = {
-		{ 0, 0,   50-GAMUT_LCENT, 2, 2, 100, .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,  1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,  0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,  0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,  1,  1,  0 },	/* +b (yellow) axis */
-	};
-
-	/* Define the labels */
-	struct {
-		double x, y, z;
-		double size;
-		char *string;
-		double r, g, b;
-	} labels[6] = {
-		{ -2, 2, -GAMUT_LCENT + 100 + 10, 10, "+L*",  .7, .7, .7 },	/* Top of L axis */
-		{ -2, 2, -GAMUT_LCENT - 10,      10, "0",    .7, .7, .7 },	/* Bottom of L axis */
-		{ 100 + 5, -3,  0-GAMUT_LCENT,  10, "+a*",  1,  0,  0 },	/* +a (red) axis */
-		{ -5, -100 - 10, 0-GAMUT_LCENT,  10, "-b*",  0,  0,  1 },	/* -b (blue) axis */
-		{ -100 - 15, -3, 0-GAMUT_LCENT,  10, "-a*",  0,  0,  1 },	/* -a (green) axis */
-		{ -5,  100 + 5, 0-GAMUT_LCENT,  10, "+b*",  1,  1,  0 },	/* +b (yellow) axis */
-	};
-
-	if ((wrl = fopen(name,"w")) == NULL)
-		error("Error opening VRML file '%s'\n",name);
-
-	npoints = 0;
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-	fprintf(wrl,"children [\n");
-	fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes != 0) {
-		int n;
-		fprintf(wrl,"    # Lab axes as boxes:\n");
-		for (n = 0; n < 5; n++) {
-			fprintf(wrl,"    Transform { translation %f %f %f\n", axes[n].x, axes[n].y, axes[n].z);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"        Shape{\n");
-			fprintf(wrl,"          geometry Box { size %f %f %f }\n",
-			                       axes[n].wx, axes[n].wy, axes[n].wz);
-			fprintf(wrl,"          appearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[n].r, axes[n].g, axes[n].b);
-			fprintf(wrl,"        }\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-		}
-		fprintf(wrl,"    # Axes identification:\n");
-		for (n = 0; n < 6; n++) {
-			fprintf(wrl,"    Transform { translation %f %f %f\n", labels[n].x, labels[n].y, labels[n].z);
-			fprintf(wrl,"      children [\n");
-			fprintf(wrl,"        Shape{\n");
-			fprintf(wrl,"          geometry Text { string [\"%s\"]\n",labels[n].string);
-			fprintf(wrl,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
-			                                  labels[n].size);
-			fprintf(wrl,"                        }\n");
-			fprintf(wrl,"          appearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[n].r, labels[n].g, labels[n].b);
-			fprintf(wrl,"        }\n");
-			fprintf(wrl,"      ]\n");
-			fprintf(wrl,"    }\n");
-		}
-		fprintf(wrl,"\n");
-	}
-
-	return wrl;
-}
-
-void
-start_line_set(FILE *wrl) {
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"Shape {\n");
-	fprintf(wrl,"  geometry IndexedLineSet { \n");
-	fprintf(wrl,"    coord Coordinate { \n");
-	fprintf(wrl,"	   point [\n");
-}
-
-void add_vertex(FILE *wrl, double pp[3]) {
-
-	fprintf(wrl,"%f %f %f,\n",pp[1], pp[2], pp[0]-GAMUT_LCENT);
-	
-	if (paloc < (npoints+1)) {
-		paloc = (paloc + 10) * 2;
-		if (pary == NULL)
-			pary = malloc(paloc * 3 * sizeof(double));
-		else
-			pary = realloc(pary, paloc * 3 * sizeof(double));
-
-		if (pary == NULL)
-			error ("Malloc failed");
-	}
-	pary[npoints].pp[0] = pp[0];
-	pary[npoints].pp[1] = pp[1];
-	pary[npoints].pp[2] = pp[2];
-	npoints++;
-}
-
-
-void make_lines(FILE *wrl, int ppset) {
-	int i, j;
-
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"  coordIndex [\n");
-
-	for (i = 0; i < npoints;) {
-		for (j = 0; j < ppset; j++, i++) {
-			fprintf(wrl,"%d, ", i);
-		}
-		fprintf(wrl,"-1,\n");
-	}
-	fprintf(wrl,"    ]\n");
-
-	/* Color */
-	fprintf(wrl,"            colorPerVertex TRUE\n");
-	fprintf(wrl,"            color Color {\n");
-	fprintf(wrl,"              color [			# RGB colors of each vertex\n");
-
-	for (i = 0; i < npoints; i++) {
-		double rgb[3], Lab[3];
-		Lab[0] = pary[i].pp[0];
-		Lab[1] = pary[i].pp[1];
-		Lab[2] = pary[i].pp[2];
-		Lab2RGB(rgb, Lab);
-		fprintf(wrl,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-	}
-	fprintf(wrl,"              ] \n");
-	fprintf(wrl,"            }\n");
-	/* End color */
-
-	fprintf(wrl,"  }\n");
-	fprintf(wrl,"} # end shape\n");
-}
-
-/* Assume 2 ppset, and make line color prop to length */
-void make_de_lines(FILE *wrl) {
-	int i, j;
-
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"  coordIndex [\n");
-
-	for (i = 0; i < npoints;) {
-		for (j = 0; j < 2; j++, i++) {
-			fprintf(wrl,"%d, ", i);
-		}
-		fprintf(wrl,"-1,\n");
-	}
-	fprintf(wrl,"    ]\n");
-
-	/* Color */
-	fprintf(wrl,"            colorPerVertex TRUE\n");
-	fprintf(wrl,"            color Color {\n");
-	fprintf(wrl,"              color [			# RGB colors of each vertex\n");
-
-	for (i = 0; i < npoints; i++) {
-		double rgb[3], ss;
-		for (ss = 0.0, j = 0; j < 3; j++) {
-			double tt = (pary[i & ~1].pp[j] - pary[i | 1].pp[j]);
-			ss += tt * tt;
-		}
-		ss = sqrt(ss);
-		DE2RGB(rgb, ss);
-		fprintf(wrl,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
-	}
-	fprintf(wrl,"              ] \n");
-	fprintf(wrl,"            }\n");
-	/* End color */
-
-	fprintf(wrl,"  }\n");
-	fprintf(wrl,"} # end shape\n");
-}
-
-void end_vrml(FILE *wrl) {
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0)
-		error("Error closing VRML file\n");
-}
-
-
-/* Convert a gamut Lab value to an RGB value for display purposes */
-static void
-Lab2RGB(double *out, double *in) {
-	double L = in[0], a = in[1], b = in[2];
-	double x,y,z,fx,fy,fz;
-	double R, G, B;
-
-	/* Scale so that black is visible */
-	L = L * (100 - 40.0)/100.0 + 40.0;
-
-	/* First convert to XYZ using D50 white point */
-	if (L > 8.0) {
-		fy = (L + 16.0)/116.0;
-		y = pow(fy,3.0);
-	} else {
-		y = L/903.2963058;
-		fy = 7.787036979 * y + 16.0/116.0;
-	}
-
-	fx = a/500.0 + fy;
-	if (fx > 24.0/116.0)
-		x = pow(fx,3.0);
-	else
-		x = (fx - 16.0/116.0)/7.787036979;
-
-	fz = fy - b/200.0;
-	if (fz > 24.0/116.0)
-		z = pow(fz,3.0);
-	else
-		z = (fz - 16.0/116.0)/7.787036979;
-
-	x *= 0.9642;	/* Multiply by white point, D50 */
-	y *= 1.0;
-	z *= 0.8249;
-
-	/* Now convert to sRGB values */
-	R = x * 3.2410  + y * -1.5374 + z * -0.4986;
-	G = x * -0.9692 + y * 1.8760  + z * 0.0416;
-	B = x * 0.0556  + y * -0.2040 + z * 1.0570;
-
-	if (R < 0.0)
-		R = 0.0;
-	else if (R > 1.0)
-		R = 1.0;
-
-	if (G < 0.0)
-		G = 0.0;
-	else if (G > 1.0)
-		G = 1.0;
-
-	if (B < 0.0)
-		B = 0.0;
-	else if (B > 1.0)
-		B = 1.0;
-
-	R = pow(R, 1.0/2.2);
-	G = pow(G, 1.0/2.2);
-	B = pow(B, 1.0/2.2);
-
-	out[0] = R;
-	out[1] = G;
-	out[2] = B;
-}
 
 /* Convert a delta E value into a signal color: */
 static void

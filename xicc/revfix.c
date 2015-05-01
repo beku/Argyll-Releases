@@ -34,6 +34,7 @@
 #include "aconfig.h"
 #include "numlib.h"
 #include "xicc.h"
+#include "ui.h"
 
 #define USE_CAM_CLIP_OPT		/* Clip in CAM Jab space rather than Lab */
 #undef DEBUG		/* Print each value changed */

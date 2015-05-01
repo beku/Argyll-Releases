@@ -5,19 +5,21 @@
 /*
  * render2d
  *
- * Threshold screen pixel processing object.
+ * Threshold or Error diffusion screen pixel processing object.
  * (Simplified from DPS code)
  *
  * Author:  Graeme W. Gill
  * Date:    11/7/2005
  * Version: 1.00
  *
- * Copyright 2005, 2012 Graeme W. Gill
+ * Copyright 2005, 2012, 2014 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
+
+#define THMXCH2D  8           /* Maximum color channels */
 
 /* Light Separation in screening flag */
 typedef enum {
@@ -45,15 +47,31 @@ struct _thscreens {
 	int np;						/* Number of planes */
 	struct _thscreen **sc;		/* List of screens */
 
-	/* Screen a single color plane */
+	int oebpc;					/* Output encoding bits per component, 1,2,4 or 8 */
+	int oelev;					/* Output encoding levels. Must be <= 2 ^ oebpc */
+	int oevalues[256];			/* Output encoding values for each level */
+
+	int edif;					/* nz if using error diffusion */
+	int **luts;					/* Lookup tables */
+	int mxwidth;				/* max width in pixels of raster to be screened */ 
+	int lastyoff;				/* Last y offset */
+	float **ebuf;				/* Error buffer for each plane */
+								/* ebuf[][-1] is used for next pixel error */
+	
+	void (*quant)(void *qcntx, double *out, double *in); /* optional quantization func. for edif */
+	void *qcntx;					/* Context for quant */
+
+	sobol *so;					/* Random number generator for error diffusion */
+
+	/* Screen pixel values */
 	void (* screen)(			/* Pointer to dither function */
 		struct _thscreens *t,	/* Screening object pointer */
 		int width, int height,	/* Width and height to screen in pixels */
 		int xoff, int yoff,		/* Offset into screening pattern */
-		unsigned char *in,		/* Input pixel buffer */
-		unsigned long ipitch,	/* Increment between input lines */
 		unsigned char *out,		/* Output pixel buffer */
-		unsigned long opitch);	/* Increment between output lines */
+		unsigned long opitch,	/* Increment between output lines in components */
+		unsigned char *in,		/* Input pixel buffer */
+		unsigned long ipitch);	/* Increment between input lines in components */
 
 	void (* del)(				/* Destructor */
 		struct _thscreens *t);	/* Screening objects pointer */
@@ -68,7 +86,7 @@ thscreens *new_thscreens(
 	int exact,				/* Return only exact matches */
 	int nplanes,			/* Number of planes to screen */
 	double asp,				/* Target aspect ratio (== dpiX/dpiY) */
-	int size,				/* Target size */
+	int size,				/* Target screen size */
 	sc_iencoding ie,		/* Input encoding - must be scie_16 */
 	int oebpc,				/* Output encoding bits per component - must be 8 */
 	int oelev,				/* Output encoding levels. Must be <= 2 ^ oebpc */
@@ -76,8 +94,12 @@ thscreens *new_thscreens(
 							/* Must be oelev entries. Default is 0 .. oelev-1 */
 	sc_oorder oo,			/* Output bit ordering */
 	double overlap,			/* Overlap between levels, 0 - 1.0 */
+	int mxwidth,			/* max width in pixels of raster to be screened */ 
 	void   **cntx,			/* List of contexts for lookup table callback */
-	double (**lutfunc)(void *cntx, double in)	/* List of callback function, NULL if none */
+	double (**lutfunc)(void *cntx, double in),	/* List of callback function, NULL if none */
+	int edif,				/* nz if using error diffusion */
+	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edif */
+	void *qcntx
 );
 
 /* ---------------------------- */
@@ -121,12 +143,12 @@ struct _thscreen {
 		struct _thscreen *t,	/* Screening object pointer */
 		int width, int height,	/* Width and height to screen in pixels */
 		int xoff, int yoff,		/* Offset into screening pattern */
-		unsigned char *in,		/* Input pixel buffer */
-		unsigned long ipinc,	/* Increment between input pixels */
-		unsigned long ipitch,	/* Increment between input lines */
 		unsigned char *out,		/* Output pixel buffer */
-		unsigned long opinc,	/* Increment between output pixels */
-		unsigned long opitch);	/* Increment between output lines */
+		unsigned long opinc,	/* Increment between output pixels in components */
+		unsigned long opitch,	/* Increment between output lines in components */
+		unsigned char *in,		/* Input pixel buffer */
+		unsigned long ipinc,	/* Increment between input pixels in components */
+		unsigned long ipitch);	/* Increment between input lines in components */
 
 	void (* del)(				/* Destructor */
 		struct _thscreen *t);	/* Screening object pointer */
@@ -136,8 +158,8 @@ struct _thscreen {
 /* Create a new thscreen object */
 /* Return NULL on error */
 thscreen *new_thscreen(
-	int width,					/* width in pixels */
-	int height,					/* Height in pixels */
+	int width,					/* width in pixels of screen */
+	int height,					/* Height in pixels of screen */
 	int xoff, int yoff,			/* Pattern offsets into width & height (must be +ve) */
 	double asp,					/* Aspect ratio (== dpiX/dpiY) */
 	int swap,					/* Swap X & Y to invert aspect ratio */

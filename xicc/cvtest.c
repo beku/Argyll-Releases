@@ -27,6 +27,7 @@
 #endif
 #include "numlib.h"
 #include "plot.h"
+#include "ui.h"
 
 #define MAX_PARM 40		/* Make > SHAPE_ORDS */
 

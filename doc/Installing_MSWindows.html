@@ -31,7 +31,8 @@
     You should also configure your %PATH% environment variable to give
     access to the executables from your command line environment.<br>
     <br>
-    For <span style="font-weight: bold;">Windows 8</span>, look in<br>
+    For <span style="font-weight: bold;">Windows 8</span> &amp; <b>8.1</b>,
+    look in<br>
     &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;"></span>Desktop
     -&gt; Settings -&gt; Control Panel -&gt; System And Security -&gt;
     System -&gt; Advanced System Settings -&gt; Environment Variables<br>
@@ -60,9 +61,9 @@
     <br>
     &nbsp;So if the current value of PATH is
     "%SystemRoot%\system32;%SystemRoot%" and you unpacked Argyll version
-    1.6.3 in <span style="font-weight: bold;">d:\bin\</span>, then you
+    1.7.0 in <span style="font-weight: bold;">d:\bin\</span>, then you
     would modify PATH to be
-    "%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.6.3\bin", -
+    "%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.7.0\bin", -
     i.e. you append the path to the Argyll binaries to your PATH,
     separated by the ';' character. The change will take effect when you
     start a new command shell, which you start from Start
@@ -77,14 +78,14 @@
     doc sub-directory, and instrument USB drivers in the usb directory.<br>
     <br>
     <span style="font-weight: bold;">NOTE: </span><span
-      style="font-weight: bold;">Vista 64/Windows 7 &amp; 8&nbsp; 64 bit</span>
-    and <span style="font-weight: bold;">Beep</span> prompt<span
-      style="font-weight: bold;">: </span>Microsoft (in its infinite
-    wisdom) has removed the built in speaker driver, and now relies on
-    systems having a sound card and speakers's installed and turned on
-    to hear system beeps. So if you're wondering where the beeps have
-    gone when using <a href="chartread.html">chartread</a>, now you
-    know.<span style="font-weight: bold;"></span><br>
+      style="font-weight: bold;">Vista 64/Windows 7, 8 &amp; 8.1&nbsp;
+      64 bit</span> and <span style="font-weight: bold;">Beep</span>
+    prompt<span style="font-weight: bold;">: </span>Microsoft (in its
+    infinite wisdom) has removed the built in speaker driver, and now
+    relies on systems having a sound card and speakers's installed and
+    turned on to hear system beeps. So if you're wondering where the
+    beeps have gone when using <a href="chartread.html">chartread</a>,
+    now you know.<span style="font-weight: bold;"></span><br>
     <br>
     <span style="font-weight: bold;">NOTE: Microsofts generic VGA Driver</span>
     does not appear to support setting the display VideoLUTs. You will
@@ -134,7 +135,7 @@
     <br>
     If you are using the <b>JETI</b> specbos <span style="font-weight:
       bold;">1211</span><span style="font-weight: bold;"> </span>or <b>1201</b>,
-    then you may need to install the <a
+    or the <b>Klein K10A</b> then you may need to install the <a
       href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual COM
       Port Drivers</a> (VCP), if they are not already on your system.<br>
     <br>
@@ -147,7 +148,8 @@
     <a href="#WIN2K">Windows 2000</a><br>
     <br>
     <hr style="width: 100%; height: 2px;"><a name="WIN8"></a><font
-      size="+1"><span style="font-weight: bold;">Windows 8</span></font><br>
+      size="+1"><span style="font-weight: bold;">Windows 8 &amp; 8.1</span></font><font
+      size="+1"><span style="font-weight: bold;"></span></font><br>
     <br>
     <span style="color: rgb(51, 153, 153);"><span style="color: rgb(0,
         0, 0); text-decoration: underline;"><span style="font-weight:
@@ -164,7 +166,13 @@
     <br>
     <span style="text-decoration: underline;">To install the Argyll
       driver for the first instrument:</span><br>
-    &nbsp;&nbsp;&nbsp; (Plug in instrument)<br>
+    &nbsp;&nbsp;&nbsp; Settings -&gt; Power -&gt; <span
+      style="font-weight: bold;">Hold Shift Key down and click</span>
+    "Restart" -&gt; Troubleshoot -&gt; Advanced Options -&gt; Startup
+    Settings -&gt; Restart -&gt;<br>
+    &nbsp;&nbsp;&nbsp; (After Reboot) -&gt; "Disable Driver Signature
+    Enforcement" (number 7 on the list)<br>
+    &nbsp;&nbsp;&nbsp; (After system starts, Plug in instrument)<br>
     &nbsp;&nbsp;&nbsp; Desktop -&gt; Settings -&gt; Control Panel -&gt;
     Hardware and Sound -&gt; Device Manager -&gt;<br>
     &nbsp;&nbsp;&nbsp; Other Devices -&gt; &lt;instrument being
@@ -191,7 +199,13 @@
     <br>
     <span style="text-decoration: underline;">To install the Argyll
       Driver:</span><br>
-    &nbsp;&nbsp;&nbsp; (Plug in instrument)<br>
+    &nbsp;&nbsp;&nbsp; Settings -&gt; Power -&gt; <span
+      style="font-weight: bold;">Hold Shift Key down and click</span>
+    "Restart" -&gt; Troubleshoot -&gt; Advanced Options -&gt; Startup
+    Settings -&gt; Restart -&gt;<br>
+    &nbsp;&nbsp;&nbsp; (After Reboot) -&gt; Disable Driver Signature
+    Enforcement" (number 7 on the list)<br>
+    &nbsp;&nbsp;&nbsp; (After system starts, Plug in instrument)<br>
     &nbsp;&nbsp;&nbsp; Desktop -&gt; Settings -&gt; Control Panel -&gt;
     Hardware and Sound -&gt; Device Manager<br>
     &nbsp;&nbsp;&nbsp; (Locate the instrument in the device list. It may

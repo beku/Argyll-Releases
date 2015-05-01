@@ -4,7 +4,7 @@
 /************************************************/
 
 /* Discrete regularized spline versions */
-/* Test variable grid spacing in 3D
+/* Test variable grid spacing in 3D */
 
 /* Author: Graeme Gill
  * Date:   28/11/2013
@@ -28,8 +28,9 @@
 #include "aconfig.h"
 #include "counters.h"
 #include "numlib.h"
-#include "plot.h"
 #include "rspl.h"
+#include "plot.h"
+#include "ui.h"
 
 double lin();
 void usage(void);

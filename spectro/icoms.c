@@ -369,10 +369,12 @@ static int
 icoms_write_read(
 icoms *p,
 char *wbuf,			/* Write puffer */
+int nwch,			/* if > 0, number of characters to write */
 char *rbuf,			/* Read buffer */
 int bsize,			/* Buffer size */
-char *tc,			/* Terminating characers, NULL for none */
-int ntc,			/* Number of terminating characters needed to terminate */
+int *bread,			/* Bytes read (not including forced '\000') */
+char *tc,			/* Terminating characers, NULL for none or char count mode */
+int ntc,			/* Number of terminating characters needed, or char count needed */
 double tout
 ) {
 	int rv = ICOM_OK;
@@ -392,14 +394,14 @@ double tout
 		if (debug < 8)
 			p->log->debug =  0;
 		for (; rv == ICOM_OK;) 	/* Until we get a timeout */
-			rv = p->read(p, rbuf, bsize, '\000', 100000, 0.01);
+			rv = p->read(p, rbuf, bsize, NULL, NULL, bsize, 0.01);
 		p->log->debug = debug;
 		rv = ICOM_OK;
 	}
 #endif
 
 	/* Write the write data */
-	rv = p->write(p, wbuf, tout);
+	rv = p->write(p, wbuf, nwch, tout);
 
 	/* Return error if coms */
 	if (rv != ICOM_OK) {
@@ -408,7 +410,7 @@ double tout
 	}
 
 	/* Read response */
-	rv = p->read(p, rbuf, bsize, tc, ntc, tout);
+	rv = p->read(p, rbuf, bsize, bread, tc, ntc, tout);
 	
 	a1logd(p->log, 8, "icoms_write_read: returning 0x%x\n",rv);
 
@@ -504,21 +506,56 @@ void bad_beep() {
 	msec_beep(350, 800, 200);
 }
 
+char *baud_rate_to_str(baud_rate br) {
+	switch (br) {
+		case baud_nc:
+			return "Not Configured";
+		case baud_110:
+			return "110";
+		case baud_300:
+			return "300";
+		case baud_600:
+			return "600";
+		case baud_1200:
+			return "1400";
+		case baud_2400:
+			return "2400";
+		case baud_4800:
+			return "4800";
+		case baud_9600:
+			return "9600";
+		case baud_14400:
+			return "14400";
+		case baud_19200:
+			return "19200";
+		case baud_38400:
+			return "38400";
+		case baud_57600:
+			return "57600";
+		case baud_115200:
+			return "115200";
+		case baud_921600:
+			return "921600";
+	}
+	return "Unknown";
+}
+
 /* Convert control chars to ^[A-Z] notation in a string */
-/* Can be called 5 times without reusing the static buffer */
+/* Can be called 3 times without reusing the static buffer */
+/* Returns a maximum of 5000 characters */
 char *
 icoms_fix(char *ss) {
-	static unsigned char buf[5][1005];
+	static unsigned char buf[3][10005];
 	static int ix = 0;
 	unsigned char *d;
 	unsigned char *s = (unsigned char *)ss;
-	if (++ix >= 5)
+	if (++ix >= 3)
 		ix = 0;
 	if (ss == NULL) {
 		strcpy((char *)buf[ix],"(null)");
 		return (char *)buf[ix];
 	}
-	for(d = buf[ix]; (d - buf[ix]) < 1000;) {
+	for(d = buf[ix]; (d - buf[ix]) < 10000;) {
 		if (*s < ' ' && *s > '\000') {
 			*d++ = '^';
 			*d++ = *s++ + '@';

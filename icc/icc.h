@@ -30,8 +30,8 @@
 
 /* Version of icclib release */
 
-#define ICCLIB_VERSION 0x020017
-#define ICCLIB_VERSION_STR "2.17"
+#define ICCLIB_VERSION 0x020020
+#define ICCLIB_VERSION_STR "2.20"
 
 #undef ENABLE_V4		/* V4 is not fully implemented */
 
@@ -61,19 +61,22 @@
 # define ICCLIB_API	/* empty */
 #endif
 
+#if UINT_MAX < 0xffffffff
+# error "icclib: integer size is too small, must be at least 32 bit"
+#endif
+
 /* =========================================================== */
 /* Platform specific primitive defines. */
 /* This really needs checking for each different platform. */
 /* Using C99 and MSC covers a lot of cases, */
 /* and the fallback default is pretty reliable with modern compilers and machines. */
+/* Note that MSWin is LLP64 == 32 bit long, while OS X/Linux is LP64 == 64 bit long. */
+/* so long shouldn't really be used in any code.... */
+/* (duplicated in icc.h) */ 
 
-/* Note that the code assume that int is at least 32 bits, */
-/* and avoid using long as it is uncertain whether this is */
-/* the same size as an int or larger, opening the scope */
-/* for oveflow errors. */
-
-#if UINT_MAX < 0xffffffff
-# error "icclib: integer size is too small, must be at least 32 bit"
+/* Use __LP64__ as cross platform 64 bit pointer #define */
+#if !defined(__LP64__) && defined(_WIN64)
+# define __LP64__ 1
 #endif
 
 #ifndef ORD32			/* If not defined elsewhere */
@@ -93,13 +96,15 @@
 
 #define PNTR intptr_t
 
-/* printf format precision specifier */
-#define PF64PREC "ll"
+#define PF64PREC "ll"		/* printf format precision specifier */
+#define CF64PREC "LL"		/* Constant precision specifier */
 
-/* Constant precision specifier */
-#define CF64PREC "LL"
+#ifndef ATTRIBUTE_NORETURN
+# define ATTRIBUTE_NORETURN __declspec(noreturn)
+#endif
 
 #else  /* !__STDC_VERSION__ */
+
 #ifdef _MSC_VER
 
 #define INR8   __int8				/* 8 bit signed */
@@ -115,16 +120,17 @@
 
 #define vsnprintf _vsnprintf
 
-/* printf format precision specifier */
-#define PF64PREC "I64"
+#define PF64PREC "I64"				/* printf format precision specifier */
+#define CF64PREC "LL"				/* Constant precision specifier */
 
-/* Constant precision specifier */
-#define CF64PREC "LL"
+#ifndef ATTRIBUTE_NORETURN
+# define ATTRIBUTE_NORETURN __declspec(noreturn)
+#endif
 
 #else  /* !_MSC_VER */
 
 /* The following works on a lot of modern systems, including */
-/* LP64 model 64 bit modes */
+/* LLP64 and LP64 models, but won't work with ILP64 which needs int32 */
 
 #define INR8   signed char		/* 8 bit signed */
 #define INR16  signed short		/* 16 bit signed */
@@ -134,19 +140,28 @@
 #define ORD32  unsigned int		/* 32 bit unsigned */
 
 #ifdef __GNUC__
-#define INR64  long long			/* 64 bit signed - not used in icclib */
-#define ORD64  unsigned long long	/* 64 bit unsigned - not used in icclib */
-
-/* printf format precision specifier */
-#define PF64PREC "ll"
-
-#endif
+# ifdef __LP64__	/* long long could be 128 bit */
+#  define INR64  long				/* 64 bit signed - not used in icclib */
+#  define ORD64  unsigned long		/* 64 bit unsigned - not used in icclib */
+#  define PF64PREC "l"			/* printf format precision specifier */
+#  define CF64PREC "L"			/* Constant precision specifier */
+# else
+#  define INR64  long long			/* 64 bit signed - not used in icclib */
+#  define ORD64  unsigned long long	/* 64 bit unsigned - not used in icclib */
+#  define PF64PREC "ll"			/* printf format precision specifier */
+#  define CF64PREC "LL"			/* Constant precision specifier */
+# endif /* !__LP64__ */
+#endif /* __GNUC__ */
 
 #define PNTR unsigned long 
 
+#ifndef ATTRIBUTE_NORETURN
+# define ATTRIBUTE_NORETURN __attribute__((noreturn))
+#endif
+
 #endif /* !_MSC_VER */
 #endif /* !__STDC_VERSION__ */
-#endif /* !defined(ORD32) */
+#endif /* !ORD32 */
 
 /* =========================================================== */
 #include "iccV42.h"	/* ICC Version 4.2 definitions. */ 
@@ -321,6 +336,15 @@ icmFile *new_icmFileMem_d(void *base, size_t length);
 
 typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 
+/* ArgyllCMS Private tagSignature: */
+/* Absolute to Media Relative Transformation Space matrix. */
+/* Uses the icSigS15Fixed16ArrayType */
+/* (Unit matrix for default ICC, Bradford matrix for Argll default) */
+#define icmSigAbsToRelTransSpace ((icTagSignature) icmMakeTag('a','r','t','s'))
+
+/* Non-standard Platform Signature for Linux and similiar */
+#define icmSig_nix ((icPlatformSignature) icmMakeTag('*','n','i','x'))
+
 /* Non-standard Color Space Signatures - will be incompatible outside icclib! */
 
 /* A monochrome CIE L* space */
@@ -352,10 +376,6 @@ typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 
 /* Pseudo PCS colospace to signal V4 16 bit L */
 #define icmSigLV4Data ((icColorSpaceSignature) icmMakeTag('L',' ',' ','4'))
-
-/* Non-standard Platform Signature */
-#define icmSig_nix ((icPlatformSignature) icmMakeTag('*','n','i','x'))
-
 
 /* Alias for icSigColorantTableType found in LOGO profiles (Byte swapped clrt !) */ 
 #define icmSigAltColorantTableType ((icTagTypeSignature)icmMakeTag('t','r','l','c'))
@@ -1095,6 +1115,7 @@ struct _icmVideoCardGamma {
 
 /* ------------------------------------------------- */
 /* The Profile header */
+/* NOTE that the deviceClass should be set up before calling chromAdaptMatrix()! */ 
 struct _icmHeader {
 
   /* Private: */
@@ -1471,7 +1492,14 @@ struct _icc {
 															/* Returns 0 if deleted OK */
 	int          (*check_id)(struct _icc *p, ORD8 *id); /* Returns 0 if ID is OK, 1 if not present etc. */
 	double       (*get_tac)(struct _icc *p, double *chmax, /* Returns total ink limit and channel maximums */
-	void (*calfunc)(void *cntx, double *out, double *in), void *cntx);	/* optional cal. lookup */
+	void         (*calfunc)(void *cntx, double *out, double *in), void *cntx);
+															/* optional cal. lookup */
+	void         (*chromAdaptMatrix)(struct _icc *p, int flags, icmXYZNumber d_wp,
+	                                 icmXYZNumber s_wp, double mat[3][3]);
+									/* Chromatic transform function that uses icc */
+									/* Absolute to Media Relative Transformation Space matrix */
+									/* Set header->deviceClass before calling this! */
+						
 
 	/* Get a particular color conversion function */
 	icmLuBase *  (*get_luobj) (struct _icc *p,
@@ -1503,6 +1531,26 @@ struct _icc {
 
 	int              allowclutPoints256; /* Non standard - allow 256 res cLUT */
 
+	int              autoWpchtmx;		/* Whether to automatically set wpchtmx[][] based on */
+										/* the header and the state of the env override */
+										/* ARGYLL_CREATE_WRONG_VON_KRIES_OUTPUT_CLASS_REL_WP. */
+										/* Default true, set false on reading a profile. */ 
+	int              useLinWpchtmx;		/* Force Wrong Von Kries for output class (default false) */
+    icProfileClassSignature wpchtmx_class;	/* Class of profile wpchtmx was set for */
+	double           wpchtmx[3][3];		/* Absolute to Media Relative Transformation Space matrix */
+	double           iwpchtmx[3][3];	/* Inverse of wpchtmx[][] */
+										/* (Default is Bradford matrix) */
+	int				 useArts;			/* Save ArgyllCMS private 'arts' tag (default yes) */
+										/* (This creates 'arts' tag on writing) */
+
+	int              chadValid;			/* nz if 'chad' tag has been read and chadmx is valid */
+	double			 chadmx[3][3];		/* 'chad' tag matrix if read */
+	int				 useChad;			/* Create 'chad' tag for Display profile (default no) */
+										/* Override with ARGYLL_CREATE_DISPLAY_PROFILE_WITH_CHAD */
+										/* (This set media white point tag to D50 and */
+										/* creates 'chad' tag on writing) */
+									
+		
   /* Private: ? */
 	icmAlloc        *al;				/* Heap allocator */
 	int              del_al;			/* NZ if heap allocator should be deleted */
@@ -1923,19 +1971,24 @@ extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *
 /* The standard D50 illuminant value */
 extern icmXYZNumber icmD50;
 extern icmXYZNumber icmD50_100;		/* Scaled to 100 */
-extern double icmD50_ary3[3];				/* As an array */
-extern double icmD50_100_ary3[3];			/* Scaled to 100 as an array */
+extern double icmD50_ary3[3];		/* As an array */
+extern double icmD50_100_ary3[3];	/* Scaled to 100 as an array */
 
 /* The standard D65 illuminant value */
 extern icmXYZNumber icmD65;
 extern icmXYZNumber icmD65_100;		/* Scaled to 100 */
-extern double icmD65_ary3[3];				/* As an array */
-extern double icmD65_100_ary3[3];			/* Scaled to 100 as an array */
+extern double icmD65_ary3[3];		/* As an array */
+extern double icmD65_100_ary3[3];	/* Scaled to 100 as an array */
 
 
 /* The default black value */
 extern icmXYZNumber icmBlack;
 
+/* The Standard ("wrong Von-Kries") chromatic transform matrix */
+extern double icmWrongVonKries[3][3];
+
+/* The Bradford chromatic transform matrix */
+extern double icmBradford[3][3];
 
 /* Initialise a pseudo-hilbert grid counter, return total usable count. */
 extern ICCLIB_API unsigned psh_init(psh *p, int di, unsigned int res, int co[]);
@@ -1990,22 +2043,38 @@ int icmClipXYZ(double out[3], double in[3]);
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* RGB primaries to device to RGB->XYZ transform matrix */
+/* RGB XYZ primaries to device to RGB->XYZ transform matrix */
 /* Return non-zero if matrix would be singular */
-int icmRGBprim2matrix(
-	icmXYZNumber white,		/* White point */
-	icmXYZNumber red,		/* Red colorant */
-	icmXYZNumber green,		/* Green colorant */
-	icmXYZNumber blue,		/* Blue colorant */
-	double mat[3][3]		/* Destination matrix[RGB[XYZ] */
+/* Use icmMulBy3x3(dst, mat, src) */
+int icmRGBXYZprim2matrix(
+	double red[3],		/* Red colorant */
+	double green[3],	/* Green colorant */
+	double blue[3],		/* Blue colorant */
+	double white[3],	/* White point */
+	double mat[3][3]	/* Destination matrix[RGB][XYZ] */
+);
+
+/* RGB Yxy primaries to device to RGB->XYZ transform matrix */
+/* Return non-zero if matrix would be singular */
+/* Use icmMulBy3x3(dst, mat, src) */
+int icmRGBYxyprim2matrix(
+	double red[3],		/* Red colorant */
+	double green[3],	/* Green colorant */
+	double blue[3],		/* Blue colorant */
+	double white[3],	/* White point */
+	double mat[3][3],	/* Return matrix[RGB][XYZ] */
+	double wXYZ[3]		/* Return white XYZ */
 );
 
 /* Chromatic Adaption transform utility */
 /* Return a 3x3 chromatic adaption matrix */
 /* Use icmMulBy3x3(dst, mat, src) */
+/* [ use icc->chromAdaptMatrix() to use the profiles cone space matrix] */
 
+#define ICM_CAM_NONE	    0x0000	/* No flags */
 #define ICM_CAM_BRADFORD	0x0001	/* Use Bradford sharpened response space */
-#define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix */
+#define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix rather than */
+									/* create a transform from scratch. */
 									/* NOTE that to transform primaries they */
 									/* must be mat[XYZ][RGB] format! */
 

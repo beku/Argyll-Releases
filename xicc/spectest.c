@@ -34,6 +34,7 @@
 #ifdef DOPLOT
 #include "plot.h"
 #endif
+#include "ui.h"
 
 
 /* Spectrolino filter "D65" illuminant */

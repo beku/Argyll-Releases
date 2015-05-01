@@ -22,6 +22,9 @@
  *      Need to cope with profile not having black point.
  *
  *		How to cope with no profile, therefore no white or black point ?
+ *
+ *		Should we have a median filter option, to ignore small groups
+ *		of extreme pixel values, rathar than total small numbers using -f ?
  */
 
 
@@ -42,6 +45,8 @@
 #include "gamut.h"
 #include "xicc.h"
 #include "sort.h"
+#include "vrml.h"
+#include "ui.h"
 
 #undef NOCAMGAM_CLIP		/* No clip to CAM gamut before CAM lookup */
 #undef DEBUG				/* Dump filter cell contents */
@@ -58,14 +63,15 @@ void del_filter();
 
 void usage(void) {
 	int i;
-	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF or JPEG, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Create gamut surface of a TIFF or JPEG, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embedded.tif/jpg] infile1.tif/jpg [infile2.tif/jpg ...] \n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
-	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
-	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
-	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
+	fprintf(stderr," -w            emit %s %s file as well as CGATS .gam file\n",vrml_format(),vrml_ext());
+	fprintf(stderr," -n            Don't add %s axes or white/black point\n",vrml_format());
+	fprintf(stderr," -k            Add %s markers for prim. & sec. \"cusp\" points\n",vrml_format());
+	fprintf(stderr,"               (set env. ARGYLL_3D_DISP_FORMAT to VRML, X3D or X3DOM to change format)\n");
 	fprintf(stderr," -f perc       Filter by popularity, perc = percent to use\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
@@ -325,7 +331,7 @@ main(int argc, char *argv[]) {
 	int ffa, lfa;				/* First, last input file argument */
 	char prof_name[MAXNAMEL+1] = { '\000' };	/* ICC profile name, "" if none */
 	char in_name[MAXNAMEL+1];			/* TIFF input file */
-	char *xl = NULL, out_name[MAXNAMEL+4+1] = { '\000' };	/* VRML output file */
+	char *xl = NULL, out_name[MAXNAMEL+4+1] = { '\000' };	/* VRML/X3D output file */
 	int verb = 0;
 	int vrml = 0;
 	int doaxes = 1;
@@ -366,12 +372,12 @@ main(int argc, char *argv[]) {
 	uint16 samplesperpixel, bitspersample;
 	uint16 pconfig, photometric, pmtc;
 	tdata_t *inbuf;
-	int inbpix;                					/* Number of pixels in jpeg in buf */
+	int inbpix = 0;               					/* Number of pixels in jpeg in buf */
 	void (*cvt)(double *out, double *in) = NULL;	/* TIFF conversion function, NULL if none */
-	icColorSpaceSignature tcs;					/* TIFF colorspace */
-	uint16 extrasamples;						/* Extra "alpha" samples */
-	uint16 *extrainfo;							/* Info about extra samples */
-	int sign_mask;								/* Handling of encoding sign */
+	icColorSpaceSignature tcs = 0;				/* TIFF colorspace */
+	uint16 extrasamples = 0;					/* Extra "alpha" samples */
+	uint16 *extrainfo = NULL;					/* Info about extra samples */
+	int sign_mask = 0;							/* Handling of encoding sign */
 
 	/* JPEG */
 	jpegerrorinfo jpeg_rerr;
@@ -547,7 +553,7 @@ main(int argc, char *argv[]) {
 					usage();
 			}
 
-			/* VRML output */
+			/* VRML/X3D output */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				vrml = 1;
 			}
@@ -1010,19 +1016,26 @@ main(int argc, char *argv[]) {
 				int i;
 				double in[MAX_CHAN], out[MAX_CHAN];
 				
+//printf("~1 location %d,%d\n",x,y);
 				if (bitspersample == 8) {
 					for (i = 0; i < samplesperpixel; i++) {
 						int v = ((unsigned char *)inbuf)[x * samplesperpixel + i];
+//printf("~1 v[%d] = %d\n",i,v);
 						if (sign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x80) ? v - 0x80 : v + 0x80;
+//printf("~1 signed v[%d] = %d\n",i,v);
 						in[i] = v/255.0;
+//printf("~1 in[%d] = %f\n",i,in[i]);
 					}
 				} else {
 					for (i = 0; i < samplesperpixel; i++) {
 						int v = ((unsigned short *)inbuf)[x * samplesperpixel + i];
+//printf("~1 v[%d] = %d\n",i,v);
 						if (sign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+//printf("~1 signed v[%d] = %d\n",i,v);
 						in[i] = v/65535.0;
+//printf("~1 in[%d] = %f\n",i,in[i]);
 					}
 				}
 				if (cvt != NULL) {	/* Undo TIFF encoding */
@@ -1054,10 +1067,14 @@ main(int argc, char *argv[]) {
 				}
 
 				for (i = 0; i < 3; i++) {
-					if (out[i] < apcsmin[i])
+					if (out[i] < apcsmin[i]) {
+//printf("~1 new min %f\n",out[i]);
 						apcsmin[i] = out[i];
-					if (out[i] > apcsmax[i])
+					}
+					if (out[i] > apcsmax[i]) {
+//printf("~1 new max %f\n",out[i]);
 						apcsmax[i] = out[i];
+					}
 				}
 				if (filter)
 					add_fpixel(out);
@@ -1117,14 +1134,13 @@ main(int argc, char *argv[]) {
 	if (verb)
 		printf("Output Gamut file '%s'\n",out_name);
 
-	/* Create the VRML file */
+	/* Create the VRML/X3D file */
 	if (gam->write_gam(gam,out_name))
 		error ("write gamut failed on '%s'",out_name);
 
 	if (vrml) {
-
-		strcpy(xl,".wrl");
-		printf("Output vrml file '%s'\n",out_name);
+		xl[0] = '\000';
+		printf("Output %s file '%s%s'\n",vrml_format(),out_name,vrml_ext());
 		if (gam->write_vrml(gam,out_name, doaxes, docusps))
 			error ("write vrml failed on '%s'",out_name);
 	}

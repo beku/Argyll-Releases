@@ -81,12 +81,13 @@ typedef enum {
 	i1d3_oem        = 2,	/* OEM */
 	i1d3_nec_ssp    = 3, 	/* NEC SpectraSensor Pro */
 	i1d3_quato_sh3  = 4, 	/* Quato Silver Haze 3 */
-	i1d3_hp_dreamc  = 5 	/* HP DreameColor */
+	i1d3_hp_dreamc  = 5, 	/* HP DreameColor */
+	i1d3_sc_c6      = 6 	/* SpectraCal C6 */
 } i1d3_dtype;
 
 /* Measurement mode */
 typedef enum {
-	i1d3_adaptive     = 0,	/* Frequency over fixed period then adaptive period measurement */
+	i1d3_adaptive     = 0,	/* Frequency over fixed period then adaptive period measurement (def) */
 	i1d3_frequency    = 1,	/* Frequency over fixed period measurement */
 	i1d3_period       = 2	/* Adaptive period measurement */
 } i1d3_mmode;
@@ -126,7 +127,9 @@ struct _i1d3 {
 	inst_disptypesel *dtlist;	/* Display Type list */
 	int ndtlist;				/* Number of valid dtlist entries */
 	int icx;					/* Internal calibration matrix index, 11 = Raw */
-	int cbid;					/* calibration base ID, 0 if not a base */
+	disptech dtech;				/* Display technology enum */
+	int cbid;					/* current calibration base ID, 0 if not a base */
+	int ucbid;					/* Underlying base ID if being used for matrix, 0 othewise */
 	int refrmode;				/* nz if in refresh display mode/double int. time */
 	icxObserverType obType;		/* ccss observer to use */
 	xspect custObserver[3];		/* Custom ccss observer to use */
@@ -157,6 +160,8 @@ struct _i1d3 {
 	volatile int th_term;		/* nz to terminate thread */
 	volatile int th_termed;		/* nz when thread terminated */
 	int dpos;					/* Diffuser position, 0 = display, 1 = ambient */
+
+	volatile double whitestamp;	/* meas_delay() white timestamp */
 
 }; typedef struct _i1d3 i1d3;
 

@@ -4,7 +4,7 @@
  * Multi-dimensional regularized spline data structure
  *
  * Precice gamut surface, gamut pruning, ink limiting and K min/max
- * support routine.s
+ * support routines.
  *
  * Author: Graeme W. Gill
  * Date:   2008/11/21
@@ -45,7 +45,7 @@
 #include "sort.h"		/* Heap sort */
 #include "counters.h"	/* Counter macros */
 
-#include "vrml.h"		/* If there is VRML stuff here */	
+#include "vrml.h"		/* If there is VRML/X3D stuff here */	
 
 /* Print a vectors value */
 #define DBGVI(text, dim, out, vec, end)			\
@@ -879,8 +879,10 @@ for (ss = 0; ss < 2; ss++) {		/* Negative side then positive */
 	rtri *tp;
 	double col[3], pos[3];
 
-	if ((wrl = new_vrml("gam_diag.wrl", 1)) == NULL)
-		error("new_vrml failed\n");
+	if ((wrl = new_vrml("gam_diag", 1, vrml_lab)) == NULL)
+		error("new_vrml failed for 'gam_diag%s\n",vrml_ext());
+
+	wrl->start_line_set(wrl, 0);
 
 	/* Display the grid */
 	EC_INIT(gc);
@@ -906,25 +908,25 @@ for (ss = 0; ss < 2; ss++) {		/* Negative side then positive */
 				pos[2] = (double)gp[2];
 				if (s->gam.outf != NULL)
 					s->gam.outf(s->gam.cntxf, pos, pos);	/* Apply output lookup */
-				wrl->add_vertex(wrl, pos);
+				wrl->add_vertex(wrl, 0, pos);
 				pos[0] = (double)sp[0];
 				pos[1] = (double)sp[1];
 				pos[2] = (double)sp[2];
 				if (s->gam.outf != NULL)
 					s->gam.outf(s->gam.cntxf, pos, pos);	/* Apply output lookup */
-				wrl->add_vertex(wrl, pos);
+				wrl->add_vertex(wrl, 0, pos);
 			}
 			DC_INC(cc);
 		}
 		EC_INC(gc);
 	}
-	wrl->make_lines(wrl, 2);
-	wrl->clear(wrl);
+	wrl->make_lines(wrl, 0, 2);
+	wrl->start_line_set(wrl, 0);
 
 	/* Display the current triangles transparently */
 	if (s->gam.ttop != NULL) {
 		for (vp = s->gam.vtop; vp != NULL; vp = vp->list) {
-			wrl->add_vertex(wrl, vp->v);
+			wrl->add_vertex(wrl, 0, vp->v);
 		}
 	
 		/* Set the triangles */
@@ -933,19 +935,19 @@ for (ss = 0; ss < 2; ss++) {		/* Negative side then positive */
 			ix[0] = tp->v[0]->n;
 			ix[1] = tp->v[1]->n;
 			ix[2] = tp->v[2]->n;
-			wrl->add_triangle(wrl, ix);
+			wrl->add_triangle(wrl, 0, ix);
 		}
 		
-//		wrl->make_triangles(wrl, 0.3, NULL);
-		wrl->make_triangles(wrl, 0.0, NULL);
-		wrl->clear(wrl);
+//		wrl->make_triangles(wrl, 0, 0.3, NULL);
+		wrl->make_triangles(wrl, 0, 0.0, NULL);
+		wrl->start_line_set(wrl, 0);
 	}
 
 	/* Show the active edge as a red cone */
 	col[0] = 1.0; col[1] = 0.0; col[2] = 0.0;	/* Red */
 	wrl->add_cone(wrl, ep->v[0]->v, ep->v[1]->v, col, 1.0);
-printf("~1 edge v1 = %d = %f %f %f\n", ep->v[0]->gix, ep->v[0]->v[0], ep->v[0]->v[1], ep->v[0]->v[2]);
-printf("~1 edge v2 = %d = %f %f %f\n", ep->v[1]->gix, ep->v[1]->v[0], ep->v[1]->v[1], ep->v[1]->v[2]);
+//printf("~1 edge v1 = %d = %f %f %f\n", ep->v[0]->gix, ep->v[0]->v[0], ep->v[0]->v[1], ep->v[0]->v[2]);
+//printf("~1 edge v2 = %d = %f %f %f\n", ep->v[1]->gix, ep->v[1]->v[0], ep->v[1]->v[1], ep->v[1]->v[2]);
 
 	/* Show the candidate verticies */
 	for (ss = 0; ss < 2; ss++) {
@@ -959,6 +961,7 @@ printf("~1 edge v2 = %d = %f %f %f\n", ep->v[1]->gix, ep->v[1]->v[0], ep->v[1]->
 		}
 	}
 	wrl->del(wrl);
+	printf("Waiting for return after writing gam_diag%s\n",vrml_ext()); 
 	getchar();
 }
 #endif
@@ -1184,7 +1187,7 @@ void rspl_gam_plot(rspl *s, char *name) {
 	vrml *wrl;
 
 	if ((wrl = new_vrml(name, 1, 0)) == NULL)
-		error("new_vrml failed\n");
+		error("new_vrml failed for '%s%s'\n",name,vrml_ext());
 
 	/* Set the verticies */
 	for (vp = s->gam.vtop; vp != NULL; vp = vp->list) {

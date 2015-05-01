@@ -54,6 +54,17 @@
 /* After init or increment, expression is TRUE if counter is done */
 #define DC_DONE(nn)									\
 	(nn##_e >= nn##_di)
+
+/* Typical use:
+
+	DCOUNT(cc, 15, 3, -1, -1, 2);
+
+	DC_INIT(cc);
+   	while(!DC_DONE(cc)) {
+
+		DC_INC(cc);
+	}
+ */
 	
 /* (Do we need a version of the above that tracks the actual input coords ?) */
 /* ------------------------------------------------------- */
@@ -136,6 +147,9 @@
 /* Macros combination counter */
 /* Declare the counter name nn, combinations out of total */
 /* mxdi should be set to maximum combinations */
+
+/* e.g. if there are 8 objects, and we want all combinations */
+/* of 4 out of the 8, we would use: COMBO(nn, 4, 4, 8) */
 
 #define COMBO(nn, mxdi, comb, total) 				\
 	int nn[mxdi+2];			/* counter value */				\

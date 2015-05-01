@@ -3,7 +3,7 @@
   <head>
     <title>illumread</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -23,6 +23,9 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 
+
+
+
         &nbsp; &nbsp; Verbose mode</span><span style="font-family:
         monospace;"></span></small><small><span style="font-family:
         monospace;"></span></small><br style="font-family: monospace;">
@@ -38,6 +41,9 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Set
 
+
+
+
         COM port, 1..4 (default 1)</span><span style="font-family:
         monospace;"></span><span style="font-family: monospace;"></span><span
         style="font-family: monospace;"></span></small><small><span
@@ -48,6 +54,9 @@ Set
         monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable
 
+
+
+
         initial calibration of instrument</span></font> if possible<br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#H">-H</a><span
@@ -56,13 +65,29 @@ Disable
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode
         (if available)<br>
         <font size="-1">&nbsp;<a href="#Yr">-Y r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
           Set refresh measurement mode</font><br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
 
+
+
+
         serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
     <small><span style="font-family: monospace;">&nbsp;</span><a
+        style="font-family: monospace;" href="#T">-T</a><span
+        style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+        Test mode - restore &amp; save measurements to<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+        *_i.sp, *_r.sp, *_p.sp, *_mpir.sp, *_cpir.sp files<br>
+      </span></small> <small><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#D">-D [level]</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -70,6 +95,9 @@ Override
     &nbsp; <font size="-1"><span style="font-family: monospace;"><a
           href="#file"><span style="font-style: italic;">illuminant.sp</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 File
+
+
+
 
         to save measurement to<br style="font-family: monospace;">
       </span></font><small><span style="font-family: monospace;"></span><span
@@ -129,6 +157,17 @@ File
     sets Xon/Xoff handshaking. This commend may be useful in workaround
     serial communications issues with some systems and cables. <br>
     <br>
+    <a name="T"></a>The <b>-T</b> flag invokes the test mode. In test
+    mode the three measurements are saved to files <i>illuminant</i><i>_i.sp</i>
+    (Illuminant spectrum), <i>illuminant</i><i>_r.sp</i> (Illuminant
+    off paper spectrum), and <i>illuminant_p.sp (</i>Instrument
+    measured paper reflectance spectrum), and these will be loaded if
+    discovered, allowing a replay of the calculation without requiring
+    any measurement. In addition, two diagnostic files <i>illuminant</i><i>_mpir.sp</i>
+    (Measured paper under illuminant spectrum) and <i>illuminant</i><i>_cpir.sp
+
+      (</i>Computed paper under illuminant spectrum) will be saved.<br>
+    <br>
     <a name="D"></a>The <b>-D</b> flag causes communications and other
     instrument diagnostics to be printed to stdout. A level can be set
     between 1 .. 9, that may give progressively more verbose
@@ -184,11 +223,10 @@ File
     it, so that it responds to UV light. A piece of cheap copier paper
     is ideal, since cheap paper is typically whitened with large amounts
     of FWA. If the paper is thin (less than 160 gsm) then two or three
-    sheets should be used to prevent any background showing through. [If
+    sheets should be used to prevent any background showing through. If
     the intention is to use the illuminant spectrum for proofing to a
-    particular paper, then an alternative might be to use a piece of the
-    intended paper for this purpose. It's unclear which may give a
-    better result.]<br>
+    particular paper, then it's best to use the intended paper for this
+    purpose.<br>
     <br>
     The first measurement <span style="font-weight: bold;">1)</span>,
     is to use either the ambient or emissive measurement mode to measure
@@ -219,9 +257,9 @@ File
       such that it is uniformly illuminated with reasonable brightness,
       and then placing the instrument so that it receives the reflected
       light from the paper. This is typically achieved by placing the
-      instrument close to the paper at about 45&ordm;, so that it's
-      aperture has a clear view of the illuminated paper, but avoiding
-      shadowing the region that is in view. <br>
+      instrument close to the paper at about 45º, so that it's aperture
+      has a clear view of the illuminated paper, but avoiding shadowing
+      the region that is in view. <br>
       <br>
       <img style="width: 219px; height: 261px;" alt="Measuring via
         Paper" src="illumread_5.jpg"><img style="width: 252px; height:

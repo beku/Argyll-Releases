@@ -15,6 +15,7 @@ mppprof.c
 mppcheck.c
 simpprof.c
 kodak2ti3.c
+ls2ti3.c
 cb2ti3.c
 txt2ti3.c
 splitti3.c

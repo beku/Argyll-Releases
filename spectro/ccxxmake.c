@@ -27,17 +27,6 @@
 /* 
 	TTBD:
 
-		Should add an option to set a UI_SELECTORS value.
-
-		If any spectrometer gets a display type function (ie. refresh/non-refresh)
-		then it becomes difficult to know what to do with the -y option :-
-
-		* Ignore the problem - don't set -y option on spectrometers.
-		  Error shouldn't be significant for ref/nonref ?
-
-		* Force the colorimeter to go first, record the ref/nonref state and
-		  set in the spectrometer ? Make .ti3 file order the same for consistency ?
-
 		Would be nice to have a veryify option that produces
 		a fit report of a matrix vs. the input files.
 
@@ -70,7 +59,9 @@
 #include "conv.h"
 #include "icoms.h"
 #include "inst.h"
+#include "ccast.h"
 #include "dispwin.h"
+#include "ui.h"
 #include "webwin.h"
 #ifdef NT
 # include "madvrwin.h"
@@ -79,7 +70,9 @@
 #include "ccss.h"
 #include "ccmx.h"
 #include "instappsup.h"
-#include "spyd2setup.h"
+#ifdef ENABLE_USB
+# include "spyd2.h"
+#endif
 
 #if defined (NT)
 #include <conio.h>
@@ -105,15 +98,16 @@ static int gcc_bug_fix(int i) {
 /* device behaviour if not. */
 
 void
-usage(char *diag, ...) {
+/* Flag = 0x0000 = default */
+/* Flag & 0x0001 = list ChromCast's */
+/* Flag & 0x0002 = list Technology choice */
+usage(int flag, char *diag, ...) {
 	disppath **dp;
 	icompaths *icmps = new_icompaths(0);
 	inst2_capability cap = 0;
 
 	fprintf(stderr,"Create CCMX or CCSS, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	if (setup_spyd2() == 2)
-		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -122,16 +116,16 @@ usage(char *diag, ...) {
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: ccmxmake [-options] output.ccmx\n");
-	fprintf(stderr," -v                     Verbose mode\n");
-	fprintf(stderr," -S                     Create CCSS rather than CCMX\n");
-	fprintf(stderr," -f file1.ti3[,file2.ti3] Create from one or two .ti3 files rather than measure.\n");
+	fprintf(stderr,"usage: ccmxmake -t dtech [-options] output.ccmx\n");
+	fprintf(stderr," -v                Verbose mode\n");
+	fprintf(stderr," -S                Create CCSS rather than CCMX\n");
+	fprintf(stderr," -f file1.ti3[,file2.ti3]    Create from one or two .ti3 files rather than measure.\n");
 #if defined(UNIX_X11)
 	fprintf(stderr," -display displayname   Choose X11 display name\n");
-	fprintf(stderr," -d n[,m]               Choose the display n from the following list (default 1)\n");
-	fprintf(stderr,"                        Optionally choose different display m for VideoLUT access\n"); 
+	fprintf(stderr," -d n[,m]          Choose the display n from the following list (default 1)\n");
+	fprintf(stderr,"                   Optionally choose different display m for VideoLUT access\n"); 
 #else
-	fprintf(stderr," -d n                   Choose the display from the following list (default 1)\n");
+	fprintf(stderr," -d n              Choose the display from the following list (default 1)\n");
 #endif
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
@@ -146,38 +140,63 @@ usage(char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
-	fprintf(stderr," -dweb[:port]           Display via a web server at port (default 8080)\n");
+	fprintf(stderr," -dweb[:port]      Display via a web server at port (default 8080)\n");
+	fprintf(stderr," -dcc[:n]          Display via n'th ChromeCast (default 1, ? for list)\n");
+	if (flag & 0x001) {
+		ccast_id **ids;
+		if ((ids = get_ccids()) == NULL) {
+			fprintf(stderr,"    ** Error discovering ChromCasts **\n");
+		} else {
+			if (ids[0] == NULL)
+				fprintf(stderr,"    ** No ChromCasts found **\n");
+			else {
+				int i;
+				for (i = 0; ids[i] != NULL; i++)
+					fprintf(stderr,"    %d = '%s'\n",i+1,ids[i]->name);
+				free_ccids(ids);
+			}
+		}
+	}
 #ifdef NT
-	fprintf(stderr," -dmadvr                Display via MadVR Video Renderer\n");
+	fprintf(stderr," -dmadvr           Display via MadVR Video Renderer\n");
 #endif
-//	fprintf(stderr," -d fake                Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
-	fprintf(stderr," -p                     Use telephoto mode (ie. for a projector) (if available)\n");
+//	fprintf(stderr," -d fake           Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
+	fprintf(stderr," -p                Use telephoto mode (ie. for a projector) (if available)\n");
 	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icmps, 1);
-	fprintf(stderr," -P ho,vo,ss[,vs]       Position test window and scale it\n");
-	fprintf(stderr,"                        ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
-	fprintf(stderr,"                        ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
-	fprintf(stderr," -F                     Fill whole screen with black background\n");
+	fprintf(stderr," -z disptype       Different display type for spectrometer (see -y)\n");
+	fprintf(stderr," -P ho,vo,ss[,vs]  Position test window and scale it\n");
+	fprintf(stderr,"                   ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
+	fprintf(stderr,"                   ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
+	fprintf(stderr," -F                Fill whole screen with black background\n");
 #if defined(UNIX_X11)
-	fprintf(stderr," -n                     Don't set override redirect on test window\n");
+	fprintf(stderr," -n                Don't set override redirect on test window\n");
 #endif
-	fprintf(stderr," -N                     Disable initial calibration of instrument if possible\n");
-	fprintf(stderr," -H                     Use high resolution spectrum mode (if available)\n");
-//	fprintf(stderr," -V                     Use adaptive measurement mode (if available)\n");
-	fprintf(stderr," -C \"command\"           Invoke shell \"command\" each time a color is set\n");
-	fprintf(stderr," -o observ              Choose CIE Observer for CCMX spectrometer data:\n");
-	fprintf(stderr,"                        1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
-	fprintf(stderr," -s steps               Override default patch sequence combination steps  (default %d)\n",DEFAULT_MSTEPS);
-	fprintf(stderr," -W n|h|x               Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
-	fprintf(stderr," -D [level]             Print debug diagnostics to stderr\n");
-	fprintf(stderr," -E desciption          Override the default overall description\n");
-	fprintf(stderr," -I displayname         Set display make and model description\n");
-	fprintf(stderr," -T displaytech         Set display technology description (ie. CRT, LCD etc.)\n");
-	fprintf(stderr," -U c                   Set UI selection character(s)\n");
-	fprintf(stderr," -Y r|n                 Set or override refresh/non-refresh display type\n");
-	fprintf(stderr," -Y R:rate              Override measured refresh rate with rate Hz\n");
-	fprintf(stderr," -Y A                   Use non-adaptive integration time mode (if available).\n");
+	fprintf(stderr," -N                Disable initial calibration of instrument if possible\n");
+	fprintf(stderr," -H                Use high resolution spectrum mode (if available)\n");
+//	fprintf(stderr," -V                Use adaptive measurement mode (if available)\n");
+	fprintf(stderr," -C \"command\"      Invoke shell \"command\" each time a color is set\n");
+	fprintf(stderr," -o observ         Choose CIE Observer for CCMX spectrometer data:\n");
+	fprintf(stderr,"                   1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -s steps          Override default patch sequence combination steps  (default %d)\n",DEFAULT_MSTEPS);
+	fprintf(stderr," -W n|h|x          Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
+	fprintf(stderr," -D [level]        Print debug diagnostics to stderr\n");
+	fprintf(stderr," -E desciption     Override the default overall description\n");
+	fprintf(stderr," -I displayname    Set display make and model description (optional)\n");
+	if (flag & 0x0002) {
+		int i;
+		disptech_info *list = disptech_get_list();
+		for (i = 0; list[i].dtech != disptech_end; i++)
+			fprintf(stderr," %s %s               %s\n",i == 0 ? "-t" : "  ", list[i].lsel,list[i].desc);
+	} else {
+		fprintf(stderr," -t dtech          Set display technology type\n");
+		fprintf(stderr,"                    (Use -?? to list technology choices)\n");
+	}
+	fprintf(stderr," -U c              Set UI selection character(s)\n");
+	fprintf(stderr," -Y r|n            Set or override refresh/non-refresh display type\n");
+	fprintf(stderr," -Y R:rate         Override measured refresh rate with rate Hz\n");
+	fprintf(stderr," -Y A              Use non-adaptive integration time mode (if available).\n");
 	fprintf(stderr," correction.ccmx | calibration.ccss\n");
-	fprintf(stderr,"                        File to save result to\n");
+	fprintf(stderr,"                   File to save result to\n");
 	if (icmps != NULL)
 		icmps->del(icmps);
 	exit(1);
@@ -185,8 +204,7 @@ usage(char *diag, ...) {
 
 typedef double ary3[3];
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	int i,j;
 	int fa, nfa, mfa;					/* current argument we're looking at */
 	disppath *disp = NULL;				/* Display being used */
@@ -206,7 +224,8 @@ int main(int argc, char *argv[])
 	int comno = COMPORT;				/* COM port used */
 	flow_control fc = fc_nc;			/* Default flow control */
 	int highres = 0;					/* High res mode if available */
-	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
+	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD, etc */
+	int sdtype = -1;					/* Spectro display kind, -1 = use dtype */
 	int refrmode = -1;					/* Refresh mode */
 	double refrate = 0.0;				/* 0.0 = default, > 0.0 = override refresh rate */ 
 	int cbid = 0;						/* Calibration base display mode ID */
@@ -214,6 +233,9 @@ int main(int argc, char *argv[])
 	int tele = 0;						/* NZ if telephoto mode */
 	int noinitcal = 0;					/* Disable initial calibration */
 	int webdisp = 0;					/* NZ for web display, == port number */
+	int ccdisp = 0;			 			/* NZ for ChromeCast, == list index */
+	ccast_id **ccids = NULL;
+	ccast_id *ccid = NULL;
 #ifdef NT
 	int madvrdisp = 0;					/* NZ for MadVR display */
 #endif
@@ -223,22 +245,23 @@ int main(int argc, char *argv[])
 	ary3 *refs = NULL;					/* Reference XYZ values */
 	int gotref = 0;
 	char *refname = NULL;				/* Name of reference instrument */
+	char *reffile = NULL;				/* Name of reference file */
 	ary3 *cols = NULL;					/* Colorimeter XYZ values */
 	int gotcol = 0;
 	char *colname = NULL;				/* Name of colorimeter instrument */
+	char *colfile = NULL;				/* Name of colorimeter file */
 	col *rdcols = NULL;					/* Internal storage of all the patch colors */
 	int saved = 0;						/* Saved result */
 	char innames[2][MAXNAMEL+1] = { "\000", "\000" };  /* .ti3 input names */
-	char outname[MAXNAMEL+1] = "\000";  /* ccmx output file name */
+	char outname[MAXNAMEL+5+1] = "\000";  /* ccmx output file name */
 	char *description = NULL;			/* Given overall description */
 	char *displayname = NULL;			/* Given display name */
-	char *displaytech = NULL;			/* Given display technology */
+	disptech_info *dtinfo = NULL;		/* Display technology */
 	char *uisel = NULL;					/* UI selection letters */
 	int rv;
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
 	check_if_not_interactive();
-	setup_spyd2();						/* Load firware if available */
 
 	/* Process the arguments */
 	mfa = 0;        /* Minimum final arguments */
@@ -258,8 +281,10 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			if (argv[fa][1] == '?') {
-				usage("Usage requested");
+			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
+				if (argv[fa][2] == '?' || argv[fa][2] == '-')
+					usage(2, "Extended usage requested");
+				usage(0, "Usage requested");
 
 			} else if (argv[fa][1] == 'v') {
 				verb = 1;
@@ -271,7 +296,7 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'f') {
 				char *cna, *f1 = NULL;
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to input file flag -f");
+				if (na == NULL) usage(0,"Expect argument to input file flag -f");
 
 				if ((cna = strdup(na)) == NULL)
 					error("Malloc failed");
@@ -297,7 +322,19 @@ int main(int argc, char *argv[])
 					if (na[3] == ':') {
 						webdisp = atoi(na+4);
 						if (webdisp == 0 || webdisp > 65535)
-							usage("Web port number must be in range 1..65535");
+							usage(0,"Web port number must be in range 1..65535");
+					}
+					fa = nfa;
+				} else if (strncmp(na,"cc",2) == 0
+				 || strncmp(na,"CC",2) == 0) {
+					ccdisp = 1;
+					if (na[2] == ':') {
+						if (na[3] < '0' || na[3] > '9')
+							usage(0x0001,"Available ChromeCasts");
+
+						ccdisp = atoi(na+3);
+						if (ccdisp <= 0)
+							usage(0,"ChromCast number must be in range 1..N");
 					}
 					fa = nfa;
 #ifdef NT
@@ -311,10 +348,10 @@ int main(int argc, char *argv[])
 					int ix, iv;
 
 					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-						if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
+						if (++fa >= argc || argv[fa][0] == '-') usage(0,"Parameter expected following -display");
 						setenv("DISPLAY", argv[fa], 1);
 					} else {
-						if (na == NULL) usage("Parameter expected following -d");
+						if (na == NULL) usage(0,"Parameter expected following -d");
 						fa = nfa;
 						if (strcmp(na,"fake") == 0 || strcmp(na,"FAKE") == 0) {
 							fake = 1;
@@ -328,14 +365,14 @@ int main(int argc, char *argv[])
 							if (disp != NULL)
 								free_a_disppath(disp);
 							if ((disp = get_a_display(ix-1)) == NULL)
-								usage("-d parameter %d out of range",ix);
+								usage(0,"-d parameter %d out of range",ix);
 							if (iv > 0)
 								disp->rscreen = iv-1;
 						}
 					}
 #else
 					int ix;
-					if (na == NULL) usage("Parameter expected following -d");
+					if (na == NULL) usage(0,"Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0 || strcmp(na,"FAKE") == 0) {
 						fake = 1;
@@ -346,7 +383,7 @@ int main(int argc, char *argv[])
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
-							usage("-d parameter %d out of range",ix);
+							usage(0,"-d parameter %d out of range",ix);
 					}
 #endif
 				}
@@ -358,9 +395,9 @@ int main(int argc, char *argv[])
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -c");
+				if (na == NULL) usage(0,"Paramater expected following -c");
 				comno = atoi(na);
-				if (comno < 1 || comno > 40) usage("-c parameter %d out of range",comno);
+				if (comno < 1 || comno > 40) usage(0,"-c parameter %d out of range",comno);
 
 			/* Telephoto */
 			} else if (argv[fa][1] == 'p') {
@@ -369,7 +406,7 @@ int main(int argc, char *argv[])
 			/* Display type */
 			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -y");
+				if (na == NULL) usage(0,"Parameter expected after -y");
 				dtype = na[0];
 
 				/* For ccss, set a default */
@@ -379,22 +416,28 @@ int main(int argc, char *argv[])
 					refrmode = 0;
 				}
 
+			/* Spectro display type */
+			} else if (argv[fa][1] == 'z') {
+				fa = nfa;
+				if (na == NULL) usage(0,"Parameter expected after -z");
+				sdtype = na[0];
+
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -P");
+				if (na == NULL) usage(0,"Parameter expected after -P");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
 					;
 				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
 					vpatscale = hpatscale;
 				} else {
-					usage("-P parameter '%s' not recognised",na);
+					usage(0,"-P parameter '%s' not recognised",na);
 				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || hpatscale <= 0.0 || hpatscale > 50.0
 				 || vpatscale <= 0.0 || vpatscale > 50.0)
-					usage("-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
+					usage(0,"-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -417,7 +460,7 @@ int main(int argc, char *argv[])
 			/* Spectral Observer type (only relevant for CCMX) */
 			} else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expecte after -o");
+				if (na == NULL) usage(0,"Parameter expecte after -o");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 2;
 					observ = icxOT_CIE_1931_2;
@@ -434,25 +477,25 @@ int main(int argc, char *argv[])
 					spec = 2;
 					observ = icxOT_Shaw_Fairchild_2;
 				} else
-					usage("-o parameter '%s' not recognised",na);
+					usage(0,"-o parameter '%s' not recognised",na);
 
 			} else if (argv[fa][1] == 's') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expecte after -s");
+				if (na == NULL) usage(0,"Parameter expecte after -s");
 				msteps = atoi(na);
 				if (msteps < 1 || msteps > 16)
-					usage("-s parameter value %d is outside the range 1 to 16",msteps);
+					usage(0,"-s parameter value %d is outside the range 1 to 16",msteps);
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -C");
+				if (na == NULL) usage(0,"Parameter expected after -C");
 				ccallout = na;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -W");
+				if (na == NULL) usage(0,"Paramater expected following -W");
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -460,7 +503,7 @@ int main(int argc, char *argv[])
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage("-W parameter '%c' not recognised",na[0]);
+					usage(0,"-W parameter '%c' not recognised",na[0]);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -472,24 +515,28 @@ int main(int argc, char *argv[])
 
 			} else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to display description flag -I");
+				if (na == NULL) usage(0,"Expect argument to display description flag -I");
 				displayname = strdup(na);
 
-			} else if (argv[fa][1] == 'T') {
+			} else if (argv[fa][1] == 't') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to display technology flag -T");
-				displaytech = strdup(na);
+				if (na == NULL) usage(2,"Expect argument to display technology flag -t");
+				dtinfo = disptech_get_list();
+				if (na[1] != '\000')
+					usage(2,"Expect single character argument to display technology flag -t");
+				if ((dtinfo = disptech_select(dtinfo, na[0])) == NULL)
+					usage(2,"-t parameter '%c' not recognized",na[0]);
 
 			/* Copyright string */
 			} else if (argv[fa][1] == 'E') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to overall description flag -E");
+				if (na == NULL) usage(0,"Expect argument to overall description flag -E");
 				description = strdup(na);
 
 			/* Extra flags */
 			} else if (argv[fa][1] == 'Y') {
 				if (na == NULL)
-					usage("Flag '-Y' expects extra flag");
+					usage(0,"Flag '-Y' expects extra flag");
 			
 				if (na[0] == 'r') {
 					refrmode = 1;
@@ -497,32 +544,32 @@ int main(int argc, char *argv[])
 					refrmode = 0;
 				} else if (na[0] == 'R') {
 					if (na[1] != ':')
-						usage("-Y R:rate syntax incorrect");
+						usage(0,"-Y R:rate syntax incorrect");
 					refrate = atof(na+2);
 					if (refrate < 5.0 || refrate > 150.0)
-						usage("-Y R:rate %f Hz not in valid range",refrate);
+						usage(0,"-Y R:rate %f Hz not in valid range",refrate);
 				} else if (na[0] == 'A') {
 					nadaptive = 1;
 				} else {
-					usage("Flag '-Z %c' not recognised",na[0]);
+					usage(0,"Flag '-Z %c' not recognised",na[0]);
 				}
 				fa = nfa;
 
 			/* UI selection character */
 			} else if (argv[fa][1] == 'U') {
 				fa = nfa;
-				if (na == NULL || na[0] == '\000') usage("Expect argument to flag -U");
+				if (na == NULL || na[0] == '\000') usage(0,"Expect argument to flag -U");
 				uisel = na;
 				for (i = 0; uisel[i] != '\000'; i++) {
 					if (!( (uisel[i] >= '0' && uisel[i] <= '9')
 					    || (uisel[i] >= 'A' && uisel[i] <= 'Z')
 					    || (uisel[i] >= 'a' && uisel[i] <= 'z'))) {
-						usage("-U character(s) must be 0-9,A-Z,a-z");
+						usage(0,"-U character(s) must be 0-9,A-Z,a-z");
 					}
 				}
 
 			} else 
-				usage("Flag '-%c' not recognised",argv[fa][1]);
+				usage(0,"Flag '-%c' not recognised",argv[fa][1]);
 		}
 		else
 			break;
@@ -530,17 +577,19 @@ int main(int argc, char *argv[])
 
 	/* Get the output ccmx file name argument */
 	if (fa >= argc)
-		usage("Output filname expected");
+		usage(0,"Output filname expected");
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
+	if (strrchr(outname, '.') == NULL)	/* no extension */
+		strcat(outname, doccss ? ".ccss" : ".ccmx");
 
 	if (fakeseq && doccss)
 		error("Fake CCSS test not implemeted");
 
 	printf("\n");
 
-	if (displayname == NULL && displaytech == NULL)
-		error("Either the display description (-I) or technology (-T) needs to be set");
+	if (dtinfo == NULL)
+		error("Display technology (-t) must be set");
 
 	/* CCSS: See if we're working from a .ti3 file */
 	if (doccss && innames[0][0] != '\000') {
@@ -617,7 +666,7 @@ int main(int argc, char *argv[])
 		cgf = NULL;
 
 		if (description == NULL) {
-			char *disp = displaytech != NULL ? displaytech : displayname;
+			char *disp = displayname != NULL ? displayname : dtinfo->desc;
 			char *tt = "CCSS for ";
 			if ((description = malloc(strlen(disp) + strlen(tt) + 1)) == NULL)
 				error("Malloc failed");
@@ -649,7 +698,7 @@ int main(int argc, char *argv[])
 			error("new_ccss() failed");
 
 		if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-		                 displaytech, refrmode, uisel, refname, samples, npat)) {
+		                 dtinfo->dtech, refrmode, uisel, refname, samples, npat)) {
 			error("set_ccss failed with '%s'\n",cc->err);
 		}
 		if(cc->write_ccss(cc, outname))
@@ -733,6 +782,7 @@ int main(int argc, char *argv[])
 					error("Found two spectral files - expect one colorimtric file");
 				current = refs;
 				refname = strdup(cgf->t[0].kdata[ii]);
+				reffile = innames[n];
 				gotref = 1;
 				
 			} else if (strcmp(cgf->t[0].kdata[ti],"NO") == 0) {
@@ -740,6 +790,7 @@ int main(int argc, char *argv[])
 				if (gotcol) {
 					/* Copy what we though was cols to refs */
 					refname = colname;
+					reffile = colfile;
 					for (i = 0; i < npat; i++) {
 						refs[i][0] = cols[i][0];
 						refs[i][1] = cols[i][1];
@@ -767,6 +818,7 @@ int main(int argc, char *argv[])
 				}
 				current = cols;
 				colname = strdup(cgf->t[0].kdata[ii]);
+				colfile = innames[n];
 				gotcol = 1;
 			} else {
 				error ("Unknown INSTRUMENT_TYPE_SPECTRAL value '%s'",cgf->t[0].kdata[ti]);
@@ -894,7 +946,7 @@ int main(int argc, char *argv[])
 			strcat(colname, ")");
 		}
 		if (description == NULL) {
-			char *disp = displaytech != NULL ? displaytech : displayname;
+			char *disp = displayname != NULL ? displayname : dtinfo->desc;
 			if ((description = malloc(strlen(colname) + strlen(disp) + 4)) == NULL)
 				error("Malloc failed");
 			strcpy(description, colname);
@@ -903,15 +955,15 @@ int main(int argc, char *argv[])
 		}
 
 		if (refrmode < 0)
-			error("The display refresh mode is not known - use the -Y flag");
+			error("The display refresh mode is not in '%s' - use the -Y flag",colfile);
 
 		if (cbid == 0)
-			error("The calibration base display mode not specified in the .ti3 file");
+			error("The calibration base display mode not specified in the '%s' file",colfile);
 
 		if ((cc = new_ccmx()) == NULL)
 			error("new_ccmx() failed");
 
-		if (cc->create_ccmx(cc, description, colname, displayname, displaytech,
+		if (cc->create_ccmx(cc, description, colname, displayname, dtinfo->dtech,
 			                     refrmode, cbid, uisel, refname, npat, refs, cols)) {
 			error("create_ccmx failed with '%s'\n",cc->err);
 		}
@@ -924,7 +976,7 @@ int main(int argc, char *argv[])
 		}
 
 		if(cc->write_ccmx(cc, outname))
-			printf("\nWriting CCMX file '%s' failed\n",outname);
+			printf("\nWriting CCMX file '%s' failed with '%s'\n",outname,cc->err);
 		else
 			printf("\nWriting CCMX file '%s' succeeded\n",outname);
 		cc->del(cc);
@@ -935,12 +987,13 @@ int main(int argc, char *argv[])
 		/* No explicit display has been set */
 		if (
 #ifndef SHOW_WINDOW_ONFAKE
-		 !fake && 
+		!fake 
 #endif
-		 webdisp == 0
 #ifdef NT
 		 && madvrdisp == 0
 #endif
+		 && webdisp == 0
+		 && ccdisp == 0
 		 && disp == NULL) {
 			int ix = 0;
 #if defined(UNIX_X11)
@@ -965,6 +1018,19 @@ int main(int argc, char *argv[])
 		}
 		if (fake) {
 			displayname = strdup("fake display");
+		}
+
+		/* If we've requested ChromeCast, look it up */
+		if (ccdisp) {
+			if ((ccids = get_ccids()) == NULL)
+				error("discovering ChromCasts failed");
+			if (ccids[0] == NULL)
+				error("There are no ChromCasts to use\n");
+			for (i = 0; ccids[i] != NULL; i++)
+				;
+			if (ccdisp < 1 || ccdisp > i)
+				error("Chosen ChromCasts (%d) is outside list (1..%d)\n",ccdisp,i);
+			ccid = ccids[ccdisp-1];
 		}
 
 		/* Create grid of device test values */
@@ -1139,7 +1205,8 @@ int main(int argc, char *argv[])
 						for (i = 0; ; i++) {
 							if (paths[i] == NULL)
 								break;
-							if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+							if ((paths[i]->itype == instSpyder1 && setup_spyd2(0) == 0)
+							 || (paths[i]->itype == instSpyder2 && setup_spyd2(1) == 0))
 								fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 							else
 								fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
@@ -1177,18 +1244,21 @@ int main(int argc, char *argv[])
 
 				/* Should we use current cal rather than native ??? */
 				if ((dr = new_disprd(&errc, icmps->get_path(icmps, comno),
-				                     fc, dtype, 1, tele, nadaptive,
+				                     fc, dtype, sdtype, 1, tele, nadaptive,
 				                     noinitcal, 0, highres, refrate, 3, NULL, NULL,
 					                 NULL, 0, disp, 0, blackbg,
-				                     override, webdisp,
+				                     override, webdisp, ccid,
 #ifdef NT
 					                 madvrdisp,
 #endif
 					                 ccallout, NULL,
 					                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
-					                 NULL, NULL, 0, 2, icxOT_default, NULL, 
-				                     0, 0, "fake" ICC_FILE_EXT, g_log)) == NULL)
-					error("new_disprd failed with '%s'\n",disprd_err(errc));
+					                 disptech_unknown, 0, NULL, NULL, 0, 2, icxOT_default, NULL, 
+				                     0, 0, "fake" ICC_FILE_EXT, g_log)) == NULL) {
+					printf("Opening the instrument failed with '%s'. Try selecting it again ?\n",
+					        disprd_err(errc));
+					continue;
+				}
 			
 				it = dr->it;
 
@@ -1289,7 +1359,7 @@ int main(int argc, char *argv[])
 					}
 
 					if (description == NULL) {
-						char *disp = displaytech != NULL ? displaytech : displayname;
+						char *disp = displayname != NULL ? displayname : dtinfo->desc;
 						char *tt = "CCSS for ";
 						if ((description = malloc(strlen(disp) + strlen(tt) + 1)) == NULL)
 							error("Malloc failed");
@@ -1326,11 +1396,11 @@ int main(int argc, char *argv[])
 						error("new_ccss() failed");
 	
 					if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-					                 displaytech, refrmode, NULL, refname, samples, npat)) {
+					                 dtinfo->dtech, refrmode, NULL, refname, samples, npat)) {
 						error("set_ccss failed with '%s'\n",cc->err);
 					}
 					if(cc->write_ccss(cc, outname))
-						printf("\nWriting CCSS file '%s' failed\n",outname);
+						printf("\nWriting CCSS file '%s' failed with '%s'\n",outname,cc->err);
 					else
 						printf("\nWriting CCSS file '%s' succeeded\n",outname);
 					cc->del(cc);
@@ -1380,7 +1450,7 @@ int main(int argc, char *argv[])
 					if ((cc = new_ccmx()) == NULL)
 						error("new_ccmx() failed");
 	
-					if (cc->create_ccmx(cc, description, colname, displayname, displaytech,
+					if (cc->create_ccmx(cc, description, colname, displayname, dtinfo->dtech,
 					                    refrmode, cbid, uisel, refname, npat, refs, cols)) {
 						error("create_ccmx failed with '%s'\n",cc->err);
 					}
@@ -1393,7 +1463,7 @@ int main(int argc, char *argv[])
 					}
 	
 					if(cc->write_ccmx(cc, outname))
-						printf("\nWriting CCMX file '%s' failed\n",outname);
+						printf("\nWriting CCMX file '%s' failed with '%s'\n",outname,cc->err);
 					else
 						printf("\nWriting CCMX file '%s' succeeded\n",outname);
 					cc->del(cc);
@@ -1418,6 +1488,7 @@ int main(int argc, char *argv[])
 		free(displayname);
 		if (icmps != NULL)
 			icmps->del(icmps);
+		free_ccids(ccids);
 	}
 
 #ifdef DEBUG

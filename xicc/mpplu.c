@@ -26,6 +26,8 @@
 #include "numlib.h"
 #include "xicc.h"
 #include "counters.h"
+#include "vrml.h"
+#include "ui.h"
 
 void usage(void) {
 	fprintf(stderr,"Translate colors through an MPP profile, V1.00\n");
@@ -41,13 +43,13 @@ void usage(void) {
 	fprintf(stderr,"            1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -u         Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," -g         Create gamut output\n");
-	fprintf(stderr," -w         Create gamut VRML as well\n");
-	fprintf(stderr," -n         Don't add VRML axes\n");
+	fprintf(stderr," -w         Create gamut %s as well\n",vrml_format());
+	fprintf(stderr," -n         Don't add %s axes\n",vrml_format());
 	fprintf(stderr," -a n       Gamut transparency level\n");
 	fprintf(stderr," -d n       Gamut surface detail level\n");
 	fprintf(stderr," -t num     Invoke debugging test code \"num\" 1..n\n");
 	fprintf(stderr,"            1 - check partial derivative for device input\n");
-	fprintf(stderr,"            2 - create overlap diagnostic VRML gamut surface\n");
+	fprintf(stderr,"            2 - create overlap diagnostic %s gamut surface\n",vrml_format());
 	fprintf(stderr,"\n");
 	fprintf(stderr,"    The colors to be translated should be fed into stdin,\n");
 	fprintf(stderr,"    one input color per line, white space separated.\n");
@@ -67,8 +69,8 @@ main(int argc, char *argv[]) {
 	int verb = 0;
 	int test = 0;			/* special test code */
 	int dogam = 0;			/* Create gamut */
-	int dowrl = 0;			/* Create VRML gamut */
-	int doaxes = 1;			/* Create VRML axes */
+	int dowrl = 0;			/* Create VRML/X3D gamut */
+	int doaxes = 1;			/* Create VRML/X3D axes */
 	double trans = 0.0;		/* Transparency */
 	double gamres = 0.0;	/* Gamut resolution */
 	int repYxy = 0;			/* Report Yxy */
@@ -250,13 +252,13 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G')
 				dogam = 1;
 
-			/* VRML plot */
+			/* VRML/X3D plot */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				dogam = 1;
 				dowrl = 1;
 			}
 
-			/* No VRML axes */
+			/* No VRML/X3D axes */
 			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
 				doaxes = 0;
 			}
@@ -415,8 +417,7 @@ main(int argc, char *argv[]) {
 			strcpy(gam_name, prof_name);
 			if ((xl = strrchr(gam_name, '.')) == NULL)	/* Figure where extention is */
 				xl = gam_name + strlen(gam_name);
-	
-			strcpy(xl,".wrl");
+			xl[0] = '\000';				/* Remove extension */
 			diag_gamut(mppo, gamres, doaxes, trans, gam_name);
 
 		} else {
@@ -434,15 +435,14 @@ main(int argc, char *argv[]) {
 		strcpy(gam_name, prof_name);
 		if ((xl = strrchr(gam_name, '.')) == NULL)	/* Figure where extention is */
 			xl = gam_name + strlen(gam_name);
-	
 		strcpy(xl,".gam");
-		if (gam->write_gam(gam,gam_name))
+		if (gam->write_gam(gam, gam_name))
 			error ("write gamut failed on '%s'",gam_name);
 	
 		if (dowrl) {
-			strcpy(xl,".wrl");
+			xl[0] = '\000';
 			if (gam->write_vrml(gam,gam_name, doaxes, docusps))
-				error ("write vrml failed on '%s'",gam_name);
+				error ("write vrml failed on '%s%s'",gam_name,vrml_ext());
 		}
 
 		gam->del(gam);
@@ -602,21 +602,10 @@ mpp *p,				/* This */
 double detail,		/* Gamut resolution detail */
 int doaxes,
 double trans,		/* Transparency */
-char *outname		/* Output VRML file */
+char *outname		/* Output VRML/X3D file (no extension) */
 ) {
 	int i, j;
-	FILE *wrl;
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-	};
+	vrml *wrl;
 	int vix;						/* Vertex index */
 	DCOUNT(coa, MAX_CHAN, p->n, 0, 0, 2);
 	double col[MPP_MXCCOMB][3];		/* Color asigned to each major vertex */
@@ -661,55 +650,10 @@ char *outname		/* Output VRML file */
 	if (res < 2)
 		res = 2;
 
-	if ((wrl = fopen(outname,"w")) == NULL)
-		error("Error opening wrl output file '%s'",outname);
+	if ((wrl = new_vrml(outname, doaxes, vrml_lab)) == NULL)
+		error("new_vrml faile for file '%s%s'",outname,vrml_ext());
 
-	/* Spit out a VRML 2 Object surface of gamut */
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"# Created by the Argyll CMS\n");
-	fprintf(wrl,"Transform {\n");
-  	fprintf(wrl,"children [\n");
-    fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
-		}
-		fprintf(wrl,"\n");
-	}
-	fprintf(wrl,"    Transform {\n");
-	fprintf(wrl,"      translation 0 0 0\n");
-	fprintf(wrl,"      children [\n");
-	fprintf(wrl,"		Shape { \n");
-	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
-	fprintf(wrl,"				solid FALSE\n");		/* Don't back face cull */
-	fprintf(wrl,"				convex TRUE\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coord Coordinate { \n");
-	fprintf(wrl,"		            point [			# Verticy coordinates\n");
-
+	wrl->start_line_set(wrl, 0);
 
 	/* Itterate over all the faces in the device space */
 	/* generating the vertx positions. */
@@ -720,6 +664,7 @@ char *outname		/* Output VRML file */
 		double in[MAX_CHAN];
 		double out[3];
 		double sum;
+		double xb, yb;
 
 		/* Scan only device surface */
 		for (m1 = 0; m1 < p->n; m1++) {
@@ -737,12 +682,32 @@ char *outname		/* Output VRML file */
 
 				/* Scan over 2D device space face */
 				for (x = 0; x < res; x++) {				/* step over surface */
-					in[m1] = x/(res - 1.0);
+					xb = in[m1] = x/(res - 1.0);
 					for (y = 0; y < res; y++) {
-						in[m2] = y/(res - 1.0);
+						int v0, v1, v2, v3;
+						double rgb[3];
+						yb = in[m2] = y/(res - 1.0);
 
+						/* Lookup PCS value */
 						p->lookup(p, out, in);
-						fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-50.0);
+
+						/* Create a color */
+						for (v0 = 0, e = 0; e < p->n; e++)
+							v0 |= coa[e] ? (1 << e) : 0;		/* Binary index */
+
+						v1 = v0 | (1 << m2);				/* Y offset */
+						v2 = v0 | (1 << m2) | (1 << m1);	/* X+Y offset */
+						v3 = v0 | (1 << m1);				/* Y offset */
+
+						/* Linear interp between the main verticies */
+						for (j = 0; j < 3; j++) {
+							rgb[j] = (1.0 - yb) * (1.0 - xb) * col[v0][j]
+							       +        yb  * (1.0 - xb) * col[v1][j]
+							       + (1.0 - yb) *        xb  * col[v3][j]
+							       +        yb  *        xb  * col[v2][j];
+						}
+
+						wrl->add_col_vertex(wrl, 0, out, rgb);
 						vix++;
 					}
 				}
@@ -751,11 +716,6 @@ char *outname		/* Output VRML file */
 		/* Increment index within block */
 		DC_INC(coa);
 	}
-
-	fprintf(wrl,"					]\n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
 
 	/* Itterate over all the faces in the device space */
 	/* generating the quadrilateral indexes. */
@@ -785,8 +745,12 @@ char *outname		/* Output VRML file */
 					for (y = 0; y < res; y++) {
 
 						if (x < (res-1) && y < (res-1)) {
-							fprintf(wrl,"%d, %d, %d, %d, -1\n", 
-							vix, vix + 1, vix + 1 + res, vix + res);
+							int ix[4];
+							ix[0] = vix;
+							ix[1] = vix + 1;
+							ix[2] = vix + 1 + res;
+							ix[3] = vix + res;
+							wrl->add_quad(wrl, 0, ix);
 						}
 						vix++;
 					}
@@ -797,87 +761,12 @@ char *outname		/* Output VRML file */
 		DC_INC(coa);
 	}
 
-	fprintf(wrl,"				]\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"				colorPerVertex TRUE\n");
-	fprintf(wrl,"		        color Color {\n");
-	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
+	wrl->make_quads_vc(wrl, 0, trans);
 
-	/* Itterate over all the faces in the device space */
-	/* generating the vertx colors. */
-	DC_INIT(coa);
-	vix = 0;
-	while(!DC_DONE(coa)) {
-		int e, m1, m2;
-		double in[MAX_CHAN];
-		double sum;
+	if (wrl->flush(wrl) != 0)
+		error("Error closing output file '%s%s'",outname,vrml_ext());
 
-		/* Scan only device surface */
-		for (m1 = 0; m1 < p->n; m1++) {
-			if (coa[m1] != 0)
-				continue;
-
-			for (m2 = m1 + 1; m2 < p->n; m2++) {
-				int x, y;
-
-				if (coa[m2] != 0)
-					continue;
-
-				for (sum = 0.0, e = 0; e < p->n; e++)
-					in[e] = (double)coa[e];		/* Base value */
-
-				/* Scan over 2D device space face */
-				for (x = 0; x < res; x++) {				/* step over surface */
-					double xb = x/(res - 1.0);
-					for (y = 0; y < res; y++) {
-						int v0, v1, v2, v3;
-						double yb = y/(res - 1.0);
-						double rgb[3];
-
-						for (v0 = 0, e = 0; e < p->n; e++)
-							v0 |= coa[e] ? (1 << e) : 0;		/* Binary index */
-
-						v1 = v0 | (1 << m2);				/* Y offset */
-						v2 = v0 | (1 << m2) | (1 << m1);	/* X+Y offset */
-						v3 = v0 | (1 << m1);				/* Y offset */
-
-						/* Linear interp between the main verticies */
-						for (j = 0; j < 3; j++) {
-							rgb[j] = (1.0 - yb) * (1.0 - xb) * col[v0][j]
-							       +        yb  * (1.0 - xb) * col[v1][j]
-							       + (1.0 - yb) *        xb  * col[v3][j]
-							       +        yb  *        xb  * col[v2][j];
-						}
-						fprintf(wrl,"%f %f %f,\n",rgb[1], rgb[2], rgb[0]);
-						vix++;
-					}
-				}
-			}
-		}
-		/* Increment index within block */
-		DC_INC(coa);
-	}
-
-	fprintf(wrl,"					] \n");
-	fprintf(wrl,"		        }\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		    appearance Appearance { \n");
-	fprintf(wrl,"		        material Material {\n");
-	fprintf(wrl,"					transparency %f\n",trans);
-	fprintf(wrl,"					ambientIntensity 0.3\n");
-	fprintf(wrl,"					shininess 0.5\n");
-	fprintf(wrl,"				}\n");
-	fprintf(wrl,"		    }\n");
-	fprintf(wrl,"		}	# end Shape\n");
-	fprintf(wrl,"      ]\n");
-	fprintf(wrl,"    }\n");
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0)
-		error("Error closing output file '%s'",outname);
+	wrl->del(wrl);
 }
 
 /* -------------------------------------------- */

@@ -62,16 +62,16 @@
 #include <float.h>
 #endif
 #ifdef DEBUG
-#include "plot.h"
+# include "plot.h"
+# include "ui.h"
 #endif
 #include "numlib.h"
 #include "sort.h"
-#include "plot.h"
 #include "icc.h"
 #include "xcolorants.h"
 #include "targen.h"
 #include "ifarp.h"
-#include "../h/sort.h"		/* Heap sort */
+#include "sort.h"		/* Heap sort */
 
 #ifdef DEBUG
 static void dump_image(ifarp *s, int pcp);

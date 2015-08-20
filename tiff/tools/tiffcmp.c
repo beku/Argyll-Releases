@@ -1,4 +1,4 @@
-/* $Id: tiffcmp.c,v 1.13.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: tiffcmp.c,v 1.17 2014-12-21 18:52:42 erouault Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -35,6 +35,10 @@
 # include <unistd.h>
 #endif
 
+#ifdef NEED_LIBPORT
+# include "libport.h"
+#endif
+
 #include "tiffio.h"
 
 #ifndef HAVE_GETOPT
@@ -52,7 +56,7 @@ static	uint32 imagelength;
 static	void usage(void);
 static	int tiffcmp(TIFF*, TIFF*);
 static	int cmptags(TIFF*, TIFF*);
-static	int ContigCompare(int, uint32, unsigned char*, unsigned char*, int);
+static	int ContigCompare(int, uint32, unsigned char*, unsigned char*, tsize_t);
 static	int SeparateCompare(int, int, uint32, unsigned char*, unsigned char*);
 static	void PrintIntDiff(uint32, int, uint32, uint32, uint32);
 static	void PrintFloatDiff(uint32, int, uint32, double, double);
@@ -256,6 +260,7 @@ bad1:
 static int
 cmptags(TIFF* tif1, TIFF* tif2)
 {
+	uint16 compression1, compression2;
 	CmpLongField(TIFFTAG_SUBFILETYPE,	"SubFileType");
 	CmpLongField(TIFFTAG_IMAGEWIDTH,	"ImageWidth");
 	CmpLongField(TIFFTAG_IMAGELENGTH,	"ImageLength");
@@ -272,8 +277,20 @@ cmptags(TIFF* tif1, TIFF* tif2)
 	CmpShortField(TIFFTAG_SAMPLEFORMAT,	"SampleFormat");
 	CmpFloatField(TIFFTAG_XRESOLUTION,	"XResolution");
 	CmpFloatField(TIFFTAG_YRESOLUTION,	"YResolution");
-	CmpLongField(TIFFTAG_GROUP3OPTIONS,	"Group3Options");
-	CmpLongField(TIFFTAG_GROUP4OPTIONS,	"Group4Options");
+	if( TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&
+		compression1 == COMPRESSION_CCITTFAX3 &&
+		TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&
+		compression2 == COMPRESSION_CCITTFAX3 )
+	{
+		CmpLongField(TIFFTAG_GROUP3OPTIONS,	"Group3Options");
+	}
+	if( TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&
+		compression1 == COMPRESSION_CCITTFAX4 &&
+		TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&
+		compression2 == COMPRESSION_CCITTFAX4 )
+	{
+		CmpLongField(TIFFTAG_GROUP4OPTIONS,	"Group4Options");
+	}
 	CmpShortField(TIFFTAG_RESOLUTIONUNIT,	"ResolutionUnit");
 	CmpShortField(TIFFTAG_PLANARCONFIG,	"PlanarConfiguration");
 	CmpLongField(TIFFTAG_ROWSPERSTRIP,	"RowsPerStrip");
@@ -309,7 +326,7 @@ cmptags(TIFF* tif1, TIFF* tif2)
 
 static int
 ContigCompare(int sample, uint32 row,
-	      unsigned char* p1, unsigned char* p2, int size)
+	      unsigned char* p1, unsigned char* p2, tsize_t size)
 {
     uint32 pix;
     int ppb = 8 / bitspersample;

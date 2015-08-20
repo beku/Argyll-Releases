@@ -9,9 +9,12 @@ if $(NT) {
     DEFINES += WIN32 ;
 }
 
-SubInclude axTLS ;
+if $(SSLLIB) {
+	DEFINES += USING_AXTLS ;		# Trigger right #include
+	SubInclude axTLS ;
+}
 
-HDRS = ../h ../numlib ../spectro axTLS chan ../yajl ; 
+HDRS = ../h ../numlib ../spectro $(SSLINC) chan ../yajl ; 
 
 # We create the channel protocol buffers implementation files thus:
 # /src/protobuf_c/protobuf.exe --c_out=chan cast_channel.proto
@@ -21,14 +24,19 @@ CHAN_SRC =
 	chan/protobuf-c.c
 	;
 
-# ccast library
-Library libccast : ccmdns.c ccpacket.c ccmes.c ccast.c $(CHAN_SRC) dpat.c ;
+Objects ccmes.c $(CHAN_SRC) : : : axTLS ;
+Objects ccmdns.c ccpacket.c ccast.c dpat.c ;
 
-LINKLIBS = ./libccast axTLS/libaxtls ../yajl/libyajl ../numlib/libnum ../spectro/libconv ;
+# ccast library
+LibraryFromObjects libccast : ccmdns ccpacket ccmes ccast $(CHAN_SRC) dpat ;
+
+LINKLIBS = ./libccast $(SSLLIB) ../yajl/libyajl ../numlib/libnum ../spectro/libconv ;
+
+# If run in ccast dir, the following don't link from clean,
+# due to the _NormPaths rule not resolving ../ccast into . 
 
 # Test harness
 #Main cctest : cctest.c ;
 Main filt : filt.c ;
-
 MainVariant dpat : dpat.c : : STANDALONE_TEST ;
 

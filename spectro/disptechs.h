@@ -136,7 +136,8 @@ disptech_info *disptech_select(disptech_info *list, char c);
 /* - - - - - - - - - - - */
 
 /* utility function, used by disptech_get_list & inst_creat_disptype_list()  */
-int disptechs_set_sel(int flag, char *sel, char *usels, int *k, char *asels);
+/* See disptechs.c for parameter description. */
+int disptechs_set_sel(int flag, int ix, char *sel, char *usels, int *k, char *asels);
 
 /* - - - - - - - - - - */
 /* Display settling time model */

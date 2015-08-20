@@ -96,7 +96,7 @@ inst_code setup_display_calibrate(
 //	dispwin *dw;	/* Display window to display test patches on, NULL if none. */
 	a1logd(p->log,1,"setup_display_calibrate called with calc = 0x%x\n",calc);
 
-	switch (calc) {
+	switch (calc & inst_calc_cond_mask) {
 		case inst_calc_none:		/* Use this as a cleanup flag */
 			if (dwi->dw == NULL && dwi->_dw != NULL) {
 				dwi->_dw->del(dwi->_dw);
@@ -112,31 +112,31 @@ inst_code setup_display_calibrate(
 			if (dwi->dw == NULL) {
 				if (dwi->webdisp != 0) {
 					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->hpatsize, dwi->vpatsize,
-						         dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
-					             p->log->verb, p->log->debug)) == NULL) {
+						         dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc,
+						         dwi->fullscreen, p->log->verb, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				} else if (dwi->ccid != NULL) {
 					if ((dwi->_dw = new_ccwin(dwi->ccid, dwi->hpatsize, dwi->vpatsize,
-						         dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
-					             p->log->verb, p->log->debug)) == NULL) {
+						         dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc,
+						         dwi->fullscreen, 0, p->log->verb, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 #ifdef NT
 				} else if (dwi->madvrdisp != 0) {
 					if ((dwi->_dw = new_madvrwin(dwi->hpatsize, dwi->vpatsize,
-					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
-					             p->log->verb, p->log->debug)) == NULL) {
+					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc,
+						         dwi->fullscreen, p->log->verb, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 #endif /* NT */
 				} else {
 					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->hpatsize, dwi->vpatsize,
-					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
-					             dwi->override, p->log->debug)) == NULL) {
+					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc,
+						         dwi->fullscreen, dwi->override, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
@@ -157,22 +157,22 @@ inst_code setup_display_calibrate(
 				dwi->dw->set_settling_delay(dwi->dw, tinfo->rise_time, tinfo->fall_time, -1.0);
 			}
 
-			if (calc == inst_calc_emis_white) {
+			if ((calc & inst_calc_cond_mask) == inst_calc_emis_white) {
 				p->cal_gy_level = 1.0;
 				dwi->_dw->set_color(dwi->_dw, 1.0, 1.0, 1.0);
 
-			} else if (calc == inst_calc_emis_80pc) {
+			} else if ((calc & inst_calc_cond_mask) == inst_calc_emis_80pc) {
 				p->cal_gy_level = 0.8;
 				dwi->_dw->set_color(dwi->_dw, 0.8, 0.8, 0.8);
 
 			} else  {
-				if (calc == inst_calc_emis_grey) {
+				if ((calc & inst_calc_cond_mask) == inst_calc_emis_grey) {
 					p->cal_gy_level = 0.6;
 					p->cal_gy_count = 0;
-				} else if (calc == inst_calc_emis_grey_darker) {
+				} else if ((calc & inst_calc_cond_mask) == inst_calc_emis_grey_darker) {
 					p->cal_gy_level *= 0.7;
 					p->cal_gy_count++;
-				} else if (calc == inst_calc_emis_grey_ligher) {
+				} else if ((calc & inst_calc_cond_mask) == inst_calc_emis_grey_ligher) {
 					p->cal_gy_level *= 1.4;
 					if (p->cal_gy_level > 1.0)
 						p->cal_gy_level = 1.0;
@@ -216,7 +216,7 @@ ccast_id *ccid,	 		/* non-NULL for ChromeCast */
 int madvrdisp,		/* NZ for MadVR display */
 #endif
 int out_tvenc,			/* 1 = use RGB Video Level encoding */
-int blackbg,			/* NZ if whole screen should be filled with black */
+int fullscreen,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
 double hpatsize,		/* Size of dispwin */
 double vpatsize,
@@ -243,7 +243,7 @@ a1log *log				/* Verb, debug & error log */
 #endif
 	dwi.disp = disp; 
 	dwi.out_tvenc = out_tvenc;
-	dwi.blackbg = blackbg;
+	dwi.fullscreen = fullscreen;
 	dwi.override = override;
 	dwi.hpatsize = hpatsize;
 	dwi.vpatsize = vpatsize;
@@ -318,7 +318,7 @@ a1log *log				/* Verb, debug & error log */
 	if (IMODETST(cap, inst_mode_spectral) && sdtype >= 0)
 		dtype = sdtype;
 
-	/* Set the display type */
+	/* Set the display type or calibration mode */
 	if (dtype != 0) {		/* Given selection character */
 		if (cap2 & inst2_disptype) {
 			int ix;
@@ -1843,6 +1843,216 @@ static int disprd_fake_read_co(disprd *p,
 	return 0;
 }
 
+/* Use without a direct connect spectrometer by manual user input */
+/* Return nz on fail/abort - see duspsup.h */
+/* Use disprd_err() to interpret it */
+static int disprd_fake_read_manual(disprd *p,
+	col *cols,		/* Array of patch colors to be tested */
+	int npat, 		/* Number of patches to be tested */
+	int spat,		/* Start patch index for "verb", 0 if not used */
+	int tpat,		/* Total patch index for "verb", 0 if not used */
+	int acr,		/* If nz, do automatic final carriage return */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
+) {
+	int patch, i, j;
+	int ttpat = tpat;
+
+	if (ttpat < npat)
+		ttpat = npat;
+
+	/* Continue until the user is done or quits */
+	for (patch = 0;;) {
+		char buf[200], *bp = NULL, *ep = NULL;
+		char ch = 0;
+		int allread;
+		double rgb[3];
+		int rv;
+		char *cmd;
+		FILE *fp;
+
+		/* Check if all the patches have been read */
+		for (allread = i = 0; i < npat; i++) {
+			if (cols[i].XYZ_v == 0) {
+				break;
+			}
+		}
+		if (i >= npat)
+			allread = 1;
+
+		if (spat != 0 && tpat != 0)
+			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat+patch,tpat);
+
+		rgb[0] = cols[patch].r;
+		rgb[1] = cols[patch].g;
+		rgb[2] = cols[patch].b;
+
+		/* If we have a test window, display the patch color */
+		if (p->dw) {
+			inst_code rv;
+			p->dw->enable_update_delay(p->dw, 0);
+			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
+				a1logd(p->log,1,"set_color() returned %d\n",rv);
+				return 3;
+			}
+			p->dw->enable_update_delay(p->dw, 1);
+		}
+
+		/* If we have a RAMDAC, apply it to the requested color */
+		if (p->cal[0][0] >= 0.0) {
+			double inputEnt_1 = (double)(p->ncal-1);
+
+			for (j = 0; j < 3; j++) {
+				unsigned int ix;
+				double val, w;
+
+				val = rgb[j] * inputEnt_1;
+				if (val < 0.0) {
+					val = 0.0;
+				} else if (val > inputEnt_1) {
+					val = inputEnt_1;
+				}
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (p->ncal-2))
+					ix = (p->ncal-2);
+				w = val - (double)ix;		/* weight */
+				val = p->cal[j][ix];
+				rgb[j] = val + w * (p->cal[j][ix+1] - val);
+			}
+		}
+
+		printf("\nReady to read patch %d of %d RGB %.1f %.1f %.1f%s\n",
+			spat+patch,tpat, rgb[0] * 255.0, rgb[1] * 255.0, rgb[2] * 255.0,
+		    allread ? " (All patches read!)" :
+		    cols[patch].XYZ_v ? " (Already read)" : "");
+
+		printf("Enter %s value (separated by spaces), or\n",
+		       p->xtern == 1 ? "L*a*b*" : "XYZ");
+		printf("  'f' to move forward\n");
+		printf("  'b' to move back\n");
+		printf("  'd' when done, 'q' to abort : ");
+		fflush(stdout);
+
+		/* Read in the next line from stdin. */
+		if (fgets(buf, 200, stdin) == NULL) {
+			printf("Error - unrecognised input\n");
+			continue;
+		}
+		/* Skip whitespace */
+		for (bp = buf; *bp != '\000' && isspace(*bp); bp++)
+			;
+
+		ch = *bp;			/* First character */
+		if (ch == '\000') {
+			printf("Error - unrecognised input\n");
+			continue;
+		}
+
+		/* If it looks like a number */
+	    if (isdigit(ch) || ch == '-' || ch == '+' || ch == '.') {
+
+			/* For each input number */
+			for (i = 0; *bp != '\000' && i < 3; i++) {
+				char *tp, *nbp;
+
+				/* Find the start of the number */
+				while(*bp != '\000' && !isdigit(*bp)
+				      && *bp != '-' && *bp != '+' && *bp != '.')
+					bp++;
+				if (!isdigit(*bp) && *bp != '-' && *bp != '+' && *bp != '.')
+					break;
+
+				/* Find the end of the number */
+				for (tp = bp+1; isdigit(*tp) || *tp == 'e' || *tp == 'E'
+				                || *tp == '-' || *tp == '+' || *tp == '.'; tp++)
+					;
+				if (*tp != '\000')
+					nbp = tp+1;
+				else
+					nbp = tp;
+				*tp = '\000';
+
+				/* Read the number */
+				cols[patch].XYZ[i] = atof(bp);
+
+				bp = nbp;
+			}
+			if (i < 3) {	/* Didn't find 3 numbers */
+				printf("Error - unrecognised input\n");
+				continue;
+			}
+			if (p->xtern == 1) {
+				icmLab2XYZ(&icmD50, cols[patch].XYZ, cols[patch].XYZ);
+				cols[patch].XYZ[0] *= 100.0;
+				cols[patch].XYZ[1] *= 100.0;
+				cols[patch].XYZ[2] *= 100.0;
+			}
+
+			if (clamp)
+				icmClamp3(cols[patch].XYZ, cols[patch].XYZ);
+			cols[patch].XYZ_v = 1;
+			cols[patch].mtype = inst_mrt_emission;
+			printf(" Got XYZ value %f %f %f\n",cols[patch].XYZ[0], cols[patch].XYZ[1], cols[patch].XYZ[2]);
+			/* Advance to next patch. */
+			patch++;
+			if (patch >= npat)
+				patch = 0;
+			continue;
+
+		/* Assume it's a command */
+		} else if (ch == 'f' || ch == 'F') {
+			patch++;
+			if (patch >= npat)
+				patch = 0;
+			continue;
+
+		} else if (ch == 'b' || ch == 'B') {
+			patch--;
+			if (patch < 0)
+				patch = npat-1;
+			continue;
+
+		} else if (ch == 'd' || ch == 'D') {
+			for (allread = i = 0; i < npat; i++) {
+				if (cols[i].XYZ_v == 0)
+					break;
+			}
+			if (i >= npat)
+				allread = 1;
+
+			if (allread)
+				break;
+
+			/* Not all patches have been read */
+			empty_con_chars();
+			printf("\nDone ? - At least one unread patch (%d), Are you sure [y/n]: ", spat+i);
+			fflush(stdout);
+			if ((ch = next_con_char()) == 0x1b) {
+				printf("\n");
+				return 1;
+			}
+			printf("\n");
+			if (ch == 'y' || ch == 'Y')
+				break;
+			continue;
+
+		} else if (ch == 'q' || ch == 'Q' || ch == 0x1b) {
+			empty_con_chars();
+			printf("\nAbort ? - Are you sure ? [y/n]:"); fflush(stdout);
+			if ((ch = next_con_char()) == 'y' || ch == 'Y') {
+				printf("\n");
+				return 1;
+			}
+			printf("\n");
+
+		} else {
+			printf("Error - unrecognised input '%c'\n",ch);
+			continue;
+		}
+	}
+	return 0;
+}
+
 /* Return a string describing the error code */
 char *disprd_err(int en) {
 	switch(en) {
@@ -2008,7 +2218,7 @@ static int config_inst_displ(disprd *p) {
 	if (IMODETST(cap, inst_mode_spectral) && p->sdtype >= 0)
 		dtype = p->sdtype;
 
-	/* Set the display type */
+	/* Set the display type or calibration mode */
 	if (dtype != 0) {
 		if (cap2 & inst2_disptype) {
 			int ix;
@@ -2150,7 +2360,7 @@ double cal[3][MAX_CAL_ENT],	/* Calibration (cal == NULL or cal[0][0] < 0.0 if no
 int ncal,			/* Number of cal[] entries */
 disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
 int out_tvenc,		/* 1 = use RGB Video Level encoding */
-int blackbg,		/* NZ if whole screen should be filled with black */
+int fullscreen,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 int webdisp,        /* If nz, port number for web color display */
 ccast_id *ccid,	 	/* non-NULL for ChromeCast */
@@ -2160,6 +2370,8 @@ int madvrdisp,		/* NZ for MadVR display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 //char *scallout,		/* Shell callout on results of measure color */
+int xtern,			/* Use external (user supplied) values rather than instument read */
+					/* 1 = Lab, 2 = XYZ */ 
 double hpatsize,	/* Size of dispwin */
 double vpatsize,
 double ho,			/* Horizontal offset */
@@ -2220,10 +2432,11 @@ a1log *log      	/* Verb, debug & error log */
 	p->noinitplace = noinitplace;
 	p->highres = highres;
 	p->refrate = refrate;
-	if (mcallout != NULL)
+	if (mcallout != NULL || xtern != 0)
 		ipath = &icomFakeDevice;	/* Force fake device */
 	p->mcallout = mcallout;
 //	p->scallout = scallout;
+	p->xtern = xtern;
 	p->ipath = ipath;
 	p->br = baud_19200;
 	p->fc = fc;
@@ -2260,7 +2473,7 @@ a1log *log      	/* Verb, debug & error log */
 		p->fake_lu = NULL;
 
 		/* See if there is a profile we should use as the fake device */
-		if (p->mcallout == NULL && p->fake_name != NULL
+		if (p->mcallout == NULL && p->xtern == 0 && p->fake_name != NULL
 		 && (p->fake_fp = new_icmFileStd_name(p->fake_name,"r")) != NULL) {
 			if ((p->fake_icc = new_icc()) != NULL) {
 				if (p->fake_icc->read(p->fake_icc,p->fake_fp,0) == 0) {
@@ -2282,6 +2495,9 @@ a1log *log      	/* Verb, debug & error log */
 		} else if (p->mcallout != NULL) {
 			a1logv(p->log, 1, "Using shell callout '%s' rather than real device\n",p->mcallout);
 			p->read = disprd_fake_read_co;
+		} else if (p->xtern != 0) {
+			a1logv(p->log, 1, "Using manual input rather than real device\n");
+			p->read = disprd_fake_read_manual;
 		} else
 			p->read = disprd_fake_read;
 
@@ -2357,7 +2573,7 @@ a1log *log      	/* Verb, debug & error log */
 		}
 	} else if (ccid != NULL) {
 		if ((p->dw = new_ccwin(ccid, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
-			                    uout_tvenc, 0, p->log->verb, p->log->debug)) == NULL) {
+			                    uout_tvenc, 0, 0, p->log->verb, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed because new_ccwin('%s') failed\n",ccid->name);
 			p->del(p);
 			if (errc != NULL) *errc = 3;
@@ -2386,7 +2602,7 @@ a1log *log      	/* Verb, debug & error log */
 			uout_tvenc = 0;
 		}
 
-		/* Open display window for positioning (no blackbg) */
+		/* Open display window for positioning (no fullscreen) */
 		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
 			                               uout_tvenc, 0, override, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed because new_dispwin failed\n");
@@ -2506,10 +2722,10 @@ a1log *log      	/* Verb, debug & error log */
 		printf("\n");
 	}
 
-	/* All except web disp can have a black backround when running tests */
-	if (webdisp == 0 && blackbg) {
+	/* All except web disp can have a full screen black backround when running tests */
+	if (webdisp == 0 && fullscreen) {
 
-		if (p->dw->set_bg(p->dw, blackbg)) {		/* Have to re-create window */
+		if (p->dw->set_fc(p->dw, fullscreen)) {		/* Have to re-create window */
 
 			/* Close the positioning window */
 			if (p->dw != NULL) {
@@ -2520,7 +2736,7 @@ a1log *log      	/* Verb, debug & error log */
 
 			/* Open display window again for measurement */
 			if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
-				                     uout_tvenc, blackbg, override, p->log->debug)) == NULL) {
+				                     uout_tvenc, fullscreen, override, p->log->debug)) == NULL) {
 				a1logd(log,1,"new_disprd failed new_dispwin failed\n");
 				p->del(p);
 				if (errc != NULL) *errc = 3;

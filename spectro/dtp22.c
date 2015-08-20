@@ -684,7 +684,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	if (*calt & inst_calt_ref_white) {		/* White calibration */
 
 		sprintf(id, "Serial no. %d",p->plaqueno);
-		if (*calc != inst_calc_man_ref_whitek) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_man_ref_whitek) {
 			*calc = inst_calc_man_ref_whitek;
 			ev = inst_cal_setup;
 			goto do_exit;
@@ -744,7 +744,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	}
 	if (*calt & inst_calt_ref_dark) {	/* Black calibration */
 
-		if (*calc != inst_calc_man_ref_dark) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_man_ref_dark) {
 			*calc = inst_calc_man_ref_dark;
 			ev = inst_cal_setup;
 			goto do_exit;
@@ -1079,7 +1079,7 @@ extern dtp22 *new_dtp22(icoms *icom, instType itype) {
 	p->del                   = dtp22_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 	p->mode = inst_mode_none;
 	p->need_cal = 1;			/* Do a white calibration each time we open the device */
 

@@ -392,7 +392,7 @@ double get_ccast_dith(double ipat[DISIZE][DISIZE][3], double val[3]) {
 
 	/* 32 bit pseudo random sequencer based on XOR feedback */
 	/* generates number between 1 and 4294967295 */
-#define PSRAND32(S) (((S) & 0x80000000) ? (((S) << 1) ^ 0xa398655d) : ((S) << 1))
+#define PSRAND32F(S) (((S) & 0x80000000) ? (((S) << 1) ^ 0xa398655d) : ((S) << 1))
 
 	/* Locate the 8 surrounding RGB verticies */
 	for (n = 0; n < 8; n++) {
@@ -662,7 +662,7 @@ double get_ccast_dith(double ipat[DISIZE][DISIZE][3], double val[3]) {
 //					dot += d_rand(-rlevel, rlevel);
 					/* use a deterministic random element, so that */
 					/* the dither patterns are repeatable. */
-					randv = PSRAND32(randv);
+					randv = PSRAND32F(randv);
 					dot += rlevel * 2.0 * ((randv - 1)/4294967294.0 - 0.5);
 
 					if (dot <= 0.0)

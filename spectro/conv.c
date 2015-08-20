@@ -131,6 +131,10 @@ int next_con_char(void) {
 }
 
 /* Horrible hack to poll stdin when we're not interactive */
+/* This has the drawback that the char and returm must be */
+/* written in one operation for the character to be recognised - */
+/* trying to do this manually typically doesn't work unless you are */
+/* very fast an lucky. */
 static int th_read_char(void *pp) {
 	char *rp = (char *)pp;
 	HANDLE stdinh;
@@ -1580,33 +1584,5 @@ int sa_lu_psinvert(double **out, double **in, int m, int n) {
 
 #endif /* SALONEINSTLIB */
 /* ============================================================= */
-
-/* Diagnostic aids */
-
-// Print bytes as hex to debug log */
-void adump_bytes(a1log *log, char *pfx, unsigned char *buf, int base, int len) {
-	int i, j, ii;
-	char oline[200] = { '\000' }, *bp = oline;
-	for (i = j = 0; i < len; i++) {
-		if ((i % 16) == 0)
-			bp += sprintf(bp,"%s%04x:",pfx,base+i);
-		bp += sprintf(bp," %02x",buf[i]);
-		if ((i+1) >= len || ((i+1) % 16) == 0) {
-			for (ii = i; ((ii+1) % 16) != 0; ii++)
-				bp += sprintf(bp,"   ");
-			bp += sprintf(bp,"  ");
-			for (; j <= i; j++) {
-				if (!(buf[j] & 0x80) && isprint(buf[j]))
-					bp += sprintf(bp,"%c",buf[j]);
-				else
-					bp += sprintf(bp,".");
-			}
-			bp += sprintf(bp,"\n");
-			a1logd(log,0,"%s",oline);
-			bp = oline;
-		}
-	}
-}
-
 
 

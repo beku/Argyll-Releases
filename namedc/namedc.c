@@ -292,7 +292,7 @@ char *sfx(namedc *p, char *key) {
 	return p->prefix;
 }
 
-/* Read in a namedc from a cxf3 file */
+/* Read in a namedc from a cxf2 or cxf3 file */
 /* Return nz on error */
 static int read_cxf(namedc *p, const char *filename, int options) {
     FILE *fp;
@@ -490,11 +490,16 @@ static int read_cxf(namedc *p, const char *filename, int options) {
 					goto next;							/* Skip this one */
 				}
 	
-				/* Check the attribute value */
-				if (strcmp(attr, "Standard") != 0) {
+#ifdef NEVER
+				/* Check the attribute value (Should we ?) */
+				/* Known values are: Standard, Color */
+				/* May be Trial, Target, Substrate, Colorant, ... ? */
+				if (strcmp(attr, "Standard") != 0
+				 && strcmp(attr, "Color") != 0) {
 					a1logd(p->log, DEB6, "read_cxf: skipping node with ObjectType = '%s'\n",attr);
 					goto next;							/* Skip this one */
 				}
+#endif
 			}
 
 			if ((attr = mxmlElementGetAttr(node, SampleNameKey)) == NULL) {

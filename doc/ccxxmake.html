@@ -32,9 +32,10 @@
     information built into them&nbsp; (ie. the X-Rite <span
       style="font-weight: bold;">i1d3</span>, and<span
       style="font-weight: bold;"><span style="font-weight: bold;"></span></span>
-    DataColor <span style="font-weight: bold;">Spyder4</span>), <span
-      style="font-weight: bold;">ccxxmake</span> allows a creation of a
-    calibration spectral sample (<a href="File_Formats.html#.ccss">ccss</a>)
+    DataColor <span style="font-weight: bold;">Spyder4 &amp; Spyder5</span>),
+
+    <span style="font-weight: bold;">ccxxmake</span> allows a creation
+    of a calibration spectral sample (<a href="File_Formats.html#.ccss">ccss</a>)
     for a particular <span style="font-weight: bold;">Display</span>,
     by making use a reference <span style="font-weight: bold;">Spectrometer</span>
     instrument. This can then be used to improve the accuracy of
@@ -55,6 +56,8 @@
     <small style="font-family: monospace;">ccxxmake -t dtech [-options]
       correction.ccmx<br>
     </small><small style="font-family: monospace;">&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -96,8 +99,10 @@ rather
 
 
 
+
+
     than CCMX<br>
-    &nbsp; <a href="#f">-f file1.ti3[,file2.ti3]</a>
+    &nbsp; <a href="#f">-f ref.ti3[,targ.ti3]</a>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create
 from
@@ -122,9 +127,13 @@ two
 
 
 
+
+
     .ti3 files rather than measure.<br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;</span><font
       style="font-family: monospace;" size="-1"><a href="#display">-display
+
+
 
 
 
@@ -177,8 +186,12 @@ m
 
 
 
+
+
       for VideoLUT access.</font><br style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#d">-d
+
+
 
 
 
@@ -223,8 +236,12 @@ list
 
 
 
+
+
       (default 1)</font><br>
     <span style="font-family: monospace;">&nbsp;<a href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -262,14 +279,20 @@ list
 
 
 
+
+
       [MSWin] Display via MadVR Video Renderer</span><br>
     <tt>&nbsp;</tt><tt><a href="#dcc">-dcc[:n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </tt><tt>Display via n'th ChromeCast (default 1, ? for list)</tt><br
       style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;</font><font
       style="font-family: monospace;" size="-1"><a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -311,11 +334,17 @@ list
 
 
 
+
+
         Display type - instrument specific list to choose from.</font></tt><tt>
       (CCMX)</tt><tt><br>
     </tt><tt>&nbsp;<a href="#z">-z disptype</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
       Different display type for spectrometer (see -y)</tt><tt><br>
     </tt><tt> </tt><tt>&nbsp;</tt><tt><a href="#P">-P ho,vo,ss[,vs]</a></tt><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
       Position test window and scale it</tt><br style="font-family:
       monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -326,6 +355,8 @@ left/top,
 0.5
 =
 center,
+
+
 
 
 
@@ -371,8 +402,12 @@ normal,
 
 
 
+
+
       2.0 = double etc.</font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -390,6 +425,8 @@ normal,
     <font style="font-family: monospace;" size="-1">&nbsp;</font><font
       style="font-family: monospace;" size="-1"><a href="#F">-F</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -438,9 +475,13 @@ on
 
 
 
+
+
       test window<br>
     </small><font style="font-family: monospace;" size="-1">&nbsp;<a
         href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -482,10 +523,14 @@ on
 
 
 
+
+
       Use high resolution spectrum mode (if available)</font><font
       style="font-family: monospace;" size="-1"></font><br
       style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#C">-C
+
+
 
 
 
@@ -539,9 +584,13 @@ sequence
 
 
 
+
+
       combination steps (default 3)</font><br style="font-family:
       monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W
+
+
 
 
 
@@ -568,6 +617,8 @@ flow
 control:
 n
 =
+
+
 
 
 
@@ -615,6 +666,8 @@ overall
 
 
 
+
+
       description</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#I">-I
         "displayname"</a> &nbsp;&nbsp;&nbsp;&nbsp; </small><span
@@ -624,6 +677,8 @@ overall
       &nbsp;</small><small style="font-family: monospace;"><a href="#T">-t
 
 
+
+
         dtech</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       Set display technology type<br>
@@ -631,9 +686,13 @@ overall
       c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
       CRT<br>
       &nbsp;&nbsp;&nbsp;
       m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
       Plasma<br>
@@ -641,14 +700,20 @@ overall
       l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
       LCD<br>
       &nbsp;&nbsp;&nbsp;
       1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
       LCD CCFL<br>
       &nbsp;&nbsp;&nbsp;
       2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -658,11 +723,15 @@ overall
       3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       CCFL VPA<br>
       &nbsp;&nbsp;&nbsp;
       4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -672,11 +741,15 @@ overall
       L&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       CCFL Wide Gamut<br>
       &nbsp;&nbsp;&nbsp;
       5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -686,11 +759,15 @@ overall
       6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       CCFL Wide Gamut VPA<br>
       &nbsp;&nbsp;&nbsp;
       7&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -700,11 +777,15 @@ overall
       e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       White LED<br>
       &nbsp;&nbsp;&nbsp;
       8&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -714,11 +795,15 @@ overall
       9&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       White LED VPA<br>
       &nbsp;&nbsp;&nbsp;
       a&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -728,11 +813,15 @@ overall
       b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       RGB LED<br>
       &nbsp;&nbsp;&nbsp;
       b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -742,11 +831,15 @@ overall
       c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       RGB LED VPA<br>
       &nbsp;&nbsp;&nbsp;
       d&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -756,11 +849,15 @@ overall
       h&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       RG Phosphor<br>
       &nbsp;&nbsp;&nbsp;
       e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -770,11 +867,15 @@ overall
       f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LCD
       RG Phosphor VPA<br>
       &nbsp;&nbsp;&nbsp;
       g&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -784,11 +885,15 @@ overall
       o&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>LED
       OLED<br>
       &nbsp;&nbsp;&nbsp;
       a&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -798,11 +903,15 @@ overall
       p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DLP
       Projector<br>
       &nbsp;&nbsp;&nbsp;
       h&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -812,11 +921,15 @@ overall
       i&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>DPL
       Projector RGBW Filter Wheel<br>
       &nbsp;&nbsp;&nbsp;
       j&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
     </small><small style="font-family: monospace;"><small
@@ -826,9 +939,13 @@ overall
       u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
     </small><small style="font-family: monospace;"><small
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </small>Unknown<br>
     </small> <tt>&nbsp;<a href="#U">-U c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -853,9 +970,13 @@ overall
 
 
 
+
+
         &nbsp;&nbsp;&nbsp;&nbsp; Override refresh, non-refresh display
         mode</span></font><br>
     <tt>&nbsp;<a href="#YR">-Y R:<i>rate</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -891,8 +1012,8 @@ overall
     that allows calibrating any suitable Colorimeter to the Display.<br>
     <br>
     <a name="f"></a><span style="font-weight: bold;">-f <span
-        style="font-style: italic;">file1.ti3[,file2.ti3]</span></span>
-    By <span style="text-decoration: underline;">default</span> <span
+        style="font-style: italic;">ref.ti3[,targ.ti3]</span></span> By
+    <span style="text-decoration: underline;">default</span> <span
       style="font-weight: bold;">ccxxmake</span> creates a <span
       style="font-weight: bold;">CCMX</span> file by displaying test
     patches on the screen, and then prompting you to measure them
@@ -964,6 +1085,8 @@ overall
 
 
 
+
+
       1,2</span> . Some experimentation may be needed using <a
       href="dispwin.html">dispwin</a> on such systems, to discover what
     screen has access to the VideoLUT hardware, and which screens the
@@ -990,10 +1113,11 @@ overall
     <br>
     <a name="dmadvr"></a><span style="font-weight: bold;">-dmadvr</span>
     [MSWin only] causes test patches to be displayed using the MadVR
-    video renderer. Note that you may have to start the video playback
-    software and load a video clip in pause for this to work. MadVR
-    rendering does not need or support VideoLUT access. Test patch
-    colors <u>will</u> be processed by the MadVR 3dLut.<br>
+    video renderer. Note that will have to start <b>MadTPG</b> before
+    running ccxxmake, and that while you can adjust the "Test Pattern
+    Configuration" controls, you should <u>not</u> normally alter the
+    "Existing Calibration" controls, as ccxxmake will set these
+    appropriately. <br>
     <br>
     <a name="dcc"></a><span style="font-weight: bold;">-dcc</span> or <b>-dcc:<i>no</i></b>
     causes test patches to be displayed using and available <a
@@ -1106,6 +1230,8 @@ overall
 
 
 
+
+
       of particular instruments</a> for more details. This may give
     better accuracy for display measurements.<br>
     <br>
@@ -1200,6 +1326,8 @@ overall
     can be used.<br>
     <br>
     <a name="Yrn"></a>The -<span style="font-weight: bold;">Y r </span>and
+
+
 
 
 

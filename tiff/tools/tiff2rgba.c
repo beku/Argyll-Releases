@@ -1,4 +1,4 @@
-/* $Id: tiff2rgba.c,v 1.13.2.3 2010-06-12 02:55:16 bfriesen Exp $ */
+/* $Id: tiff2rgba.c,v 1.20 2014-06-08 03:37:02 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -11,16 +11,16 @@
  * Sam Leffler and Silicon Graphics may not be used in any advertising or
  * publicity relating to the software without the specific, prior written
  * permission of Sam Leffler and Silicon Graphics.
- * 
- * THE SOFTWARE IS PROVIDED "AS-IS" AND WITHOUT WARRANTY OF ANY KIND, 
- * EXPRESS, IMPLIED OR OTHERWISE, INCLUDING WITHOUT LIMITATION, ANY 
- * WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.  
- * 
+ *
+ * THE SOFTWARE IS PROVIDED "AS-IS" AND WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS, IMPLIED OR OTHERWISE, INCLUDING WITHOUT LIMITATION, ANY
+ * WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ *
  * IN NO EVENT SHALL SAM LEFFLER OR SILICON GRAPHICS BE LIABLE FOR
  * ANY SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY KIND,
  * OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
- * WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY THEORY OF 
- * LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE 
+ * WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY THEORY OF
+ * LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
  */
 
@@ -32,6 +32,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffiop.h"
@@ -46,86 +50,90 @@
 #endif
 #define	roundup(x, y)	(howmany(x,y)*((uint32)(y)))
 
-uint16	compression = COMPRESSION_PACKBITS;
-uint32	rowsperstrip = (uint32) -1;
-int	process_by_block = 0; /* default is whole image at once */
-int     no_alpha = 0;
+uint16 compression = COMPRESSION_PACKBITS;
+uint32 rowsperstrip = (uint32) -1;
+int process_by_block = 0; /* default is whole image at once */
+int no_alpha = 0;
+int bigtiff_output = 0;
 
 
-static	int tiffcvt(TIFF* in, TIFF* out);
-static	void usage(int code);
+static int tiffcvt(TIFF* in, TIFF* out);
+static void usage(int code);
 
 int
 main(int argc, char* argv[])
 {
-    TIFF *in, *out;
-    int c;
-    extern int optind;
-    extern char *optarg;
+	TIFF *in, *out;
+	int c;
+	extern int optind;
+	extern char *optarg;
 
-    while ((c = getopt(argc, argv, "c:r:t:bn")) != -1)
-        switch (c) {
-          case 'b':
-            process_by_block = 1;
-            break;
-            
-          case 'c':
-            if (streq(optarg, "none"))
-                compression = COMPRESSION_NONE;
-            else if (streq(optarg, "packbits"))
-                compression = COMPRESSION_PACKBITS;
-            else if (streq(optarg, "lzw"))
-                compression = COMPRESSION_LZW;
-            else if (streq(optarg, "jpeg"))
-                compression = COMPRESSION_JPEG;
-            else if (streq(optarg, "zip"))
-                compression = COMPRESSION_DEFLATE;
-            else
-                usage(-1);
-            break;
+	while ((c = getopt(argc, argv, "c:r:t:bn8")) != -1)
+		switch (c) {
+			case 'b':
+				process_by_block = 1;
+				break;
 
-          case 'r':
-            rowsperstrip = atoi(optarg);
-            break;
+			case 'c':
+				if (streq(optarg, "none"))
+					compression = COMPRESSION_NONE;
+				else if (streq(optarg, "packbits"))
+					compression = COMPRESSION_PACKBITS;
+				else if (streq(optarg, "lzw"))
+					compression = COMPRESSION_LZW;
+				else if (streq(optarg, "jpeg"))
+					compression = COMPRESSION_JPEG;
+				else if (streq(optarg, "zip"))
+					compression = COMPRESSION_DEFLATE;
+				else
+					usage(-1);
+				break;
 
-          case 't':
-            rowsperstrip = atoi(optarg);
-            break;
-            
-          case 'n':
-            no_alpha = 1;
-            break;
-            
-          case '?':
-            usage(0);
-            /*NOTREACHED*/
-        }
+			case 'r':
+				rowsperstrip = atoi(optarg);
+				break;
 
-    if (argc - optind < 2)
-        usage(-1);
+			case 't':
+				rowsperstrip = atoi(optarg);
+				break;
 
-    out = TIFFOpen(argv[argc-1], "w");
-    if (out == NULL)
-        return (-2);
+			case 'n':
+				no_alpha = 1;
+				break;
 
-    for (; optind < argc-1; optind++) {
-        in = TIFFOpen(argv[optind], "r");
-        if (in != NULL) {
-            do {
-                if (!tiffcvt(in, out) ||
-                    !TIFFWriteDirectory(out)) {
-                    (void) TIFFClose(out);
-                    return (1);
-                }
-            } while (TIFFReadDirectory(in));
-            (void) TIFFClose(in);
-        }
-    }
-    (void) TIFFClose(out);
-    return (0);
+			case '8':
+				bigtiff_output = 1;
+				break;
+
+			case '?':
+				usage(0);
+				/*NOTREACHED*/
+		}
+
+	if (argc - optind < 2)
+		usage(-1);
+
+	out = TIFFOpen(argv[argc-1], bigtiff_output?"w8":"w");
+	if (out == NULL)
+		return (-2);
+
+	for (; optind < argc-1; optind++) {
+		in = TIFFOpen(argv[optind], "r");
+		if (in != NULL) {
+			do {
+				if (!tiffcvt(in, out) ||
+				    !TIFFWriteDirectory(out)) {
+					(void) TIFFClose(out);
+					(void) TIFFClose(in);
+					return (1);
+				}
+			} while (TIFFReadDirectory(in));
+			(void) TIFFClose(in);
+		}
+	}
+	(void) TIFFClose(out);
+	return (0);
 }
-
-#define multiply(a,b) TIFFSafeMultiply(tsize_t,a,b)
 
 static int
 cvt_by_tile( TIFF *in, TIFF *out )
@@ -136,7 +144,6 @@ cvt_by_tile( TIFF *in, TIFF *out )
     uint32  tile_width, tile_height;
     uint32  row, col;
     uint32  *wrk_line;
-    tsize_t raster_size;
     int	    ok = 1;
 
     TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);
@@ -154,14 +161,7 @@ cvt_by_tile( TIFF *in, TIFF *out )
     /*
      * Allocate tile buffer
      */
-    raster_size = multiply(multiply(tile_width, tile_height), sizeof (uint32));
-    if (!raster_size) {
-	TIFFError(TIFFFileName(in),
-		  "Can't allocate buffer for raster of size %lux%lu",
-		  (unsigned long) tile_width, (unsigned long) tile_height);
-	return (0);
-    }
-    raster = (uint32*)_TIFFmalloc(raster_size);
+    raster = (uint32*)_TIFFmalloc(tile_width * tile_height * sizeof (uint32));
     if (raster == 0) {
         TIFFError(TIFFFileName(in), "No space for raster buffer");
         return (0);
@@ -169,7 +169,7 @@ cvt_by_tile( TIFF *in, TIFF *out )
 
     /*
      * Allocate a scanline buffer for swapping during the vertical
-     * mirroring pass.  (Request can't overflow given prior checks.)
+     * mirroring pass.
      */
     wrk_line = (uint32*)_TIFFmalloc(tile_width * sizeof (uint32));
     if (!wrk_line) {
@@ -246,7 +246,6 @@ cvt_by_strip( TIFF *in, TIFF *out )
     uint32  width, height;		/* image width & height */
     uint32  row;
     uint32  *wrk_line;
-    tsize_t raster_size;
     int	    ok = 1;
 
     TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);
@@ -262,14 +261,7 @@ cvt_by_strip( TIFF *in, TIFF *out )
     /*
      * Allocate strip buffer
      */
-    raster_size = multiply(multiply(width, rowsperstrip), sizeof (uint32));
-    if (!raster_size) {
-	TIFFError(TIFFFileName(in),
-		  "Can't allocate buffer for raster of size %lux%lu",
-		  (unsigned long) width, (unsigned long) rowsperstrip);
-	return (0);
-    }
-    raster = (uint32*)_TIFFmalloc(raster_size);
+    raster = (uint32*)_TIFFmalloc(width * rowsperstrip * sizeof (uint32));
     if (raster == 0) {
         TIFFError(TIFFFileName(in), "No space for raster buffer");
         return (0);
@@ -277,7 +269,7 @@ cvt_by_strip( TIFF *in, TIFF *out )
 
     /*
      * Allocate a scanline buffer for swapping during the vertical
-     * mirroring pass.  (Request can't overflow given prior checks.)
+     * mirroring pass.
      */
     wrk_line = (uint32*)_TIFFmalloc(width * sizeof (uint32));
     if (!wrk_line) {
@@ -383,7 +375,7 @@ cvt_whole_image( TIFF *in, TIFF *out )
 
     raster = (uint32*)_TIFFCheckMalloc(in, pixel_count, sizeof(uint32), "raster buffer");
     if (raster == 0) {
-        TIFFError(TIFFFileName(in), "Requested buffer size is %lu elements %lu each",
+        TIFFError(TIFFFileName(in), "Failed to allocate buffer (%lu elements of %lu each)",
 		  (unsigned long)pixel_count, (unsigned long)sizeof(uint32));
         return (0);
     }
@@ -511,10 +503,10 @@ tiffcvt(TIFF* in, TIFF* out)
 }
 
 static char* stuff[] = {
-    "usage: tiff2rgba [-c comp] [-r rows] [-b] input... output",
+    "usage: tiff2rgba [-c comp] [-r rows] [-b] [-n] [-8] input... output",
     "where comp is one of the following compression algorithms:",
     " jpeg\t\tJPEG encoding",
-    " zip\t\tLempel-Ziv & Welch encoding",
+    " zip\t\tZip/Deflate encoding",
     " lzw\t\tLempel-Ziv & Welch encoding",
     " packbits\tPackBits encoding",
     " none\t\tno compression",
@@ -522,6 +514,7 @@ static char* stuff[] = {
     " -r\trows/strip",
     " -b (progress by block rather than as a whole image)",
     " -n don't emit alpha component.",
+    " -8 write BigTIFF file instead of ClassicTIFF",
     NULL
 };
 

@@ -1128,7 +1128,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	if (*calt & inst_calt_ref_white) {
 		int i;
 
-		if (*calc != inst_calc_man_ref_white) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_man_ref_white) {
 			char *cp;
 			if ((ev = dtp20_command(p, "04SN\r", buf, MAX_MES_SIZE, 4.5)) != inst_ok)
 				return ev;
@@ -1725,7 +1725,7 @@ extern dtp20 *new_dtp20(icoms *icom, instType itype) {
 	p->del             = dtp20_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 	p->cap = inst_mode_none;		/* Unknown until set */
 	p->mode = inst_mode_none;		/* Not in a known mode yet */
 

@@ -26,7 +26,7 @@ struct _disp_win_info {
 #endif
 	disppath *disp;			/* display to calibrate. */
 	int out_tvenc;			/* 1 = use RGB Video Level encoding */
-	int blackbg;			/* NZ if whole screen should be filled with black */
+	int fullscreen;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
 	double hpatsize;		/* Size of dispwin */
 	double vpatsize;		/* Size of dispwin */
@@ -62,7 +62,7 @@ ccast_id *ccid,		/* non-NULL for ChromeCast */
 int madvrdisp,		/* NZ for MadVR display */
 #endif
 int out_tvenc,		/* 1 = use RGB Video Level encoding */
-int blackbg,		/* NZ if whole screen should be filled with black */
+int fullscreen,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 double hpatsize,	/* Size of dispwin */
 double vpatsize,
@@ -113,6 +113,8 @@ struct _disprd {
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
 //	char *scallout;		/* measurement XYZ value callout */
+	int xtern;			/* Use external (user supplied) values rather than instument read */
+						/* 1 = Lab, 2 = XYZ */ 
 	icompath *ipath;	/* Instrument path to open, &icomFakeDevice == fake */
 	baud_rate br;
 	flow_control fc;
@@ -249,7 +251,7 @@ double cal[3][MAX_CAL_ENT],	/* Calibration set (cal = NULL or cal[0][0] < 0.0 if
 int ncal,			/* number of entries use in cal */
 disppath *screen,	/* Screen to calibrate. */
 int out_tvenc,		/* 1 = use RGB Video Level encoding */
-int blackbg,		/* NZ if whole screen should be filled with black */
+int fullscreen,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 int webdisp,		/* If nz, port number for web display */
 ccast_id *ccid,		/* non-NULL for ChromeCast */
@@ -259,6 +261,8 @@ int madvrdisp,		/* NZ for MadVR display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 //char *scallout,		/* Shell callout on results of measure color */
+int xtern,			/* Use external (user supplied) values rather than instument read */
+					/* 1 = Lab, 2 = XYZ */ 
 double hpatsize,	/* Size of dispwin */
 double vpatsize,
 double ho,			/* Horizontal offset */

@@ -94,7 +94,7 @@ usage (void)
 	fprintf (stderr, " -i illum    Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
 	fprintf (stderr, "             A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf (stderr, " -o observ   Choose CIE Observer for spectral data:\n");
-	fprintf (stderr, "              1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf (stderr, "              1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2 or file.cmf\n");
 	fprintf (stderr, " -n          Don't output spectral values\n"); 
 #ifdef ALLOW_PLOT
 	fprintf (stderr, " -p          Plot each values spectrum\n"); 
@@ -116,6 +116,7 @@ main(int argc, char *argv[])
 	cgats *ocg;						/* output cgats structure */
 	cgats_set_elem *elems;
 
+	int isemis = 0;					/* nz if this is an emissive reference */
 	int isdisp = 0;					/* nz if this is a display device */
 	int isdnormed = 0;				/* Has display data been normalised to 100 ? */
 	icColorSpaceSignature devspace = icmSigDefaultData;	/* The device colorspace */
@@ -127,13 +128,15 @@ main(int argc, char *argv[])
 	char* illum_str = "D50";
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
-	icxIllumeType illum = icxIT_D50;			/* Spectral defaults */
+	icxIllumeType illum = icxIT_none;			/* Spectral defaults */
 	xspect cust_illum;				/* Custom CIE illumination spectrum */
 	icxIllumeType inst_illum = icxIT_none;		/* Spectral defaults */
 	xspect inst_cust_illum;			/* Custom actual instrument illumination spectrum */
-	icxObserverType observ = icxOT_CIE_1931_2;
+	icxObserverType observ = icxOT_none;
+	xspect cust_observ[3];			/* Custom observer CMF's */
 
 	int npat;						/* Number of patches */
+	int dti;						/* Device Type index */
 	char *kw;
 	int i, j, jj, k;
 
@@ -304,8 +307,11 @@ main(int argc, char *argv[])
 				else if (strcmp (na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
 					observ = icxOT_Shaw_Fairchild_2;
 				}
-				else
-					usage ();
+				else {				/* Assume it's a filename */
+					observ = icxOT_custom;
+					if (read_cmf (cust_observ, na) != 0)
+						usage ();
+				}
 			}
 
 			else
@@ -364,15 +370,34 @@ main(int argc, char *argv[])
 		}
 	}
 
-	/* Figure out what sort of device it is */
+	if ((dti = icg->find_kword (icg, 0, "DEVICE_CLASS")) < 0)
+		error ("Input file doesn't contain keyword DEVICE_CLASS");
 
+	/* Reflective options when not a reflective profile type */
+	if (strcmp(icg->t[0].kdata[dti],"DISPLAY") == 0
+	 || strcmp(icg->t[0].kdata[dti],"EMISINPUT") == 0) {
+		isemis = 1;
+		if (illum != icxIT_none)
+			error("-i illuminant can't be used for emissive reference type");
+		if (fwacomp)
+			error("-f FWA compensation can't be used for emissive reference type");
+		fwacomp = 0;
+		tillum = icxIT_none;
+	}
+
+	/* Set defaults */
+	if (illum == icxIT_none)
+		illum = icxIT_D50;
+	
+	if (observ = icxOT_none)
+		observ = icxOT_CIE_1931_2;
+
+	/* Figure out what sort of device it is */
 	{
 		int ti;
+		char *tos;
 
-		if ((ti = icg->find_kword (icg, 0, "DEVICE_CLASS")) < 0)
-			error ("Input file doesn't contain keyword DEVICE_CLASS");
-
-		if (strcmp (icg->t[0].kdata[ti], "DISPLAY") == 0) {
+		if (strcmp (icg->t[0].kdata[dti], "DISPLAY") == 0) {
 			isdisp = 1;
 		}
 
@@ -384,26 +409,31 @@ main(int argc, char *argv[])
 			isdnormed = 1;
 		}
 
-		if (isdisp && fwacomp) {
-			error ("FWA compensation cannot be used for DISPLAY devices");
-		}
-
 		if ((ti = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
 			error("Input file doesn't contain keyword COLOR_REP");
 
-		if (strncmp(icg->t[0].kdata[ti],"CMYK_",5) == 0)
+		if ((tos = strchr(icg->t[0].kdata[ti], '_')) == NULL)
+			tos = icg->t[0].kdata[ti];
+
+		if (strncmp(icg->t[0].kdata[ti],"CMYK_",5) == 0
+		 || strncmp(tos,"_CMYK",5) == 0) {
 			devspace = icSigCmykData;
-		else if (strncmp(icg->t[0].kdata[ti],"CMY_",4) == 0)
+		} else if (strncmp(icg->t[0].kdata[ti],"CMY_",4) == 0
+		        || strncmp(tos,"_CMY",4) == 0) {
 			devspace = icSigCmyData;
-		else if (strncmp(icg->t[0].kdata[ti],"RGB_",4) == 0)
+		} else if (strncmp(icg->t[0].kdata[ti],"RGB_",4) == 0
+		        || strncmp(tos,"_RGB",4) == 0) {
 			devspace = icSigRgbData;
-		else if (strncmp(icg->t[0].kdata[ti],"iRGB_",4) == 0) {
+		} else if (strncmp(icg->t[0].kdata[ti],"iRGB_",4) == 0
+		        || strncmp(tos,"_iRGB",4) == 0) {
 			devspace = icSigRgbData;
 			isInverted = 1;
-		} else if (strncmp(icg->t[0].kdata[ti],"K_",2) == 0) {
+		} else if (strncmp(icg->t[0].kdata[ti],"K_",2) == 0
+		        || strncmp(tos,"_K",2) == 0) {
 			devspace = icSigGrayData;
 			isAdditive = 0;
-		} else if (strncmp(icg->t[0].kdata[ti],"W_",2) == 0) {
+		} else if (strncmp(icg->t[0].kdata[ti],"W_",2) == 0
+		        || strncmp(tos,"_W",2) == 0) {
 			devspace = icSigGrayData;
 			isAdditive = 1;
 		} else 
@@ -415,12 +445,12 @@ main(int argc, char *argv[])
 				if ((ci = icg->find_field(icg, 0, "GRAY_W")) < 0)
 					error("Input file doesn't contain field GRAY_W");
 				if (icg->t[0].ftype[ci] != r_t)
-					error("Field GRAY_W is wrong type - corrupted file ?");
+					error("Field GRAY_W is wrong type - expect float");
 			} else {
 				if ((ci = icg->find_field(icg, 0, "GRAY_K")) < 0)
 					error("Input file doesn't contain field GRAY_K");
 				if (icg->t[0].ftype[ci] != r_t)
-					error("Field GRAY_K is wrong type - corrupted file ?");
+					error("Field GRAY_K is wrong type - expect float");
 			}
 			mi = yi = ki = ci;
 
@@ -429,15 +459,15 @@ main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "RGB_R")) < 0)
 				error("Input file doesn't contain field RGB_R");
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Field RGB_R is wrong type - corrupted file ?");
+				error("Field RGB_R is wrong type - expect float");
 			if ((mi = icg->find_field(icg, 0, "RGB_G")) < 0)
 				error("Input file doesn't contain field RGB_G");
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Field RGB_G is wrong type - corrupted file ?");
+				error("Field RGB_G is wrong type - expect float");
 			if ((yi = icg->find_field(icg, 0, "RGB_B")) < 0)
 				error("Input file doesn't contain field RGB_B");
 			if (icg->t[0].ftype[yi] != r_t)
-				error("Field RGB_B is wrong type - corrupted file ?");
+				error("Field RGB_B is wrong type - expect float");
 			ki = yi;
 
 		} else if (devspace == icSigCmyData) {
@@ -445,15 +475,15 @@ main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "CMY_C")) < 0)
 				error("Input file doesn't contain field CMY_C");
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Field CMY_C is wrong type - corrupted file ?");
+				error("Field CMY_C is wrong type - expect float");
 			if ((mi = icg->find_field(icg, 0, "CMY_M")) < 0)
 				error("Input file doesn't contain field CMY_M");
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Field CMY_M is wrong type - corrupted file ?");
+				error("Field CMY_M is wrong type - expect float");
 			if ((yi = icg->find_field(icg, 0, "CMY_Y")) < 0)
 				error("Input file doesn't contain field CMY_Y");
 			if (icg->t[0].ftype[yi] != r_t)
-				error("Field CMY_Y is wrong type - corrupted file ?");
+				error("Field CMY_Y is wrong type - expect float");
 			ki = yi;
 
 		} else {	/* Assume CMYK */
@@ -461,19 +491,19 @@ main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "CMYK_C")) < 0)
 				error("Input file doesn't contain field CMYK_C");
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Field CMYK_C is wrong type - corrupted file ?",icg->t[0].ftype[ci],r_t);
+				error("Field CMYK_C is wrong type - expect float",icg->t[0].ftype[ci],r_t);
 			if ((mi = icg->find_field(icg, 0, "CMYK_M")) < 0)
 				error("Input file doesn't contain field CMYK_M");
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Field CMYK_M is wrong type - corrupted file ?");
+				error("Field CMYK_M is wrong type - expect float");
 			if ((yi = icg->find_field(icg, 0, "CMYK_Y")) < 0)
 				error("Input file doesn't contain field CMYK_Y");
 			if (icg->t[0].ftype[yi] != r_t)
-				error("Field CMYK_Y is wrong type - corrupted file ?");
+				error("Field CMYK_Y is wrong type - expect float");
 			if ((ki = icg->find_field(icg, 0, "CMYK_K")) < 0)
 				error("Input file doesn't contain field CMYK_K");
 			if (icg->t[0].ftype[ki] != r_t)
-				error("Field CMYK_K is wrong type - corrupted file ?");
+				error("Field CMYK_K is wrong type - expect float");
 		}
 	}
 
@@ -530,10 +560,13 @@ main(int argc, char *argv[])
 
 			if ((spi[j] = icg->find_field (icg, 0, buf)) < 0)
 				error ("Input file doesn't contain field %s", buf);
+
+			if (icg->t[0].ftype[spi[j]] != r_t)
+				error("Field %s is wrong type - expect float",buf);
 		}
 
-		if (isdisp) {
-			illum = icxIT_none;		/* Displays are assumed to be self luminous */
+		if (isemis) {
+			illum = icxIT_none;
 		}
 
 
@@ -585,7 +618,7 @@ main(int argc, char *argv[])
 		/* Create a spectral conversion object */
 		if ((sp2cie = new_xsp2cie (illum,
 								   illum == icxIT_none ?  NULL : &cust_illum,
-								   observ, NULL, icSigXYZData, icxClamp)) == NULL)
+								   observ, cust_observ, icSigXYZData, icxClamp)) == NULL)
 		{
 			error ("Creation of spectral conversion object failed");
 		}

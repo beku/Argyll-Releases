@@ -20,6 +20,9 @@
 
 /*
  * TTBD:
+ *
+ *	We're no warning about setting illuminant or FWA for emissive spectral data,
+ *  they are just ignored.
  */
 
 #define DEBUG
@@ -56,7 +59,7 @@ void
 usage(void) {
 	fprintf(stderr,"Verify CIE values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	fprintf(stderr,"usage: verify [-options] target.ti3 measured.ti3\n");
+	fprintf(stderr,"usage: colverify [-options] target.ti3 measured.ti3\n");
 	fprintf(stderr," -v [n]          Verbose mode, n >= 2 print each value\n");
 	fprintf(stderr," -n              Normalise each files reading to its white Y\n");
 	fprintf(stderr," -N              Normalise each files reading to its white XYZ\n");
@@ -65,9 +68,9 @@ usage(void) {
 	fprintf(stderr," -D              Use D50 100.0 as L*a*b* white reference\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
-	fprintf(stderr," -h              Plot a histogram of delta E's\n");
+	fprintf(stderr," -h [hist.txt]   Plot a histogram of delta E's [Optionaly save points to .txt]\n");
 	fprintf(stderr," -s              Sort patch values by error\n");
-	fprintf(stderr," -w              create PCS %s vector visualisation (measured%s)\n",vrml_format(), vrml_ext());
+	fprintf(stderr," -w              create PCS %s vector visualisation (measured%s)\n",vrml_format(),vrml_ext());
 	fprintf(stderr," -W              create PCS %s marker visualisation (measured%s)\n",vrml_format(),vrml_ext());
 	fprintf(stderr," -d              create Device RGB %s marker visualisation (measured%s)\n",vrml_format(),vrml_ext());
 //	fprintf(stderr," -d y            create Device YCbCr %s marker visualisation (measured%s)\n",vrml_format(),vrml_ext());
@@ -118,6 +121,7 @@ int main(int argc, char *argv[])
 	int dovrml = 0;			/* 1 = PCS vector, 2 = PCS marker, 3 = RGB, 4 - YCbCr */
 	int doaxes = 0;
 	int dohisto = 0;			/* Plot histogram of delta E's */
+	char histoname[MAXNAMEL+1] = "\000";  /* Optional file to save histogram points to */
 	int dosort = 0;
 	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
@@ -129,6 +133,7 @@ int main(int argc, char *argv[])
 
 	struct {
 		char name[MAXNAMEL+1];	/* Patch filename  */
+		int isemis;				/* nz if emsissive spectral reference data */
 		int isdisp;				/* nz if display */
 		int isdnormed;      	/* Has display data been normalised to 100 ? */
 		int isrgb;				/* Is RGB device space ? */
@@ -145,9 +150,9 @@ int main(int argc, char *argv[])
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
-	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
+	icxIllumeType illum = icxIT_none;	/* Spectral defaults to D50 */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_CIE_1931_2;
+	icxObserverType observ = icxOT_none;	/* Defaults to 1931 2 degree */
 
 	icmXYZNumber labw = icmD50;	/* The Lab white reference */
 
@@ -186,8 +191,8 @@ int main(int argc, char *argv[])
 				verb = 1;
 
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
-					verb = atoi(na);
 					fa = nfa;
+					verb = atoi(na);
 				}
 			}
 
@@ -244,8 +249,14 @@ int main(int argc, char *argv[])
 			}
 
 			/* Plot histogram */
-			else if (argv[fa][1] == 'h')
+			else if (argv[fa][1] == 'h') {
 				dohisto = 1;
+
+				if (na != NULL) {	/* Argument is present - file to save points to */
+					fa = nfa;
+					strncpy(histoname,na,MAXNAMEL); histoname[MAXNAMEL] = '\000';
+				}
+			}
 
 			/* Sort */
 			else if (argv[fa][1] == 's')
@@ -295,8 +306,8 @@ int main(int argc, char *argv[])
 
 			/* Spectral to CIE Illuminant type */
 			else if (argv[fa][1] == 'i') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
@@ -331,8 +342,8 @@ int main(int argc, char *argv[])
 
 			/* Spectral Observer type */
 			else if (argv[fa][1] == 'o') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 1;
 					observ = icxOT_CIE_1931_2;
@@ -354,15 +365,15 @@ int main(int argc, char *argv[])
 
 			/* Gamut limit profile for first file */
 			else if (argv[fa][1] == 'L') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				strncpy(gprofname,na,MAXNAMEL-1); gprofname[MAXNAMEL-1] = '\000';
 			}
 
 			/* Colorimeter Correction Matrix for second file */
 			else if (argv[fa][1] == 'X') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
 
 			} else 
@@ -438,6 +449,7 @@ int main(int argc, char *argv[])
 		int sldx = -1;				/* Sample location index, < 0 if invalid */
 		int xix, yix, zix;
 		int rgbix[3];				/* RGB field indexes (if rgb ) */
+		int dti;					/* Device type index */
 
 		/* Open CIE target values */
 		cgf = new_cgats();			/* Create a CGATS structure */
@@ -451,46 +463,26 @@ int main(int argc, char *argv[])
 		if (cgf->ntables < 1)
 			error ("Input file '%s' doesn't contain at least one table",cg[n].name);
 	
-		/* Check if the file is suitable */
-		if (!spec
-		 && cgf->find_field(cgf, 0, "LAB_L") < 0
-		 && cgf->find_field(cgf, 0, "XYZ_X") < 0) {
-	
-			if (cgf->find_kword(cgf, 0, "SPECTRAL_BANDS") < 0)
-				error ("Neither CIE nor spectral data found in file '%s'",cg[n].name);
-	
-			/* Switch to using spectral information */
-			if (verb)
-				printf("No CIE data found, switching to spectral with standard observer & D50 for file '%s'\n",cg[n].name);
-			spec = 1;
-			illum = icxIT_D50;
-			observ = icxOT_CIE_1931_2;
-		}
-		if (spec && cgf->find_kword(cgf, 0, "SPECTRAL_BANDS") < 0)
-			error ("No spectral data data found in file '%s' when spectral expected",cg[n].name);
-	
-		if (!spec && cgf->find_field(cgf, 0, "LAB_L") >= 0)
-			isLab = 1;
-		
-		cg[n].nig = cg[n].npat = cgf->t[0].nsets;		/* Number of patches */
-	
+		if ((dti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0)
+			warning("Input file '%s' doesn't contain keyword DEVICE_CLASS",cg[n].name);
+
 		/* Figure out what sort of device it is */
 		{
 			int ti;
 	
+			cg[n].isemis = 0;
 			cg[n].isdisp = 0;
 			cg[n].isdnormed = 0;
 			cg[n].w[0] = cg[n].w[1] = cg[n].w[2] = 0.0;
 
-			if ((ti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0) {
-				warning("Input file '%s' doesn't contain keyword DEVICE_CLASS",cg[n].name);
-
-			} else {
-				if (strcmp(cgf->t[0].kdata[ti],"DISPLAY") == 0) {
+			if (dti >= 0) {
+				if (strcmp(cgf->t[0].kdata[dti],"DISPLAY") == 0) {
+					cg[n].isemis = 1;
 					cg[n].isdisp = 1;
 					cg[n].isdnormed = 1;	/* Assume display type is normalised to 100 */
-					illum = icxIT_none;		/* Displays are assumed to be self luminous */
-					/* ?? What if two files are different ?? */
+
+				} else if (strcmp(cgf->t[0].kdata[dti],"EMISINPUT") == 0) {
+					cg[n].isemis = 1;
 				}
 	
 				if (cg[n].isdisp) {
@@ -511,6 +503,27 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+
+		/* Check if the file is suitable */
+		if (!spec
+		 && cgf->find_field(cgf, 0, "LAB_L") < 0
+		 && cgf->find_field(cgf, 0, "XYZ_X") < 0) {
+	
+			if (cgf->find_kword(cgf, 0, "SPECTRAL_BANDS") < 0)
+				error ("Neither CIE nor spectral data found in file '%s'",cg[n].name);
+	
+			/* Switch to using spectral information */
+			if (verb)
+				printf("No CIE data found, switching to spectral with standard observer & D50 for file '%s'\n",cg[n].name);
+			spec = 1;
+		}
+		if (spec && cgf->find_kword(cgf, 0, "SPECTRAL_BANDS") < 0)
+			error ("No spectral data data found in file '%s' when spectral expected",cg[n].name);
+	
+		if (!spec && cgf->find_field(cgf, 0, "LAB_L") >= 0)
+			isLab = 1;
+		
+		cg[n].nig = cg[n].npat = cgf->t[0].nsets;		/* Number of patches */
 
 		/* See if it has RGB device space (for -d option) */
 		if ((rgbix[0] = cgf->find_field(cgf, 0, "RGB_R")) >= 0
@@ -559,29 +572,29 @@ int main(int argc, char *argv[])
 				if ((xix = cgf->find_field(cgf, 0, "LAB_L")) < 0)
 					error("Input file '%s' doesn't contain field LAB_L",cg[n].name);
 				if (cgf->t[0].ftype[xix] != r_t)
-					error("Field LAB_L is wrong type");
+					error("Field LAB_L is wrong type - expect float");
 				if ((yix = cgf->find_field(cgf, 0, "LAB_A")) < 0)
 					error("Input file '%s' doesn't contain field LAB_A",cg[n].name);
 				if (cgf->t[0].ftype[yix] != r_t)
-					error("Field LAB_A is wrong type");
+					error("Field LAB_A is wrong type - expect float");
 				if ((zix = cgf->find_field(cgf, 0, "LAB_B")) < 0)
 					error("Input file '%s' doesn't contain field LAB_B",cg[n].name);
 				if (cgf->t[0].ftype[zix] != r_t)
-					error("Field LAB_B is wrong type");
+					error("Field LAB_B is wrong type - expect float");
 
 			} else { 		/* Expect XYZ */
 				if ((xix = cgf->find_field(cgf, 0, "XYZ_X")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_X",cg[n].name);
 				if (cgf->t[0].ftype[xix] != r_t)
-					error("Field XYZ_X is wrong type");
+					error("Field XYZ_X is wrong type - expect float");
 				if ((yix = cgf->find_field(cgf, 0, "XYZ_Y")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_Y",cg[n].name);
 				if (cgf->t[0].ftype[yix] != r_t)
-					error("Field XYZ_Y is wrong type");
+					error("Field XYZ_Y is wrong type - expect float");
 				if ((zix = cgf->find_field(cgf, 0, "XYZ_Z")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_Z",cg[n].name);
 				if (cgf->t[0].ftype[zix] != r_t)
-					error("Field XYZ_Z is wrong type");
+					error("Field XYZ_Z is wrong type - expect float");
 			}
 
 			for (i = 0; i < cg[n].npat; i++) {
@@ -639,6 +652,14 @@ int main(int argc, char *argv[])
 			int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
 			xsp2cie *sp2cie;	/* Spectral conversion object */
 
+			/* Copies of global values: */
+			int l_fwacomp = fwacomp;
+			int l_spec = spec;
+			icxIllumeType l_tillum = tillum;
+			xspect *l_tillump = tillump;
+			icxIllumeType l_illum = illum;
+			icxObserverType l_observ = observ;
+
 			if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_BANDS")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_BANDS");
 			sp.spec_n = atoi(cgf->t[0].kdata[ii]);
@@ -665,14 +686,35 @@ int main(int argc, char *argv[])
 
 				if ((spi[j] = cgf->find_field(cgf, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (cgf->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 
 			/* Create a spectral conversion object */
-			if ((sp2cie = new_xsp2cie(illum, illum == icxIT_none ? NULL : &cust_illum,
-			                          observ, NULL, icSigXYZData, icxClamp)) == NULL)
+			if (cg[n].isemis) {
+				if (l_illum != icxIT_none)
+					warning("-i illuminant ignored for emissive reference type");
+				if (l_fwacomp)
+					warning("-f FWA ignored for emissive reference type");
+				l_illum = icxIT_none;		/* Make emissive conversion */
+				l_tillum = icxIT_none;
+				l_fwacomp = 0;
+			} else {
+				/* Set default */
+				if (l_illum == icxIT_none)
+					l_illum = icxIT_D50;
+			}
+	
+			/* Set default */
+			if (l_observ = icxOT_none)
+				l_observ = icxOT_CIE_1931_2;
+
+			if ((sp2cie = new_xsp2cie(l_illum, l_illum == icxIT_none ? NULL : &cust_illum,
+			                          l_observ, NULL, icSigXYZData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
-			if (fwacomp) {
+			if (l_fwacomp) {
 				int ti;
 				xspect mwsp;			/* Medium spectrum */
 				instType itype;			/* Spectral instrument type */
@@ -709,16 +751,16 @@ int main(int argc, char *argv[])
 				}
 
 				/* If we are setting a specific simulated instrument illuminant */
-				if (tillum != icxIT_none) {
-					tillump = &cust_tillum;
-					if (tillum != icxIT_custom) {
-						if (standardIlluminant(tillump, tillum, 0.0)) {
+				if (l_tillum != icxIT_none) {
+					l_tillump = &cust_tillum;
+					if (l_tillum != icxIT_custom) {
+						if (standardIlluminant(l_tillump, l_tillum, 0.0)) {
 							error("simulated inst. illum. not recognised");
 						}
 					}
 				}
 
-				if (sp2cie->set_fwa(sp2cie, &insp, tillump, &mwsp)) 
+				if (sp2cie->set_fwa(sp2cie, &insp, l_tillump, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
 
 				if (verb) {
@@ -762,8 +804,7 @@ int main(int argc, char *argv[])
 			}
 
 			sp2cie->del(sp2cie);		/* Done with this */
-
-		}	/* End of reading in CGATs file */
+		}	/* End of reading in CGATs file spectral data */
 
 
 		/* Locate the patch with maximum Y, a possible white patch */
@@ -974,8 +1015,10 @@ int main(int argc, char *argv[])
 	if (dohisto) {
 		double demax = -1e6, demin = 1e6;
 		int maxbins = 50;		/* Maximum bins */
-		int minbins = 20;		/* Target minimum bins (depends on distribution) */ 
-		int mincount = 10;		/* Minimum number of points in a bin */
+//		int minbins = 20;		/* Target minimum bins (depends on distribution) */ 
+//		int mincount = 10;		/* Minimum number of points in a bin */
+		int minbins = 10;		/* Target minimum bins (depends on distribution) */ 
+		int mincount = 5;		/* Minimum number of points in a bin */
 		double mbwidth;
 		int nbins = 0;
 		hbin *bins = NULL;
@@ -1001,9 +1044,11 @@ int main(int argc, char *argv[])
 		/* Bin width that gives maxbins */
 		mbwidth = demax / maxbins;
 		
+#ifdef NEVER
 		/* Reduce mincount if needed to get minbins */
 		if (cg[0].npat/minbins < mincount)
 			mincount = cg[0].npat/minbins;
+#endif
 
 		if ((bins = (hbin *)calloc(maxbins, sizeof(hbin))) == NULL)
 			error("malloc of histogram bins failed");
@@ -1067,6 +1112,23 @@ int main(int argc, char *argv[])
 		x[i] = demax;
 		y[i] = 0.0;
 		do_plot(x, y, NULL, NULL, nbins+1);
+
+		/* Save points to a file ? */
+		if (histoname[0] != '\000') {
+			FILE *fp;
+
+			if ((fp = fopen(histoname, "w")) == NULL)
+				error("Opening '%s' for writing failed",histoname);
+
+			fprintf(fp, "%s\t%s\n\n",cg[0].name, cg[1].name);
+
+ 			for (i = 0; i < nbins; i++) {
+				fprintf(fp, "%f\t%f\n",0.5 * (bins[i].min + bins[i].max), bins[i].val);
+			}
+
+			if (fclose(fp) != 0)
+				error("Closing '%s' failed",histoname);
+		}
 
 		free(y);
 		free(x);

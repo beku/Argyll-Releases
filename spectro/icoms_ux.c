@@ -98,7 +98,7 @@ int icompaths_refresh_paths(icompaths *p) {
 		/* Find all the matching serial ports */
 		for (;;) {
 			char pname[200];
-			int fast = 0;
+			icom_ser_attr sattr = icom_normal;
 			
 	        CFTypeRef dfp;		/* Device file path */
 
@@ -122,19 +122,19 @@ int icompaths_refresh_paths(icompaths *p) {
 
 			/* Would be nice to identify FTDI serial ports more specifically ? */
 			if (strstr(pname, "usbserial") != NULL)
-				fast = 1;
+				sattr |= icom_fast;
 
 #ifndef ENABLE_SERIAL
-			if (fast) {			/* Only add fast ports if !ENABLE_SERIAL */
+			if (sattr & icom_fast) {		/* Only add fast ports if !ENABLE_SERIAL */
 #endif
 			/* Add the port to the list */
-			p->add_serial(p, pname, pname, fast);
-			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' fast %d\n",pname, fast);
+			p->add_serial(p, pname, pname, sattr);
+			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' attr 0x%x\n",pname, sattr);
 #ifndef ENABLE_SERIAL
 			}
 #endif
 			/* If fast, try and identify it */
-			if (fast) {
+			if (sattr & icom_fast) {
 				icompath *path;
 				icoms *icom;
 				if ((path = p->get_last_path(p)) != NULL
@@ -217,7 +217,7 @@ int icompaths_refresh_paths(icompaths *p) {
 		for (;;) {
 			int fd;
 			char *dpath;
-			int fast = 0;
+			icom_ser_attr sattr = icom_normal;
 
 			if ((de = readdir(dd)) == NULL)
 				break;
@@ -271,21 +271,21 @@ int icompaths_refresh_paths(icompaths *p) {
 			a1logd(p->log, 8, "icoms_get_paths: open'd serial \"%s\" - assume real\n",dpath);
 
 			if (strncmp(de->d_name, "ttyUSB", 5) == 0)
-				fast = 1;
+				sattr |= icom_fast;
 
 #ifndef ENABLE_SERIAL
-			if (fast) {			/* Only add fast ports if !ENABLE_SERIAL */
+			if (sattr & icom_fast) {		/* Only add fast ports if !ENABLE_SERIAL */
 #endif
 			/* Add the path to the list */
 			p->add_serial(p, dpath, dpath, 0);
-			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' fast %d\n",dpath,fast);
+			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' attr 0x%x\n",dpath,sattr);
 #ifndef ENABLE_SERIAL
 			}
 #endif
 			free(dpath);
 
 			/* If fast, try and identify it */
-			if (fast) {
+			if (sattr & icom_fast) {
 				icompath *path;
 				icoms *icom;
 				if ((path = p->get_last_path(p)) != NULL
@@ -630,17 +630,21 @@ char *wbuf,			/* null terminated unless nwch > 0 */
 int nwch,			/* if > 0, number of characters to write */
 double tout
 ) {
-	int rv, retrv = ICOM_OK;
 	int len, wbytes;
-	long toc, i, top;			/* Timout count, counter, timeout period */
+	long ttop, top;				/* Total timeout period, timeout period */
+	unsigned int stime, etime;	/* Start and end times of USB operation */
 	struct pollfd pa[1];		/* Poll array to monitor serial write and stdin */
 	int nfd = 1;				/* Number of fd's to poll */
 	struct termios origs, news;
+	int retrv = ICOM_OK;
+
+	a1logd(p->log, 8, "\nicoms_ser_write: writing '%s'\n",
+	       nwch > 0 ? icoms_tohex((unsigned char *)wbuf, nwch) : icoms_fix(wbuf));
 
 	if (!p->is_open) {
 		a1loge(p->log, ICOM_SYS, "icoms_ser_write: device not initialised\n");
-		p->lserr = rv = ICOM_SYS;
-		return rv;
+		p->lserr = ICOM_SYS;
+		return p->lserr;
 	}
 
 	/* Setup to wait for serial output not block */
@@ -648,52 +652,56 @@ double tout
 	pa[0].events = POLLOUT;
 	pa[0].revents = 0;
 
-	/* Until timed out, aborted, or transmitted */
 	if (nwch != 0)
 		len = nwch;
 	else
 		len = strlen(wbuf);
-	tout *= 1000.0;		/* Timout in msec */
-	a1logd(p->log, 8, "icoms_ser_write: About to write %d bytes",len);
 
-	top = 100;						/* Timeout period in msecs */
-	toc = (int)(tout/top + 0.5);	/* Number of timout periods in timeout */
-	if (toc < 1)
-		toc = 1;
+	ttop = (int)(tout * 1000.0 + 0.5);        /* Total timeout period in msecs */
 
-	/* Until data is all written, we time out, or the user aborts */
-	for(i = toc; i > 0 && len > 0;) {
-		if (poll_x(pa, nfd, top) > 0) {
+	a1logd(p->log, 8, "\nicoms_ser_write: ep 0x%x, bytes %d, ttop %d, quant %d\n", p->rd_ep, len, ttop, p->rd_qa);
+
+	etime = stime = msec_time();
+
+	/* Until data is all written or we time out */
+	for (top = ttop; top > 0 && len > 0;) {
+
+		if (poll_x(pa, nfd, top) > 0) {		/* Wait for something */
+
 			if (pa[0].revents != 0) {
 				if (pa[0].revents != POLLOUT) {
 					a1loge(p->log, ICOM_SYS, "icoms_ser_write: poll returned "
 					                     "unexpected value 0x%x",pa[0].revents);
-					p->lserr = rv = ICOM_SYS;
-					return rv;
+					p->lserr = ICOM_SYS;
+					return p->lserr;
 				}
 				
 				/* We can write it without blocking */
-				if ((wbytes = write(p->fd, wbuf, len)) < 0) {
+				wbytes = write(p->fd, wbuf, len);
+				if (wbytes < 0) {
+					a1logd(p->log, 8, "icoms_ser_write: write failed with %d\n",wbytes);
 					retrv |= ICOM_SERW;
 					break;
+
 				} else if (wbytes > 0) {
-					i = toc;
+					a1logd(p->log, 8, "icoms_ser_write: wrote %d bytes\n",wbytes);
 					len -= wbytes;
 					wbuf += wbytes;
 				}
 			}
-		} else {
-			i--;		/* timeout (or error!) */
 		}
-	}
-	if (i <= 0) {		/* Timed out */
-		retrv |= ICOM_TO;
+		etime = msec_time();
+		top = ttop - (etime - stime);	/* Remaining time */
 	}
 
-	a1logd(p->log, 8, "icoms_ser_write: returning ICOM err 0x%x\n",retrv);
+	if (top <= 0) {			/* Must have timed out */
+		a1logd(p->log, 8, "icoms_ser_write: timeout, took %d msec out of %d\n",etime - stime,ttop);
+		retrv |= ICOM_TO; 
+	}
 
+	a1logd(p->log, 8, "icoms_ser_write: took %d msec, returning ICOM err 0x%x\n",etime - stime,retrv);
 	p->lserr = retrv;
-	return retrv;
+	return p->lserr;
 }
 
 /* Read characters into the buffer */
@@ -709,69 +717,71 @@ char *tc,			/* Terminating characers, NULL for none or char count mode */
 int ntc,			/* Number of terminating characters or char count needed, if 0 use bsize */
 double tout			/* Time out in seconds */
 ) {
-	int rv, retrv = ICOM_OK;
-	int rbytes;
-	long j, toc, i, top;		/* Timout count, counter, timeout period */
+	int j, rbytes;
+	long ttop, top;			/* Total timeout period, timeout period */
+	unsigned int stime, etime;		/* Start and end times of USB operation */
 	struct pollfd pa[1];		/* Poll array to monitor serial read and stdin */
 	int nfd = 1;				/* Number of fd's to poll */
 	struct termios origs, news;
 	char *rrbuf = rbuf;		/* Start of return buffer */
 	int bread = 0;
+	int retrv = ICOM_OK;
+	int nreads;				/* Number of reads performed */
 
 	if (!p->is_open) {
 		a1loge(p->log, ICOM_SYS, "icoms_ser_read: device not initialised\n");
-		p->lserr = rv = ICOM_SYS;
-		return rv;
+		p->lserr = ICOM_SYS;
+		return p->lserr;
 	}
 
 	if (bsize < 3) {
 		a1loge(p->log, ICOM_SYS, "icoms_ser_read: given too small a buffer\n");
-		p->lserr = rv = ICOM_SYS;
-		return rv;
+		p->lserr = ICOM_SYS;
+		return p->lserr;
 	}
 
-	a1logd(p->log, 8, "icoms_ser_read: About to read buf %d, tc %p ntc %d tout %f",bsize,tc,ntc,tout);
+	for (j = 0; j < bsize; j++)
+		rbuf[j] = 0;
+ 
+	ttop = (int)(tout * 1000.0 + 0.5);        /* Total timeout period in msecs */
+
+	a1logd(p->log, 8, "\nicoms_ser_read: bytes %d, ttop %d, ntc %d\n", bsize, ttop, ntc);
 
 	/* Wait for serial input to have data */
 	pa[0].fd = p->fd;
 	pa[0].events = POLLIN | POLLPRI;
 	pa[0].revents = 0;
 
-	bsize--;			/* Allow space for forced null */
-	tout *= 1000.0;		/* Timout in msec */
+	bsize -=1;			/* Allow space for forced null */
 
-	top = 100;						/* Timeout period in msecs */
-	toc = (int)(tout/top + 0.5);	/* Number of timout periods in timeout */
-	if (toc < 1)
-		toc = 1;
-
-	if (tc == NULL) {			/* no tc or char count mode */
-		j = -1;
-		if (ntc > 0 && ntc < bsize)
-			bsize = ntc;		/* Don't read more than ntc */
-	} else {
-		j = 0;
-	}
 	/* Until data is all read, we time out, or the user aborts */
-	for (i = toc; i > 0 && bsize > 0 && j < ntc ;) {
+	etime = stime = msec_time();
+	j = (tc == NULL && ntc <= 0) ? -1 : 0;
+
+	/* Until data is all read or we time out */
+	for (top = ttop, nreads = 0; top > 0 && bsize > 0 && j < ntc ;) {
+
 		if (poll_x(pa, nfd, top) > 0) {
 			if (pa[0].revents != 0) {
 				int btr;
 				if (pa[0].revents != POLLIN &&  pa[0].revents != POLLPRI) {
 					a1loge(p->log, ICOM_SYS, "icoms_ser_read: poll on serin returned "
 					                     "unexpected value 0x%x",pa[0].revents);
-					p->lserr = rv = ICOM_SYS;
-					return rv;
+					p->lserr = ICOM_SYS;
+					return p->lserr;
 				}
 
 				/* We have data to read from input */
-				if ((rbytes = read(p->fd, rbuf, bsize)) < 0) {
+				rbytes = read(p->fd, rbuf, bsize);
+				if (rbytes < 0) {
+					a1logd(p->log, 8, "icoms_ser_read: read failed with %d, rbuf = '%s'\n",rbytes,icoms_fix(rrbuf));
 					retrv |= ICOM_SERR;
 					break;
+
 				} else if (rbytes > 0) {
-					i = toc;		/* Reset time */
+					a1logd(p->log, 8, "icoms_ser_read: read %d bytes, rbuf = '%s'\n",rbytes,icoms_fix(rrbuf));
+		
 					bsize -= rbytes;
-					bread += rbytes;
 					if (tc != NULL) {
 						while(rbytes--) {	/* Count termination characters */
 							char ch = *rbuf++, *tcp = tc;
@@ -782,6 +792,7 @@ double tout			/* Time out in seconds */
 								tcp++;
 							}
 						}
+						a1logd(p->log, 8, "icoms_ser_read: tc count %d\n",j);
 					} else {
 						if (ntc > 0)
 							j += rbytes;
@@ -789,22 +800,30 @@ double tout			/* Time out in seconds */
 					}
 				}
 			}
-		} else {
-			i--;		/* We timed out (or error!) */
 		}
+		etime = msec_time();
+		top = ttop - (etime - stime);	/* Remaining time */
 	}
 
-	if (i <= 0) 			/* timed out */
-		retrv |= ICOM_TO;
-
 	*rbuf = '\000';
+	a1logd(p->log, 8, "icoms_ser_read: read %d total bytes with %d reads\n",rbuf - rrbuf, nreads);
 	if (pbread != NULL)
-		*pbread = bread;
+		*pbread = (rbuf - rrbuf);
 
-	a1logd(p->log, 8, "icoms_ser_read: returning '%s' ICOM err 0x%x\n",icoms_fix(rrbuf),retrv);
+	/* If ran out of time and not completed */
+	a1logd(p->log, 8, "icoms_ser_read: took %d msec\n",etime - stime);
+	if (top <= 0 && bsize > 0 && j < ntc) {
+		a1logd(p->log, 8, "icoms_ser_read: timeout, took %d msec out of %d\n",etime - stime,ttop);
+		retrv |= ICOM_TO; 
+	}
+
+	a1logd(p->log, 8, "icoms_ser_read: took %d msec, returning '%s' ICOM err 0x%x\n",
+	       etime - stime, tc == NULL && ntc > 0
+			                          ? icoms_tohex((unsigned char *)rrbuf, rbuf - rrbuf)
+	                                  : icoms_fix(rrbuf), retrv);
 
 	p->lserr = retrv;
-	return retrv;
+	return p->lserr;
 }
 
 #endif /* ENABLE_SERIAL */

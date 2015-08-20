@@ -209,6 +209,8 @@ void usage(int flag, char *diag, ...) {
 	fprintf(stderr," -Y p                 Don't wait for the instrument to be placed on the display\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
+//	fprintf(stderr," -x [lx]              Take manually entered values, either L*a*b* (-xl) or XYZ (-xx).\n");
+	fprintf(stderr," -x x                 Take manually entered XYZ values\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
@@ -225,7 +227,7 @@ int main(int argc, char *argv[]) {
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int out_tvenc = 0;					/* 1 to use RGB Video Level encoding */
 	int qbits = 0;						/* Quantization bits, 0 = not set */
-	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
+	int fullscreen = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
 	int fake = 0;						/* Use the fake device for testing */
@@ -259,6 +261,8 @@ int main(int argc, char *argv[]) {
 #endif
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
+	int xtern = 0;						/* Use external (user supplied) values rather than */
+										/* instument read 1 = Lab, 2 = XYZ */ 
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name (if any) */
@@ -463,9 +467,9 @@ int main(int argc, char *argv[]) {
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
-			/* Black background */
+			/* Full screen black background */
 			} else if (argv[fa][1] == 'F') {
-				blackbg = 1;
+				fullscreen = 1;
 
 			/* Video encoded output */
 			} else if (argv[fa][1] == 'E') {
@@ -550,6 +554,18 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage(0,"Parameter expected after -M");
 				mcallout = na;
+
+			/* Request external values */
+			} else if (argv[fa][1] == 'x') {
+				fa = nfa;
+				if (na == NULL) usage(0, "Parameter expected after -x");
+
+				if (na[0] == 'x' || na[0] == 'X')
+					xtern = 2;
+//				else if (na[0] == 'l' || na[0] == 'L')
+//					xtern = 1;
+				else
+					usage(0, "Unexpected parameter -x %c",na[0]);
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
@@ -683,7 +699,7 @@ int main(int argc, char *argv[]) {
 #ifdef NT
 			                         madvrdisp,
 #endif
-			                         out_tvenc, blackbg, override,
+			                         out_tvenc, fullscreen, override,
 			                         100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 		                             g_log)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
@@ -764,15 +780,15 @@ int main(int argc, char *argv[]) {
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
 			error ("Input file '%s' doesn't contain field RGB_R",inname);
 		if (icg->t[0].ftype[ri] != r_t)
-			error ("Input file '%s' field RGB_R is wrong type",inname);
+			error ("Input file '%s' field RGB_R is wrong type - expect float",inname);
 		if ((gi = icg->find_field(icg, 0, "RGB_G")) < 0)
 			error ("Input file '%s' doesn't contain field RGB_G",inname);
 		if (icg->t[0].ftype[gi] != r_t)
-			error ("Input file '%s' field RGB_G is wrong type",inname);
+			error ("Input file '%s' field RGB_G is wrong type - expect float",inname);
 		if ((bi = icg->find_field(icg, 0, "RGB_B")) < 0)
 			error ("Input file '%s' doesn't contain field RGB_B",inname);
 		if (icg->t[0].ftype[bi] != r_t)
-			error ("Input file '%s' field RGB_B is wrong type",inname);
+			error ("Input file '%s' field RGB_B is wrong type - expect float",inname);
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
 		ocg->add_field(ocg, 0, "RGB_G", r_t);
 		ocg->add_field(ocg, 0, "RGB_B", r_t);
@@ -872,19 +888,19 @@ int main(int argc, char *argv[]) {
 		if ((ii = ccg->find_field(ccg, 0, "RGB_I")) < 0)
 			error ("Calibration file '%s' doesn't contain field RGB_I",calname);
 		if (ccg->t[0].ftype[ii] != r_t)
-			error ("Field RGB_R in file '%s' is wrong type",calname);
+			error ("Field RGB_R in file '%s' is wrong type - expect float",calname);
 		if ((ri = ccg->find_field(ccg, 0, "RGB_R")) < 0)
 			error ("Calibration file '%s' doesn't contain field RGB_R",calname);
 		if (ccg->t[0].ftype[ri] != r_t)
-			error ("Field RGB_R in file '%s' is wrong type",calname);
+			error ("Field RGB_R in file '%s' is wrong type - expect float",calname);
 		if ((gi = ccg->find_field(ccg, 0, "RGB_G")) < 0)
 			error ("Calibration file '%s' doesn't contain field RGB_G",calname);
 		if (ccg->t[0].ftype[gi] != r_t)
-			error ("Field RGB_G in file '%s' is wrong type",calname);
+			error ("Field RGB_G in file '%s' is wrong type - expect float",calname);
 		if ((bi = ccg->find_field(ccg, 0, "RGB_B")) < 0)
 			error ("Calibration file '%s' doesn't contain field RGB_B",calname);
 		if (ccg->t[0].ftype[bi] != r_t)
-			error ("Field RGB_B in file '%s' is wrong type",calname);
+			error ("Field RGB_B in file '%s' is wrong type - expect float",calname);
 		for (i = 0; i < ncal; i++) {
 			cal[0][i] = *((double *)ccg->t[0].fdata[i][ri]);
 			cal[1][i] = *((double *)ccg->t[0].fdata[i][gi]);
@@ -897,11 +913,11 @@ int main(int argc, char *argv[]) {
 
 	if ((dr = new_disprd(&errc, ipath, fc, dtype, -1, 0, tele, nadaptive, noautocal, noplace,
 	                     highres, refrate, native, &noramdac, &nocm, cal, ncal, disp,
-		                 out_tvenc, blackbg, override, webdisp, ccid,
+		                 out_tvenc, fullscreen, override, webdisp, ccid,
 #ifdef NT
 						 madvrdisp,
 #endif
-		                 ccallout, mcallout,
+		                 ccallout, mcallout, xtern,
 		                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 	                     ccs != NULL ? ccs->dtech : cmx != NULL ? cmx->dtech : disptech_unknown,
 	                     cmx != NULL ? cmx->cc_cbid : 0,

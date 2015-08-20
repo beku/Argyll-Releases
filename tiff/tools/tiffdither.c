@@ -1,4 +1,4 @@
-/* $Id: tiffdither.c,v 1.9.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: tiffdither.c,v 1.14 2013-05-02 14:44:29 tgl Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -32,6 +32,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"
@@ -77,7 +81,8 @@ fsdither(TIFF* in, TIFF* out)
 	 * Get first line
 	 */
 	if (TIFFReadScanline(in, inputline, 0, 0) <= 0)
-		return;
+            goto skip_on_error;
+
 	inptr = inputline;
 	nextptr = nextline;
 	for (j = 0; j < imagewidth; ++j)
@@ -128,6 +133,7 @@ fsdither(TIFF* in, TIFF* out)
 		if (TIFFWriteScanline(out, outline, i-1, 0) < 0)
 			break;
 	}
+  skip_on_error:
 	_TIFFfree(inputline);
 	_TIFFfree(thisline);
 	_TIFFfree(nextline);
@@ -191,7 +197,6 @@ main(int argc, char* argv[])
 	float floatv;
 	char thing[1024];
 	uint32 rowsperstrip = (uint32) -1;
-	int onestrip = 0;
 	uint16 fillorder = 0;
 	int c;
 	extern int optind;
@@ -213,7 +218,6 @@ main(int argc, char* argv[])
 			break;
 		case 'r':		/* rows/strip */
 			rowsperstrip = atoi(optarg);
-			onestrip = 0;
 			break;
 		case 't':
 			threshold = atoi(optarg);
@@ -256,17 +260,14 @@ main(int argc, char* argv[])
 		TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);
 	else
 		CopyField(TIFFTAG_FILLORDER, shortv);
-	sprintf(thing, "Dithered B&W version of %s", argv[optind]);
+	snprintf(thing, sizeof(thing), "Dithered B&W version of %s", argv[optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
 	CopyField(TIFFTAG_PHOTOMETRIC, shortv);
 	CopyField(TIFFTAG_ORIENTATION, shortv);
 	CopyField(TIFFTAG_XRESOLUTION, floatv);
 	CopyField(TIFFTAG_YRESOLUTION, floatv);
 	CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);
-	if (onestrip)
-		rowsperstrip = imagelength-1;
-	else
-		rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip);
+        rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip);
 	TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, rowsperstrip);
 	switch (compression) {
 	case COMPRESSION_CCITTFAX3:
@@ -288,6 +289,7 @@ char* stuff[] = {
 "usage: tiffdither [options] input.tif output.tif",
 "where options are:",
 " -r #		make each strip have no more than # rows",
+" -t #		set the threshold value for dithering (default 128)",
 " -f lsb2msb	force lsb-to-msb FillOrder for output",
 " -f msb2lsb	force msb-to-lsb FillOrder for output",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",

@@ -72,11 +72,11 @@ int main(int argc, char *argv[])
 	int out2 = 0;			/* Create dumy .ti2 file output */
 	int disp = 0;			/* nz if this is a display device */
 	int inp = 0;			/* nz if this is an input device */
-	static char devname[200] = { 0 };		/* Input CMYK/Device .txt file (may be null) */
-	static char ciename[200] = { 0 };		/* Input CIE .txt file (may be null) */
-	static char specname[200] = { 0 };		/* Input Device / Spectral .txt file */
-	static char outname[200] = { 0 };		/* Output cgats .ti3 file base name */
-	static char outname2[200] = { 0 };		/* Output cgats .ti2 file base name */
+	static char devname[MAXNAMEL+1] = { 0 };		/* Input CMYK/Device .txt file (may be null) */
+	static char ciename[MAXNAMEL+1] = { 0 };		/* Input CIE .txt file (may be null) */
+	static char specname[MAXNAMEL+1] = { 0 };		/* Input Device / Spectral .txt file */
+	static char outname[MAXNAMEL+9] = { 0 };		/* Output cgats .ti3 file base name */
+	static char outname2[MAXNAMEL+9] = { 0 };		/* Output cgats .ti2 file base name */
 	cgats *cmy = NULL;		/* Input RGB/CMYK reference file */
 	int f_id1 = -1, f_c, f_m, f_y, f_k = 0;	/* Field indexes */
 	double dev_scale = 1.0;	/* Device value scaling */
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	cgats *spec = NULL;		/* Input spectral readings (NULL if none) */
 	double spec_scale = 1.0;	/* Spectral value scaling */
 	int f_id3 = 0;			/* Field indexes */
-	int spi[100];			/* CGATS indexes for each wavelength */
+	int spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
 	cgats *ocg;				/* output cgats structure for .ti3 */
 	cgats *ocg2;			/* output cgats structure for .ti2 */
 	time_t clk = time(0);
@@ -127,9 +127,9 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == '2')
 				out2 = 1;
 
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
-				fa = nfa;
+			else if (argv[fa][1] == 'l') {
 				if (na == NULL) usage("No ink limit parameter");
+				fa = nfa;
 				tlimit = atoi(na);
 				if (tlimit < 1)
 					tlimit = -1;
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 				disp = 0;
 				inp = 1;
 
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			} else if (argv[fa][1] == 'v')
 				verb = 1;
 			else 
 				usage("Unknown flag");
@@ -239,39 +239,39 @@ int main(int argc, char *argv[])
 			error("Input file '%s' doesn't contain field RGB_R",devname);
 		}
 		if (cmy->t[0].ftype[f_c] != r_t)
-			error("Field RGB_R from file '%s' is wrong type",devname);
+			error("Field RGB_R from file '%s' is wrong type - expect float",devname);
 
 		if ((f_m = cmy->find_field(cmy, 0, "RGB_G")) < 0)
 			error("Input file '%s' doesn't contain field RGB_G",devname);
 		if (cmy->t[0].ftype[f_m] != r_t)
-			error("Field RGB_G from file '%s' is wrong type",devname);
+			error("Field RGB_G from file '%s' is wrong type - expect float",devname);
 
 		if ((f_y = cmy->find_field(cmy, 0, "RGB_B")) < 0)
 			error("Input file '%s' doesn't contain field RGB_B",devname);
 		if (cmy->t[0].ftype[f_y] != r_t)
-			error("Field RGB_B from file '%s' is wrong type",devname);
+			error("Field RGB_B from file '%s' is wrong type - expect float",devname);
 
 	} else if (ndchan == 4) {
 		if ((f_c = cmy->find_field(cmy, 0, "CMYK_C")) < 0) {
 			error("Input file '%s' doesn't contain field CMYK_C",devname);
 		}
 		if (cmy->t[0].ftype[f_c] != r_t)
-			error("Field CMYK_C from file '%s' is wrong type",devname);
+			error("Field CMYK_C from file '%s' is wrong type - expect float",devname);
 
 		if ((f_m = cmy->find_field(cmy, 0, "CMYK_M")) < 0)
 			error("Input file '%s' doesn't contain field CMYK_M",devname);
 		if (cmy->t[0].ftype[f_m] != r_t)
-			error("Field CMYK_M from file '%s' is wrong type",devname);
+			error("Field CMYK_M from file '%s' is wrong type - expect float",devname);
 
 		if ((f_y = cmy->find_field(cmy, 0, "CMYK_Y")) < 0)
 			error("Input file '%s' doesn't contain field CMYK_Y",devname);
 		if (cmy->t[0].ftype[f_y] != r_t)
-			error("Field CMYK_Y from file '%s' is wrong type",devname);
+			error("Field CMYK_Y from file '%s' is wrong type - expect float",devname);
 
 		if ((f_k = cmy->find_field(cmy, 0, "CMYK_K")) < 0)
 			error("Input file '%s' doesn't contain field CMYK_Y",devname);
 		if (cmy->t[0].ftype[f_k] != r_t)
-			error("Field CMYK_K from file '%s' is wrong type",devname);
+			error("Field CMYK_K from file '%s' is wrong type - expect float",devname);
 	}
 	if (verb && ndchan > 0) printf("Read device values\n");
 
@@ -351,7 +351,7 @@ int main(int argc, char *argv[])
 				error("Input file '%s' doesn't contain field XYZ_Y",fields[islab][i], ciename);
 
 			if (ncie->t[0].ftype[f_cie[i]] != r_t)
-				error("Field %s from file '%s' is wrong type",fields[islab][i], ciename);
+				error("Field %s from file '%s' is wrong type - expect float",fields[islab][i], ciename);
 		}
 	
 		if (verb) printf("Found CIE values\n");
@@ -447,7 +447,7 @@ int main(int argc, char *argv[])
 					error("Failed to find spectral band %d nm in file '%s'\n",specmin + 10 * j,specname);
 				} else {
 					if (spec->t[0].ftype[spi[j]] != r_t)
-						error("Field '%s' from file '%s' is wrong type",spec->t[0].fsym[spi[j]], specname);
+						error("Field '%s' from file '%s' is wrong type - expect float",spec->t[0].fsym[spi[j]], specname);
 				}
 
 			}

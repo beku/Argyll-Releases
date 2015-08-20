@@ -139,6 +139,7 @@ if $(BUILD_JUNK) {
 	LINKLIBS += ../render/librender ;
 
 	Main illlocus : illlocus.c ;
+	Main illlocus2 : illlocus2.c ;
 
 	Main slocustest : slocustest.c ;
 	

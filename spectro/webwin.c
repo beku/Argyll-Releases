@@ -16,18 +16,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#ifdef NT
-# include <winsock2.h>
-#endif
-#ifdef UNIX
-# include <sys/types.h>
-# include <ifaddrs.h>
-# include <netinet/in.h> 
-# include <arpa/inet.h>
-# if defined(__FreeBSD__) || defined(__OpenBSD__)
-#  include <sys/socket.h>
-# endif /* __FreeBSD__ */
-#endif
 #include "copyright.h"
 #include "aconfig.h"
 #include "icc.h"
@@ -263,9 +251,9 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	return 0;
 }
 
-/* Set/unset the blackground color flag */
+/* Set/unset the full screen black flag */
 /* Return nz on error */
-static int webwin_set_bg(dispwin *p, int blackbg) {
+static int webwin_set_fc(dispwin *p, int fullscreen) {
 	return 1;		/* Setting black BG not supported */
 }
 
@@ -319,7 +307,7 @@ int native,						/* X0 = use current per channel calibration curve */
 int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
 int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
 int out_tvenc,					/* 1 = use RGB Video Level encoding */
-int blackbg,					/* NZ if whole screen should be filled with black */
+int fullscreen,					/* NZ if whole screen should be filled with black */
 int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
@@ -344,7 +332,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = out_tvenc;
-	p->blackbg = blackbg;
+	p->fullscreen = fullscreen;
 	p->ddebug = ddebug;
 	p->get_ramdac          = webwin_get_ramdac;
 	p->set_ramdac          = webwin_set_ramdac;
@@ -352,7 +340,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->uninstall_profile   = webwin_uninstall_profile;
 	p->get_profile         = webwin_get_profile;
 	p->set_color           = webwin_set_color;
-	p->set_bg              = webwin_set_bg;
+	p->set_fc              = webwin_set_fc;
 	p->set_update_delay    = dispwin_set_update_delay;
 	p->set_settling_delay  = dispwin_set_settling_delay;
 	p->enable_update_delay = dispwin_enable_update_delay;

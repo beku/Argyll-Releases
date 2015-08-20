@@ -1,4 +1,4 @@
-/* $Id: sgisv.c,v 1.5.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: sgisv.c,v 1.6 2010-03-10 18:56:49 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1990-1997 Sam Leffler

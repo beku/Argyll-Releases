@@ -176,9 +176,17 @@ struct _ramdac {
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Dispwin object */
 /* This is used by all the different test patch window types, */
-/* dispwin, webwin, madvrwin and ccwin.
+/* dispwin, webwin, madvrwin and ccwin. */
 /* !!!! Make changes in dispwin.c, webwin.c, madvrwin.c & ccwin.c !!!!  */
 /* !!!! if this structure gets changed. !!!! */
+
+/* Full screen background handling */
+typedef enum {
+	dw_bg_black   = 0,		/* Black background */
+	dw_bg_grey    = 1,		/* Grey background */
+	dw_bg_cvideo  = 2,		/* Constant Average Video background */
+	dw_bg_clight  = 3		/* Constant Average Light background */
+} dw_bg_type;
 
 struct _dispwin {
 
@@ -218,7 +226,9 @@ struct _dispwin {
 	ramdac *or;			/* Original ramdac contents, NULL if not accessible, restored on exit */
 	ramdac *r;			/* Ramdac in use for native mode or general use */
 	double width, height;	/* Orginial size in mm or % */
-	int blackbg;		/* NZ if black full screen background */
+	int fullscreen;		/* NZ if full screen background (default black) */
+	dw_bg_type bge;		/* Full screen background color (ccwin only) */
+	double area;		/* Patch area for bge calc 0..1 */
 
 	char *callout;		/* if not NULL - set color Shell callout routine */
 
@@ -329,13 +339,20 @@ struct _dispwin {
 	/* Return nz on error */
 	int (*set_color)(struct _dispwin *p, double r, double g, double b);
 
-	/* Set/unset the blackground color flag. */
+	/* Set/unset the fullscreen black flag. */
 	/* Will only change on next set_col() */
 	/* Return nz on error */
-	int (*set_bg)(struct _dispwin *p, int blackbg);
+	int (*set_fc)(struct _dispwin *p, int fullscreen);
 
+	/* Change the patch display parameters. */
 	/* Optional - may be NULL */
-	/* set patch info */
+	int (*set_patch_win)(struct _dispwin *p, 
+		double hoff, double voff,		/* Offset from c. in fraction of screen, -1.0 .. 1.0 */
+		double area,					/* Patch area 0..1 */
+		dw_bg_type bge					/* Background */  
+	);
+
+	/* set patch user info */
 	/* Return nz on error */
 	int (*set_pinfo)(struct _dispwin *p, int pno, int tno);
 
@@ -356,6 +373,7 @@ struct _dispwin {
 	/* Set a shell set color callout command line */
 	void (*set_callout)(struct _dispwin *p, char *callout);
 
+
 	/* Destroy ourselves */
 	void (*del)(struct _dispwin *p);
 
@@ -374,7 +392,7 @@ dispwin *new_dispwin(
 	int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
 	int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
 	int out_tvenc,					/* 1 = use RGB Video Level encoding */
-	int blackbg,					/* NZ if whole screen should be filled with black */
+	int fullscreen,					/* NZ if whole screen should be filled with black */
 	int override,					/* NZ if override_redirect is to be used on X11 */
 	int ddebug						/* >0 to print debug statements to stderr */
 );

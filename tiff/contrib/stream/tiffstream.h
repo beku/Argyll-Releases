@@ -60,7 +60,8 @@ private:
 	
 };
 
-#endif // _TIFF_STREAM_H_/*
+#endif // _TIFF_STREAM_H_
+/*
  * Local Variables:
  * mode: c++
  * c-basic-offset: 8

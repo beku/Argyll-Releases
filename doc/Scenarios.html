@@ -181,6 +181,7 @@
 
 
 
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -203,6 +204,7 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
 
 
 
@@ -641,6 +643,7 @@
 
 
 
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -656,6 +659,7 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
 
 
 
@@ -879,6 +883,7 @@
 
 
 
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
@@ -891,6 +896,7 @@
       2px solid ; width: 200px; height: 140px;"><br>
     <br>
     Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+
 
 
 
@@ -1020,6 +1026,7 @@
 
 
 
+
       Imaging DCPro Target</a>:<br>
     <br>
     <img style="width: 153px; height: 122px;" alt="LaserSoft DCPro
@@ -1084,8 +1091,10 @@
 
 
 
+
       201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
 href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
 
 
 
@@ -1193,7 +1202,7 @@ href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-prof
       create your own reference file using an instrument and chartread,
       making use of the chart reference file <span style="font-weight:
         bold;">ref/ColorChecker.ti2</span>:<br>
-      &nbsp;&nbsp; <a href="chartread.html">chartread</a> -n -a
+      &nbsp;&nbsp; <a href="chartread.html">chartread</a> -n
       ColorChecker.ti2<br>
       Note that due to the small number of patches, a profile created
       from such a chart is not likely to be very detailed.<br>
@@ -1217,6 +1226,7 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
         style="text-decoration: underline;">plain text</span> editor,
       first deleting everything before the line starting with "A1" and
       everything after "N10", then prepending <a href="SG_header.txt">this
+
 
 
 
@@ -1298,7 +1308,7 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
       instrument (usually the Eye-One Pro). This can be done using
       chartread,&nbsp; making use of the chart reference file <span
         style="font-weight: bold;">ref/i1_RGB_Scan_1.4.ti2</span>:<br>
-      &nbsp;&nbsp;&nbsp; <a href="chartread.html">chartread</a> -n -a
+      &nbsp;&nbsp;&nbsp; <a href="chartread.html">chartread</a> -n
       i1_RGB_Scan_1.4<br>
       and then rename the resulting <span style="font-weight: bold;">i1_RGB_Scan_1.4.ti3</span>
       file to <span style="font-weight: bold;">i1_RGB_Scan_1.4.cie</span><br>
@@ -1349,6 +1359,7 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
     For any other type of chart, a chart recognition template file will
     need to be created (this is beyond the scope of the current
     documentation, although see&nbsp; the <a href="cht_format.html">.cht_format
+
 
 
 
@@ -1857,6 +1868,7 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -2006,6 +2018,7 @@ then
 
 
 
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -2083,6 +2096,7 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
 
 
 
@@ -2603,6 +2617,7 @@ chart,
 
 
 
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -2613,6 +2628,7 @@ and
 calibration
 to
 an
+
 
 
 
@@ -2727,6 +2743,7 @@ an
 
 
 
+
     To incorporate calibration into an ICC profile.<br>
     &nbsp;&nbsp;&nbsp; <a href="chartread.html#I">chartread</a>&nbsp;&nbsp;
 To
@@ -2737,6 +2754,7 @@ assumed
 when
 reading
 a
+
 
 
 
@@ -3135,6 +3153,7 @@ a
 
 
 
+
       madvr</b>" in dispcal, dispread and dispwin. Leave the MadTPG
     "VideoLUT" and "3dluts" buttons in their default&nbsp; (enabled)
     state, as the various tools will automatically take care of
@@ -3196,6 +3215,7 @@ a
 
 
 
+
         interactive adjustment mode can be used to set the white point.
         Note that while adjusting the neutral axis for neutrality may
         help, the Device Link will override the transfer curve
@@ -3218,6 +3238,7 @@ a
         taken, then the resulting calibration file should be provided to
         dispread as the <a href="dispcal.html#k">-k parameter</a> or <a
           href="dispcal.html#K">-K parameter</a>.&nbsp; See also below <b>Choice
+
 
 
 
@@ -3721,9 +3742,11 @@ a
 
 
 
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-H
+
 
 
 
@@ -3778,9 +3801,11 @@ a
 
 
 
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-a
+
 
 
 

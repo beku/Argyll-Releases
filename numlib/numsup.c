@@ -63,7 +63,7 @@ void set_exe_path(char *argv0) {
 	g_log->tag = argv0;
 	i = strlen(argv0);
 	if ((exe_path = malloc(i + 5)) == NULL) {
-		a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed",i+5);
+		a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed\n",i+5);
 		return;
 	}
 	strcpy(exe_path, argv0);
@@ -80,7 +80,7 @@ void set_exe_path(char *argv0) {
 			strcat(exe_path, ".exe");
 
 		if ((mh = GetModuleHandle(exe_path)) == NULL) {
-			a1loge(g_log, 1, "set_exe_path: GetModuleHandle '%s' failed with%d",
+			a1loge(g_log, 1, "set_exe_path: GetModuleHandle '%s' failed with%d\n",
 			                                            exe_path,GetLastError());
 			exe_path[0] = '\000';
 			return;
@@ -91,12 +91,12 @@ void set_exe_path(char *argv0) {
 			if (tpath != NULL)
 				free(tpath);
 			if ((tpath = malloc(pl)) == NULL) {
-				a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed",pl);
+				a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed\n",pl);
 				exe_path[0] = '\000';
 			return;
 			}
 			if ((i = GetModuleFileName(mh, tpath, pl)) == 0) {
-				a1loge(g_log, 1, "set_exe_path: GetModuleFileName '%s' failed with%d",
+				a1loge(g_log, 1, "set_exe_path: GetModuleFileName '%s' failed with%d\n",
 				                                                tpath,GetLastError());
 				exe_path[0] = '\000';
 				return;
@@ -135,7 +135,7 @@ void set_exe_path(char *argv0) {
 				else
 					ll = p - cp;
 				if ((ll + 1 + strlen(exe_path) + 1) > PATH_MAX) {
-					a1loge(g_log, 1, "set_exe_path: Search path exceeds PATH_MAX");
+					a1loge(g_log, 1, "set_exe_path: Search path exceeds PATH_MAX\n");
 					exe_path[0] = '\000';
 					return;
 				}
@@ -148,7 +148,7 @@ void set_exe_path(char *argv0) {
 						found = 1;
 						free(exe_path);
 						if ((exe_path = malloc(strlen(b2)+1)) == NULL) {
-							a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed",strlen(b2)+1);
+							a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed\n",strlen(b2)+1);
 							exe_path[0] = '\000';
 							return;
 						}
@@ -170,7 +170,7 @@ void set_exe_path(char *argv0) {
 		if (exe_path[i] == '/') {
 			char *tpath;
 			if ((tpath = malloc(strlen(exe_path + i))) == NULL) {
-				a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed",strlen(exe_path + i));
+				a1loge(g_log, 1, "set_exe_path: malloc %d bytes failed\n",strlen(exe_path + i));
 				exe_path[0] = '\000';
 				return;
 			}
@@ -451,6 +451,34 @@ void a1logue(a1log *log) {
 	if (log != NULL) {
 		log->errc = 0;
 		log->errm[0] = '\000';
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Print bytes as hex to debug log */
+/* base is the base of the displayed offset */
+void adump_bytes(a1log *log, char *pfx, unsigned char *buf, int base, int len) {
+	int i, j, ii;
+	char oline[200] = { '\000' }, *bp = oline;
+	for (i = j = 0; i < len; i++) {
+		if ((i % 16) == 0)
+			bp += sprintf(bp,"%s%04x:",pfx,base+i);
+		bp += sprintf(bp," %02x",buf[i]);
+		if ((i+1) >= len || ((i+1) % 16) == 0) {
+			for (ii = i; ((ii+1) % 16) != 0; ii++)
+				bp += sprintf(bp,"   ");
+			bp += sprintf(bp,"  ");
+			for (; j <= i; j++) {
+				if (!(buf[j] & 0x80) && isprint(buf[j]))
+					bp += sprintf(bp,"%c",buf[j]);
+				else
+					bp += sprintf(bp,".");
+			}
+			bp += sprintf(bp,"\n");
+			a1logd(log,0,"%s",oline);
+			bp = oline;
+		}
 	}
 }
 
@@ -1609,7 +1637,7 @@ unsigned int read_ORD8(ORD8 *p) {
 	return rv;
 }
 
-void write_ORD8(unsigned int d, ORD8 *p) {
+void write_ORD8(ORD8 *p, unsigned int d) {
 	if (d > 0xff)
 		d = 0xff;
 	p[0] = (ORD8)(d);
@@ -1624,7 +1652,7 @@ int read_INR8(ORD8 *p) {
 	return rv;
 }
 
-void write_INR8(int d, ORD8 *p) {
+void write_INR8(ORD8 *p, int d) {
 	if (d > 0x7f)
 		d = 0x7f;
 	else if (d < -0x80)
@@ -1649,14 +1677,14 @@ unsigned int read_ORD16_le(ORD8 *p) {
 	return rv;
 }
 
-void write_ORD16_be(unsigned int d, ORD8 *p) {
+void write_ORD16_be(ORD8 *p, unsigned int d) {
 	if (d > 0xffff)
 		d = 0xffff;
 	p[0] = (ORD8)(d >> 8);
 	p[1] = (ORD8)(d);
 }
 
-void write_ORD16_le(unsigned int d, ORD8 *p) {
+void write_ORD16_le(ORD8 *p, unsigned int d) {
 	if (d > 0xffff)
 		d = 0xffff;
 	p[0] = (ORD8)(d);
@@ -1680,7 +1708,7 @@ int read_INR16_le(ORD8 *p) {
 	return rv;
 }
 
-void write_INR16_be(int d, ORD8 *p) {
+void write_INR16_be(ORD8 *p, int d) {
 	if (d > 0x7fff)
 		d = 0x7fff;
 	else if (d < -0x8000)
@@ -1689,7 +1717,7 @@ void write_INR16_be(int d, ORD8 *p) {
 	p[1] = (ORD8)(d);
 }
 
-void write_INR16_le(int d, ORD8 *p) {
+void write_INR16_le(ORD8 *p, int d) {
 	if (d > 0x7fff)
 		d = 0x7fff;
 	else if (d < -0x8000)
@@ -1719,14 +1747,14 @@ unsigned int read_ORD32_le(ORD8 *p) {
 	return rv;
 }
 
-void write_ORD32_be(unsigned int d, ORD8 *p) {
+void write_ORD32_be(ORD8 *p, unsigned int d) {
 	p[0] = (ORD8)(d >> 24);
 	p[1] = (ORD8)(d >> 16);
 	p[2] = (ORD8)(d >> 8);
 	p[3] = (ORD8)(d);
 }
 
-void write_ORD32_le(unsigned int d, ORD8 *p) {
+void write_ORD32_le(ORD8 *p, unsigned int d) {
 	p[0] = (ORD8)(d);
 	p[1] = (ORD8)(d >> 8);
 	p[2] = (ORD8)(d >> 16);
@@ -1754,14 +1782,14 @@ int read_INR32_le(ORD8 *p) {
 	return rv;
 }
 
-void write_INR32_be(int d, ORD8 *p) {
+void write_INR32_be(ORD8 *p, int d) {
 	p[0] = (ORD8)(d >> 24);
 	p[1] = (ORD8)(d >> 16);
 	p[2] = (ORD8)(d >> 8);
 	p[3] = (ORD8)(d);
 }
 
-void write_INR32_le(int d, ORD8 *p) {
+void write_INR32_le(ORD8 *p, int d) {
 	p[0] = (ORD8)(d);
 	p[1] = (ORD8)(d >> 8);
 	p[2] = (ORD8)(d >> 16);
@@ -1797,7 +1825,7 @@ ORD64 read_ORD64_le(ORD8 *p) {
 	return rv;
 }
 
-void write_ORD64_be(ORD64 d, ORD8 *p) {
+void write_ORD64_be(ORD8 *p, ORD64 d) {
 	p[0] = (ORD8)(d >> 56);
 	p[1] = (ORD8)(d >> 48);
 	p[2] = (ORD8)(d >> 40);
@@ -1808,7 +1836,7 @@ void write_ORD64_be(ORD64 d, ORD8 *p) {
 	p[7] = (ORD8)(d);
 }
 
-void write_ORD64_le(ORD64 d, ORD8 *p) {
+void write_ORD64_le(ORD8 *p, ORD64 d) {
 	p[0] = (ORD8)(d);
 	p[1] = (ORD8)(d >> 8);
 	p[2] = (ORD8)(d >> 16);
@@ -1848,7 +1876,7 @@ INR64 read_INR64_le(ORD8 *p) {
 	return rv;
 }
 
-void write_INR64_be(INR64 d, ORD8 *p) {
+void write_INR64_be(ORD8 *p, INR64 d) {
 	p[0] = (ORD8)(d >> 56);
 	p[1] = (ORD8)(d >> 48);
 	p[2] = (ORD8)(d >> 40);
@@ -1859,7 +1887,7 @@ void write_INR64_be(INR64 d, ORD8 *p) {
 	p[7] = (ORD8)(d);
 }
 
-void write_INR64_le(INR64 d, ORD8 *p) {
+void write_INR64_le(ORD8 *p, INR64 d) {
 	p[0] = (ORD8)(d);
 	p[1] = (ORD8)(d >> 8);
 	p[2] = (ORD8)(d >> 16);

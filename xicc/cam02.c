@@ -809,7 +809,7 @@ double XYZ[3]
 	}
 #endif
 
-	/* Constraied (+ve, non-zero) J */
+	/* Constrained (+ve, non-zero) J */
 	if (A > 0.0) {
 		cJ = pow(A/s->Aw, s->C * s->z);
 		if (cJ < s->ssmincj)

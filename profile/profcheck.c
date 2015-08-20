@@ -122,14 +122,15 @@ int main(int argc, char *argv[])
 	vrml *wrl = NULL;
 
 	int fwacomp = 0;			/* FWA compensation */
+	int isemis = 0;				/* nz if this has emissive reference data */
 	int isdisp = 0;				/* nz if this is a display device, 0 if output */
 	int isdnormed = 0;      	/* Has display data been normalised to 100 ? */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
-	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
+	icxIllumeType illum = icxIT_none;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_CIE_1931_2;
+	icxObserverType observ = icxOT_none;
 
 	int sortbyde = 0;			/* Sort by delta E */
 
@@ -224,8 +225,8 @@ int main(int argc, char *argv[])
 
 			/* Create a pruned .ti3 */
 			else if (argv[fa][1] == 'P') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				prune = atof(na);
 				if (prune <= 0.0)
 					usage();
@@ -235,8 +236,8 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'd') {
 				char *tp, buf[200];
 				int ndv;
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 
 				ddevv = 1;
 				strcpy(buf, na);
@@ -302,8 +303,8 @@ int main(int argc, char *argv[])
 			}
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
@@ -338,8 +339,8 @@ int main(int argc, char *argv[])
 
 			/* Spectral Observer type */
 			else if (argv[fa][1] == 'o') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 1;
 					observ = icxOT_CIE_1931_2;
@@ -361,8 +362,8 @@ int main(int argc, char *argv[])
 
 			/* Intent (only applies to ICC profile) */
 			else if (argv[fa][1] == 'I') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
     			switch (na[0]) {
 					case 'r':
 						intent = icRelativeColorimetric;
@@ -408,6 +409,46 @@ int main(int argc, char *argv[])
 	if (icg->ntables < 1)
 		error ("Input file '%s' doesn't contain at least one table",ti3name);
 
+	/* Figure out what sort of device it is */
+	{
+		int ti;
+
+		if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
+			error ("Input file '%s' doesn't contain keyword DEVICE_CLASS",ti3name);
+
+		if (strcmp(icg->t[0].kdata[ti],"EMISINPUT") == 0) {
+			isemis = 1;
+
+		} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
+			isemis = 1;
+			isdisp = 1;
+		}
+
+		/* See if the CIE data has been normalised to Y = 100 */
+		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
+		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
+			isdnormed = 0;
+		} else {
+			isdnormed = 1;
+		}
+	}
+
+	if (isemis && illum != icxIT_none)
+		warning("-i illuminant ignored for emissive reference type");
+
+	if (isemis & fwacomp) {
+			warning("-f FWA compensation ignored for emissive reference type");
+		fwacomp = 0;
+		tillum = icxIT_none;
+	}
+
+	/* Set defaults */
+	if (illum == icxIT_none)
+		illum = icxIT_D50;
+	
+	if (observ = icxOT_none)
+		observ = icxOT_CIE_1931_2;
+
 	/* See if CIE is actually available - some sources of .TI3 don't provide it */
 	if (!spec
 	 && icg->find_field(icg, 0, "LAB_L") < 0
@@ -424,26 +465,6 @@ int main(int argc, char *argv[])
 		observ = icxOT_CIE_1931_2;
 	}
 	
-	/* Figure out what sort of device it is */
-	{
-		int ti;
-
-		if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
-			error ("Input file '%s' doesn't contain keyword DEVICE_CLASS",ti3name);
-
-		if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
-			isdisp = 1;
-		}
-
-		/* See if the CIE data has been normalised to Y = 100 */
-		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
-		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
-			isdnormed = 0;
-		} else {
-			isdnormed = 1;
-		}
-	}
-
 	/* Figure out what sort of device colorspace it is */
 	{
 		int ti;
@@ -569,12 +590,12 @@ int main(int argc, char *argv[])
 				if ((ci = icg->find_field(icg, 0, "GRAY_W")) < 0)
 					error("Input file doesn't contain field GRAY_W");
 				if (icg->t[0].ftype[ci] != r_t)
-					error("Field GRAY_W is wrong type - corrupted file ?");
+					error("Field GRAY_W is wrong type - expect float");
 			} else {
 				if ((ci = icg->find_field(icg, 0, "GRAY_K")) < 0)
 					error("Input file doesn't contain field GRAY_K");
 				if (icg->t[0].ftype[ci] != r_t)
-					error("Field GRAY_K is wrong type - corrupted file ?");
+					error("Field GRAY_K is wrong type - expect float");
 			}
 			mi = yi = ki = ci;
 
@@ -582,15 +603,15 @@ int main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "RGB_R")) < 0)
 				error("Input file '%s' doesn't contain field RGB_R",ti3name);
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Input file '%s' field RGB_R is wrong type",ti3name);
+				error("Input file '%s' field RGB_R is wrong type - expect float",ti3name);
 			if ((mi = icg->find_field(icg, 0, "RGB_G")) < 0)
 				error("Input file '%s' doesn't contain field RGB_G",ti3name);
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Input file '%s' field RGB_G is wrong type",ti3name);
+				error("Input file '%s' field RGB_G is wrong type - expect float",ti3name);
 			if ((yi = icg->find_field(icg, 0, "RGB_B")) < 0)
 				error("Input file '%s' doesn't contain field RGB_B",ti3name);
 			if (icg->t[0].ftype[yi] != r_t)
-				error("Input file '%s' field RGB_B is wrong type",ti3name);
+				error("Input file '%s' field RGB_B is wrong type - expect float",ti3name);
 			ki = yi;
 
 		} else if (devspace == icSigCmyData) {
@@ -598,11 +619,11 @@ int main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "CMY_C")) < 0)
 				error("Input file '%s' doesn't contain field CMY_C",ti3name);
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Input file '%s' field CMY_C is wrong type",ti3name);
+				error("Input file '%s' field CMY_C is wrong type - expect float",ti3name);
 			if ((mi = icg->find_field(icg, 0, "CMY_M")) < 0)
 				error("Input file '%s' doesn't contain field CMY_M",ti3name);
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Input file '%s' field CMY_M is wrong type",ti3name);
+				error("Input file '%s' field CMY_M is wrong type - expect float",ti3name);
 			if ((yi = icg->find_field(icg, 0, "CMY_Y")) < 0)
 				error("Input file '%s' doesn't contain field CMY_Y",ti3name);
 			ki = yi;
@@ -611,19 +632,19 @@ int main(int argc, char *argv[])
 			if ((ci = icg->find_field(icg, 0, "CMYK_C")) < 0)
 				error("Input file '%s' doesn't contain field CMYK_C",ti3name);
 			if (icg->t[0].ftype[ci] != r_t)
-				error("Input file '%s' field CMYK_C is wrong type",ti3name);
+				error("Input file '%s' field CMYK_C is wrong type - expect float",ti3name);
 			if ((mi = icg->find_field(icg, 0, "CMYK_M")) < 0)
 				error("Input file '%s' doesn't contain field CMYK_M",ti3name);
 			if (icg->t[0].ftype[mi] != r_t)
-				error("Input file '%s' field CMYK_M is wrong type",ti3name);
+				error("Input file '%s' field CMYK_M is wrong type - expect float",ti3name);
 			if ((yi = icg->find_field(icg, 0, "CMYK_Y")) < 0)
 				error("Input file '%s' doesn't contain field CMYK_Y",ti3name);
 			if (icg->t[0].ftype[yi] != r_t)
-				error("Input file '%s' field CMYK_Y is wrong type",ti3name);
+				error("Input file '%s' field CMYK_Y is wrong type - expect float",ti3name);
 			if ((ki = icg->find_field(icg, 0, "CMYK_K")) < 0)
 				error("Input file '%s' doesn't contain field CMYK_K",ti3name);
 			if (icg->t[0].ftype[ki] != r_t)
-				error("Input file '%s' field CMYK_K is wrong type",ti3name);
+				error("Input file '%s' field CMYK_K is wrong type - expect float",ti3name);
 		}
 
 		if (spec == 0) { 		/* Using instrument tristimulous value */
@@ -632,29 +653,29 @@ int main(int argc, char *argv[])
 				if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
 					error("Input file '%s' doesn't contain field LAB_L",ti3name);
 				if (icg->t[0].ftype[Xi] != r_t)
-					error("Input file '%s' field LAB_L is wrong type",ti3name);
+					error("Input file '%s' field LAB_L is wrong type - expect float",ti3name);
 				if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
 					error("Input '%s' file doesn't contain field LAB_A",ti3name);
 				if (icg->t[0].ftype[Yi] != r_t)
-					error("Input file '%s' field LAB_A is wrong type",ti3name);
+					error("Input file '%s' field LAB_A is wrong type - expect float",ti3name);
 				if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
 					error("Input file '%s' doesn't contain field LAB_B",ti3name);
 				if (icg->t[0].ftype[Zi] != r_t)
-					error("Input file '%s' field LAB_B is wrong type",ti3name);
+					error("Input file '%s' field LAB_B is wrong type - expect float",ti3name);
 
 			} else { 		/* Expect XYZ */
 				if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_X",ti3name);
 				if (icg->t[0].ftype[Xi] != r_t)
-					error("Input file '%s' field XYZ_X is wrong type",ti3name);
+					error("Input file '%s' field XYZ_X is wrong type - expect float",ti3name);
 				if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_Y",ti3name);
 				if (icg->t[0].ftype[Yi] != r_t)
-					error("Input file '%s' field XYZ_Y is wrong type",ti3name);
+					error("Input file '%s' field XYZ_Y is wrong type - expect float",ti3name);
 				if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
 					error("Input file '%s' doesn't contain field XYZ_Z",ti3name);
 				if (icg->t[0].ftype[Zi] != r_t)
-					error("Input file '%s' field XYZ_Z is wrong type",ti3name);
+					error("Input file '%s' field XYZ_Z is wrong type - expect float",ti3name);
 			}
 
 			for (i = 0; i < npat; i++) {
@@ -719,10 +740,14 @@ int main(int argc, char *argv[])
 
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file '%s' doesn't contain field %s",ti3name,buf);
+
+				if (icg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 
-			if (isdisp) {
-				illum = icxIT_none;		/* Displays are assumed to be self luminous */
+			if (isemis) {
+				illum = icxIT_none;		/* Emissive data has no illuminant */
+				fwacomp = 0;
 			}
 
 			/* Create a spectral conversion object */

@@ -729,7 +729,7 @@ int main(int argc, char *argv[])
 			if ((ii = ti3->find_field(ti3, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
 			if (ti3->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",fname);
+				error ("Field %s is wrong type - expect float",fname);
 			ti3_chix[j] = ii;
 		}
 
@@ -740,7 +740,7 @@ int main(int argc, char *argv[])
 			if ((ii = ti3->find_field(ti3, 0, ti3_isLab ? labfname[j] : xyzfname[j])) < 0)
 				error ("Input file doesn't contain field %s",ti3_isLab ? labfname[j] : xyzfname[j]);
 			if (ti3->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",ti3_isLab ? labfname[j] : xyzfname[j]);
+				error ("Field %s is wrong type - expect float",ti3_isLab ? labfname[j] : xyzfname[j]);
 			ti3_pcsix[j] = ii;
 		}
 
@@ -768,6 +768,9 @@ int main(int argc, char *argv[])
 	
 				if ((ti3_spi[j] = ti3->find_field(ti3, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (ti3->t[0].ftype[ti3_spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 		}
 
@@ -1061,7 +1064,7 @@ int main(int argc, char *argv[])
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
 			if (icg->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",fname);
+				error ("Field %s is wrong type - expect float",fname);
 	
 			ocg->add_field(ocg, 0, fname, r_t);
 			chix[j] = ii;
@@ -1075,7 +1078,7 @@ int main(int argc, char *argv[])
 				if ((ii = icg->find_field(icg, 0, islab ? labfname[j] : xyzfname[j])) < 0)
 					error ("Input file doesn't contain field %s",islab ? labfname[j] : xyzfname[j]);
 				if (icg->t[0].ftype[ii] != r_t)
-					error ("Field %s is wrong type",islab ? labfname[j] : xyzfname[j]);
+					error ("Field %s is wrong type - expect float",islab ? labfname[j] : xyzfname[j]);
 				pcsix[j] = ii;
 			}
 		}

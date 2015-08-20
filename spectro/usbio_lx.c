@@ -606,7 +606,7 @@ static int cancel_req(icoms *p, usbio_req *req, int thisurb) {
 		int ev;
 		// ~~99 can we skip done, errored or cancelled urbs ?
 		// Does it matter if there is a race between cancellers ? */
-		a1logd(p->log, 7, "cancel_req %d\n",i);
+		a1logd(p->log, 8, "cancel_req %d\n",i);
 		ev = ioctl(p->usbd->fd, USBDEVFS_DISCARDURB, &req->urbs[i].urb);
 		if (ev != 0 && ev != EINVAL) {
 			/* Hmmm */
@@ -627,7 +627,7 @@ static void *urb_reaper(void *context) {
 	int rv;
 	struct pollfd pa[2];        /* Poll array to monitor urb result or shutdown */
 
-	a1logd(p->log, 6, "urb_reaper: reap starting\n");
+	a1logd(p->log, 8, "urb_reaper: reap starting\n");
 
 	/* Wait for a URB, and signal the requester */
 	for (;;) {
@@ -668,7 +668,7 @@ static void *urb_reaper(void *context) {
 
 		/* Hmm. poll returned without event from fd. */
 		if (pa[0].revents == 0) {
-			a1logd(p->log, 6, "urb_reaper: poll returned events %d %d - ignoring\n",
+			a1logd(p->log, 8, "urb_reaper: poll returned events %d %d - ignoring\n",
 			                   pa[0].revents,pa[1].revents);
 			continue;
 		}
@@ -677,15 +677,15 @@ static void *urb_reaper(void *context) {
 		rv = ioctl(p->usbd->fd, USBDEVFS_REAPURBNDELAY, &out);
 
 		if (rv == EAGAIN) {
-			a1logd(p->log, 2, "urb_reaper: reap returned EAGAIN - ignored\n");
+			a1logd(p->log, 8, "urb_reaper: reap returned EAGAIN - ignored\n");
 			continue;
 		}
 		if (rv < 0) {
-			a1logd(p->log, 2, "urb_reaper: reap failed with %d\n",rv);
+			a1logd(p->log, 8, "urb_reaper: reap failed with %d\n",rv);
 				if (errc++ < 5) {
 				continue;
 			}
-			a1logd(p->log, 2, "urb_reaper: reap failed too many times - shutting down\n");
+			a1logd(p->log, 8, "urb_reaper: reap failed too many times - shutting down\n");
 			p->usbd->shutdown = 1;
 			break;
 		}
@@ -693,7 +693,7 @@ static void *urb_reaper(void *context) {
 		errc = 0;
 
 		if (out == NULL) {
-			a1logd(p->log, 2, "urb_reaper: reap returned NULL URB - ignored\n");
+			a1logd(p->log, 8, "urb_reaper: reap returned NULL URB - ignored\n");
 			continue;
 		}
 
@@ -710,7 +710,7 @@ static void *urb_reaper(void *context) {
 		if (req->nourbs > 0 && !req->cancelled
 		 && ((out->actual_length < out->buffer_length)
 		   || (out->status < 0 && out->status != -ECONNRESET))) {
-			a1logd(p->log, 6, "urb_reaper: reaper canceling failed or done urb's\n",rv);
+			a1logd(p->log, 8, "urb_reaper: reaper canceling failed or done urb's\n",rv);
 			if (cancel_req(p, req, iurb->urbno) != ICOM_OK) {
 				pthread_mutex_unlock(&req->lock);
 				/* Is this fatal ? Assume so for the moment ... */
@@ -749,7 +749,7 @@ static void *urb_reaper(void *context) {
 			req = req->next;
 		}
 		pthread_mutex_unlock(&p->usbd->lock);
-		a1logd(p->log, 1, "urb_reaper: cleared requests\n");
+		a1logd(p->log, 8, "urb_reaper: cleared requests\n");
 	}
 	p->usbd->running = 0;
 
@@ -834,7 +834,7 @@ static int icoms_usb_transaction(
 		bp += req.urbs[i].urb.buffer_length;
 		req.urbs[i].urb.status = -EINPROGRESS;
 	}
-a1logd(p->log, 8, "icoms_usb_transaction: reset req %p nourbs to %d\n",&req,req.nourbs);
+	a1logd(p->log, 8, "icoms_usb_transaction: reset req %p nourbs to %d\n",&req,req.nourbs);
 
 	/* Add our request to the req list so that it can be cancelled on reap failure */
 	pthread_mutex_lock(&p->usbd->lock);

@@ -130,6 +130,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -a              Read and Write planes > 4 as alpha planes\n");
 	fprintf(stderr," -I              Ignore any file or profile colorspace mismatches\n");
 	fprintf(stderr," -D              Don't append or set the output TIFF or JPEG description\n");
+	fprintf(stderr," -N              Output uncompressed TIFF (default LZW)\n");
 	fprintf(stderr," -e profile.[%s | tiff | jpg]  Optionally embed a profile in the destination TIFF or JPEG file.\n",ICC_FILE_EXT_ND);
 	fprintf(stderr,"\n");
 	fprintf(stderr,"                 Then for each profile in sequence:\n");
@@ -664,6 +665,7 @@ struct _profinfo {
 typedef struct {
 	/* Overall parameters */
 	int verb;				/* Non-zero if verbose */
+	int compr;				/* NZ to use TIFF LZW */
 	icColorSpaceSignature ins, outs;	/* Input/Output spaces */
 	int iinv, oinv;			/* Space inversion */	
 	int id, od, md;			/* Input/Output dimensions and max(id,od) */
@@ -1043,6 +1045,7 @@ main(int argc, char *argv[]) {
 
 	/* Set defaults */
 	memset((void *)&su, 0, sizeof(sucntx));
+	su.compr = 1;								/* TIFF LZW by default */
 	next_intent = icmDefaultIntent;
 	next_func = icmFwd;
 	next_order = icmLuOrdNorm;
@@ -1212,6 +1215,10 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'D')
 				nodesc = 1;
+
+			else if (argv[fa][1] == 'N')
+				su.compr = 0;
+
 
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
@@ -1655,7 +1662,11 @@ main(int argc, char *argv[]) {
 		TIFFSetField(wh, TIFFTAG_BITSPERSAMPLE, bitspersample);
 		TIFFSetField(wh, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 
-		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+		if (su.compr)
+			TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+		else
+			TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+
 		if (resunits) {
 			TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, resunits);
 			TIFFSetField(wh, TIFFTAG_XRESOLUTION, resx);

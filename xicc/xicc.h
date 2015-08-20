@@ -126,7 +126,7 @@ int shape0gam,		/* NZ if zero'th order shaper should be gamma function */
 int clipbw,			/* Prevent white > 1 and -ve black */
 int clipprims,		/* Prevent primaries going -ve */
 double smooth,		/* Smoothing factor (nominal 1.0) */
-double scale		/* Scale device values */
+double scale		/* Amount to scale device values */
 );
 
 /* ------------------------------------------------------------------------------ */

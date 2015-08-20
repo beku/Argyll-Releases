@@ -2040,7 +2040,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	if (p->dtype == 0) {		/* Eye-One Display 1 */
 		if (*calt & inst_calt_emis_offset) {
 
-			if (*calc != inst_calc_man_ref_dark) {
+			if ((*calc & inst_calc_cond_mask) != inst_calc_man_ref_dark) {
 				*calc = inst_calc_man_ref_dark;
 				return inst_cal_setup;
 			}
@@ -2055,7 +2055,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	} else {				/* Eye-One Display 2 */
 		if ((*calt & inst_calt_ref_freq) && p->refrmode != 0) {
 
-			if (*calc != inst_calc_emis_80pc) {
+			if ((*calc & inst_calc_cond_mask) != inst_calc_emis_80pc) {
 				*calc = inst_calc_emis_80pc;
 				return inst_cal_setup;
 			}
@@ -2605,6 +2605,8 @@ i1disp_get_set_opt(inst *pp, inst_opt_type m, ...)
 /* Constructor */
 extern i1disp *new_i1disp(icoms *icom, instType itype) {
 	i1disp *p;
+
+
 	if ((p = (i1disp *)calloc(sizeof(i1disp),1)) == NULL) {
 		a1loge(icom->log, 1, "new_i1disp: malloc failed!\n");
 		return NULL;
@@ -2632,7 +2634,7 @@ extern i1disp *new_i1disp(icoms *icom, instType itype) {
 	p->del               = i1disp_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	if (p->itype == instI1Disp2)
 		p->dtype = 1;			/* i1Display2 */

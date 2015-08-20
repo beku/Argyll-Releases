@@ -50,6 +50,8 @@
 
 /*
 
+	~~~~~!!!!! This has all been fixed ?
+
 	NOTE :- an alternative to the way display profile absolute is handled here
 	would be to always chromatically adapt the illuminant to D50, and encode
 	that in the Chromatic adapation tag. To make absolute colorimetric
@@ -2267,6 +2269,7 @@ icxInk                *ink			/* inking details (NULL for default) */
 ) {
 	icxLuLut *p;						/* Object being created */
 	icmLuLut *luluto = (icmLuLut *)plu;	/* Lookup Lut type object */
+	icmLookupFunc fnc;
 
 	int i;
 
@@ -2314,7 +2317,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	p->intent = intent;
 
 	/* Get the effective spaces of underlying icm */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs, NULL);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, &fnc, &p->pcs, NULL);
 
 	/* Override with pcsor */
 	/* We assume that any profile that has a CIE color as a "device" color */
@@ -2460,7 +2463,8 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	/* Setup all the clipping, ink limiting and auxiliary stuff, */
 	/* in case a reverse call is used. Only do this if we know */
 	/* the reverse stuff isn't going to fail due to channel limits. */
-	if (p->clutTable->within_restrictedsize(p->clutTable)) {
+	if (fnc != icmGamut && fnc != icmPreview
+	 && p->clutTable->within_restrictedsize(p->clutTable)) {
 
 		if (setup_ink_icxLuLut(p, ink, 1) != 0) {
 			p->del((icxLuBase *)p);

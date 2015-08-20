@@ -20,3 +20,4 @@ makeall.sh
 ziparch.sh
 makeinstall.sh
 makepackagebin.sh
+makeoemdnldbin.sh

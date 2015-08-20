@@ -726,7 +726,7 @@ i1pro_get_set_opt(inst *pp, inst_opt_type m, ...)
 		i1pro_set_noinitcalib(p, 0, 0);
 		return inst_ok;
 
-	} if (m == inst_opt_noinitcalib) {
+	} else if (m == inst_opt_noinitcalib) {
 		va_list args;
 		int losecs = 0;
 
@@ -839,7 +839,7 @@ extern i1pro *new_i1pro(icoms *icom, instType itype) {
 	p->del               = i1pro_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	i1pro_determine_capabilities(p);
 

@@ -1,4 +1,4 @@
-/* $Id: gif2tiff.c,v 1.8.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: gif2tiff.c,v 1.16 2014-11-20 16:47:21 erouault Exp $ */
 
 /*
  * Copyright (c) 1990-1997 Sam Leffler
@@ -42,6 +42,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"
@@ -250,7 +254,7 @@ readscreen(void)
     global = buf[4] & 0x80;
     if (global) {
         globalbits = (buf[4] & 0x07) + 1;
-        fread(globalmap,3,1<<globalbits,infile);
+        fread(globalmap,3,((size_t)1)<<globalbits,infile);
     }
 }
 
@@ -271,11 +275,15 @@ readgifimage(char* mode)
     height = buf[6] + (buf[7] << 8);
     local = buf[8] & 0x80;
     interleaved = buf[8] & 0x40;
-
+    if (width == 0 || height == 0 || width > 2000000000 / height) {
+        fprintf(stderr, "Invalid value of width or height\n");
+        return(0);
+    }
     if (local == 0 && global == 0) {
         fprintf(stderr, "no colormap present for image\n");
         return (0);
     }
+
     if ((raster = (unsigned char*) _TIFFmalloc(width*height+EXTRAFUDGE)) == NULL) {
         fprintf(stderr, "not enough memory for image\n");
         return (0);
@@ -285,7 +293,7 @@ readgifimage(char* mode)
 
         fprintf(stderr, "   local colors: %d\n", 1<<localbits);
 
-        fread(localmap, 3, 1<<localbits, infile);
+        fread(localmap, 3, ((size_t)1)<<localbits, infile);
         initcolors(localmap, 1<<localbits);
     } else if (global) {
         initcolors(globalmap, 1<<globalbits);
@@ -308,7 +316,7 @@ readextension(void)
     char buf[255];
 
     (void) getc(infile);
-    while ((count = getc(infile)))
+    while ((count = getc(infile)) && count <= 255)
         fread(buf, 1, count, infile);
 }
 
@@ -329,6 +337,8 @@ readraster(void)
     int status = 1;
 
     datasize = getc(infile);
+    if (datasize > 12)
+	return 0;
     clear = 1 << datasize;
     eoi = clear + 1;
     avail = clear + 2;
@@ -340,7 +350,7 @@ readraster(void)
 	suffix[code] = code;
     }
     stackp = stack;
-    for (count = getc(infile); count > 0; count = getc(infile)) {
+    for (count = getc(infile); count > 0 && count <= 255; count = getc(infile)) {
 	fread(buf,1,count,infile);
 	for (ch=buf; count-- > 0; ch++) {
 	    datum += (unsigned long) *ch << bits;
@@ -394,6 +404,14 @@ process(register int code, unsigned char** fill)
     }
 
     if (oldcode == -1) {
+        if (code >= clear) {
+            fprintf(stderr, "bad input: code=%d is larger than clear=%d\n",code, clear);
+            return 0;
+        }
+        if (*fill >= raster + width*height) {
+            fprintf(stderr, "raster full before eoi code\n");
+            return 0;
+        }
 	*(*fill)++ = suffix[code];
 	firstchar = oldcode = code;
 	return 1;
@@ -424,6 +442,10 @@ process(register int code, unsigned char** fill)
     }
     oldcode = incode;
     do {
+        if (*fill >= raster + width*height) {
+            fprintf(stderr, "raster full before eoi code\n");
+            return 0;
+        }
 	*(*fill)++ = *--stackp;
     } while (stackp > stack);
     return 1;
@@ -503,6 +525,10 @@ rasterize(int interleaved, char* mode)
     strip = 0;
     stripsize = TIFFStripSize(tif);
     for (row=0; row<height; row += rowsperstrip) {
+	if (rowsperstrip > height-row) {
+	    rowsperstrip = height-row;
+	    stripsize = TIFFVStripSize(tif, rowsperstrip);
+	}
 	if (TIFFWriteEncodedStrip(tif, strip, newras+row*width, stripsize) < 0)
 	    break;
 	strip++;

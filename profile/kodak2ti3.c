@@ -104,21 +104,21 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
-				fa = nfa;
+			else if (argv[fa][1] == 'l') {
 				if (na == NULL) usage();
+				fa = nfa;
 				limit = atoi(na);
 				if (limit < 1)
 					limit = 1;
 			}
 
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'r') {
-				fa = nfa;
+			else if (argv[fa][1] == 'r') {
 				if (na == NULL) usage();
+				fa = nfa;
 				strcpy(tarname, na);
 			}
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v')
 				verb = 1;
 			else 
 				usage();

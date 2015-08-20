@@ -59,7 +59,8 @@ struct _thscreens {
 								/* ebuf[][-1] is used for next pixel error */
 	
 	void (*quant)(void *qcntx, double *out, double *in); /* optional quantization func. for edif */
-	void *qcntx;					/* Context for quant */
+	void *qcntx;				/* Context for quant */
+	double mxerr;				/* if != 0, max error to propogate */
 
 	sobol *so;					/* Random number generator for error diffusion */
 
@@ -99,7 +100,8 @@ thscreens *new_thscreens(
 	double (**lutfunc)(void *cntx, double in),	/* List of callback function, NULL if none */
 	int edif,				/* nz if using error diffusion */
 	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edif */
-	void *qcntx
+	void *qcntx,
+	double mxerr			/* If error diffusion anf != 0, max error to propogate */
 );
 
 /* ---------------------------- */

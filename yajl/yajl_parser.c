@@ -14,12 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "yajl_parse.h"
-#include "yajl_lex.h"
-#include "yajl_parser.h"
-#include "yajl_encode.h"
-#include "yajl_bytestack.h"
-
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h>
@@ -28,6 +22,12 @@
 #include <ctype.h>
 #include <assert.h>
 #include <math.h>
+
+#include "yajl_parse.h"
+#include "yajl_lex.h"
+#include "yajl_parser.h"
+#include "yajl_encode.h"
+#include "yajl_bytestack.h"
 
 #define MAX_VALUE_TO_MULTIPLY ((LLONG_MAX / 10) + (LLONG_MAX % 10))
 

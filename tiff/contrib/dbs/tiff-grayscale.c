@@ -1,4 +1,4 @@
-/* $Id: tiff-grayscale.c,v 1.4.2.1 2010-06-08 18:50:40 bfriesen Exp $ */
+/* $Id: tiff-grayscale.c,v 1.6 2010-06-08 18:55:15 bfriesen Exp $ */
 
 /*
  * tiff-grayscale.c -- create a Class G (grayscale) TIFF file
@@ -86,6 +86,7 @@ int main(int argc, char **argv)
 
     if ((tif = TIFFOpen(argv[3], "w")) == NULL) {
         fprintf(stderr, "can't open %s as a TIFF file\n", argv[3]);
+		free(gray);
         return 0;
     }
 

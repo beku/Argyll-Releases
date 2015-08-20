@@ -218,6 +218,7 @@ icxObserverType obType,	/* ccss observer */
 double scan_tol,	/* Modify patch consistency tolerance */
 int pbypatch,		/* Patch by patch measurement */
 int xtern,			/* Use external (user supplied) values rather than instument read */
+					/* 1 = Lab, 2 = XYZ */ 
 int spectral,		/* Generate spectral info flag */
 int uvmode,			/* ~~~ i1pro2 test mode ~~~ */
 int accurate_expd,	/* Expected values can be assumed to be accurate */
@@ -321,7 +322,7 @@ a1log *log			/* verb, debug & error log */
 				}
 			}
 
-			/* Set display type */
+			/* Set display type or calibration mode */
 			if (dtype != 0) {
 
 				if (cap2 & inst2_disptype) {
@@ -1746,7 +1747,7 @@ a1log *log			/* verb, debug & error log */
 				empty_con_chars();
 
 				printf("\nReady to read patch '%s'%s\n",scols[pix]->loc,
-				       i >= npat ? "(All patches read!)" :
+				       i >= npat ? " (All patches read!)" :
 				       strcmp(scols[pix]->id, "0") == 0 ? " (Padding Patch)" :
 				       scols[pix]->rr ? " (Already read)" : "");
 
@@ -2563,7 +2564,7 @@ int main(int argc, char *argv[]) {
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
 			if (icg->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",fname);
+				error ("Field %s is wrong type - expect float",fname);
 	
 			ocg->add_field(ocg, 0, fname, r_t);
 			chix[j] = ii;
@@ -2573,7 +2574,7 @@ int main(int argc, char *argv[]) {
 		for (j = 0; j < 3; j++) {
 			if ((ii = icg->find_field(icg, 0, xyzfname[j])) >= 0) {
 				if (icg->t[0].ftype[ii] != r_t)
-					error ("Field %s is wrong type",xyzfname[j]);
+					error ("Field %s is wrong type - expect float",xyzfname[j]);
 				xyzix[j] = ii;
 			} else {
 				gotexyz = 0;
@@ -2765,6 +2766,9 @@ int main(int argc, char *argv[]) {
 	
 				if ((spi[j] = rcg->find_field(rcg, 0, buf)) < 0)
 					error("Resumed file '%s' doesn't contain field %s",outname,buf);
+
+				if (rcg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 		}
 

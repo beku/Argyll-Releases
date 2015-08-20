@@ -11,7 +11,7 @@ Headers = zlib.h ;
 LIBSRCS = 
 	adler32.c
 	compress.c
-	crc32.c
+	zcrc32.c
 	deflate.c
 	gzclose.c
 	gzlib.c

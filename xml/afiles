@@ -10,7 +10,7 @@ config.h.in
 configure
 configure.in
 install-sh
-config.h
+mxml-config.h
 mxml.h
 mxml-attr.c
 mxml-entity.c

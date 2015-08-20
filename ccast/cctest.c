@@ -67,7 +67,7 @@ static int get_a_reply(ccmessv *mes, ORD8 **pdata) {
 		printf("  binary = %d\n",binary);
 		if (binary) {
 			printf("  payload =\n");
-			cc_dump_bytes(stdout, "  ", data, bin_len);
+			adump_bytes(g_log, "  ", data, 0, bin_len);
 		} else {
 			printf("  payload = '%s'\n",data);
 		}

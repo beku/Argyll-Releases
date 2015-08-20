@@ -20,15 +20,6 @@
 # include <winsock2.h>
 # include <shlwapi.h>
 #endif
-#ifdef UNIX
-# include <sys/types.h>
-# include <ifaddrs.h>
-# include <netinet/in.h> 
-# include <arpa/inet.h>
-# ifdef __FreeBSD__
-#  include <sys/socket.h>
-# endif /* __FreeBSD__ */
-#endif
 #include "copyright.h"
 #include "aconfig.h"
 #include "icc.h"
@@ -356,12 +347,12 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	return 0;
 }
 
-/* Set/unset the blackground color flag */
+/* Set/unset the full screen black flag */
 /* Return nz on error */
-static int madvrwin_set_bg(dispwin *p, int blackbg) {
+static int madvrwin_set_fc(dispwin *p, int fullscreen) {
 	int perc, bgperc, bgmode, border;
 
-	p->blackbg = blackbg;
+	p->fullscreen = fullscreen;
 
 	/* Parameters that shouldn't change can be set to -1, but this doesn't seem */
 	/* to work for background level, so get current background level */
@@ -369,16 +360,16 @@ static int madvrwin_set_bg(dispwin *p, int blackbg) {
 		debugr2((errout,"madVR_GetPatternConfig failed\n"));
 		return 1;
 	}
-	debugr2((errout,"madvrwin_set_bg: got pattern config %i, %i, %i, %i\n",
+	debugr2((errout,"madvrwin_set_fc: got pattern config %i, %i, %i, %i\n",
 	                 perc, bgperc, bgmode, border));
 
 	/* Default test window is 10% of the width/height = 1% of the area*/
 	perc = (int)((p->width/100.0 * 0.1 * p->height/100.0 * 0.1) * 100.0 + 0.5);
 
 	/* Background level is 1..100 in percent */
-	debugr2((errout,"madvrwin_set_bg: setting pattern config %i, %i\n",
-	                                       perc, blackbg ? 0 : bgperc));
-	if (!madVR_SetPatternConfig(perc, blackbg ? 0 : bgperc, -1, -1)) {
+	debugr2((errout,"madvrwin_set_fc: setting pattern config %i, %i\n",
+	                                       perc, fullscreen ? 0 : bgperc));
+	if (!madVR_SetPatternConfig(perc, fullscreen ? 0 : bgperc, -1, -1)) {
 		debugr2((errout,"madVR_SetPatternConfig failed\n"));
 		return 1;
 	}
@@ -459,7 +450,7 @@ int native,						/* X0 = use current per channel calibration curve */
 int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
 int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
 int out_tvenc,					/* 1 = use RGB Video Level encoding */
-int blackbg,					/* NZ if whole screen should be filled with black */
+int fullscreen,					/* NZ if whole screen should be filled with black */
 int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
@@ -487,7 +478,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = 0;
-	p->blackbg = blackbg;
+	p->fullscreen = fullscreen;
 	p->ddebug = ddebug;
 	p->get_ramdac          = madvrwin_get_ramdac;
 	p->set_ramdac          = madvrwin_set_ramdac;
@@ -495,7 +486,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->uninstall_profile   = madvrwin_uninstall_profile;
 	p->get_profile         = madvrwin_get_profile;
 	p->set_color           = madvrwin_set_color;
-	p->set_bg              = madvrwin_set_bg;
+	p->set_fc              = madvrwin_set_fc;
 	p->set_pinfo           = madvrwin_set_pinfo;
 	p->set_update_delay    = dispwin_set_update_delay;
 	p->set_settling_delay  = dispwin_set_settling_delay;
@@ -535,7 +526,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		madVR_Disable3dlut();
 	}
 
-	p->set_bg(p, blackbg);
+	p->set_fc(p, fullscreen);
 
 	/* Create a suitable description */
 	{

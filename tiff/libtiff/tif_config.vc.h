@@ -1,3 +1,10 @@
+
+/* We're using win32 file i/o because it works */
+#define USE_WIN32_FILEIO
+
+/* Don't pop an error window */
+#define TIF_PLATFORM_CONSOLE
+
 /* Define to 1 if you have the <assert.h> header file. */
 #define HAVE_ASSERT_H 1
 
@@ -32,14 +39,17 @@
 /* The size of a `long', as computed by sizeof. */
 #define SIZEOF_LONG 4
 
-/* Signed 64-bit type */
-#define TIFF_INT64_T signed __int64
-
-/* Unsigned 64-bit type */
-#define TIFF_UINT64_T unsigned __int64
-
 /* Set the native cpu bit order */
 #define HOST_FILLORDER FILLORDER_LSB2MSB
+
+/* Visual Studio 2015 / VC 14 / MSVC 19.00 finally has snprintf() */
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
+
+#ifndef INVALID_SET_FILE_POINTER
+# define INVALID_SET_FILE_POINTER ((DWORD)-1)
+#endif
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */

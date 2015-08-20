@@ -1744,7 +1744,7 @@ extern huey *new_huey(icoms *icom, instType itype) {
 	p->del               = huey_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
 	p->dtech = disptech_unknown;

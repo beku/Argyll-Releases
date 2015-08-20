@@ -16,7 +16,7 @@
  */
 
 /*
-	The gamut boundary is comuted using a variation of
+	The gamut surface is computed using a variation of
 	Jan Morovic's Segment Maximum approach. The variations
 	are:
 
@@ -24,7 +24,7 @@
 		so that approximately the same detail is kept on the gamut
 		surface. Multiple direction vectors at each point are retained.
 		The resultant points are used to create the overal convex
-		jull, but in an adaptive, non-linearly scaled radial space, 
+		hull, but in an adaptive, non-linearly scaled radial space, 
 		that allows for convexity in the PCS result.
 */
 		
@@ -3628,7 +3628,7 @@ gamut *s
  * 
  * For accellerating the vector intersect code, this isn't
  * so fabulous, and a general unconstrained BSP tree would
- * be better. To address this, an orhogonal element to the
+ * be better. To address this, an orthogonal element to the
  * radial BSP's is provided in the radius squared range
  * of each set of elements below a BSP node.
  */

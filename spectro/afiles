@@ -80,8 +80,13 @@ colorhug.c
 colorhug.h
 ex1.c
 ex1.h
+smcube.c
+smcube.h
+cubecal.h
 spec2cie.c
 average.c
+rspec.h
+rspec.c
 conv.h
 conv.c
 aglob.h

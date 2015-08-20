@@ -641,7 +641,7 @@ int main(int argc, char *argv[]) {
 #endif // NEVER
 
 	/* Process the arguments */
-	mfa = 2;		/* Minimum final arguments */
+	mfa = 1;		/* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 
 		nfa = fa;					/* skip to nfa if next argument is used */
@@ -683,6 +683,7 @@ int main(int argc, char *argv[]) {
 				recal = 0;
 				verify = 0;
 				imitate = 0;
+				mfa = 1;
 			}
 
 			else if (argv[fa][1] == 'r') {
@@ -690,6 +691,7 @@ int main(int argc, char *argv[]) {
 				recal = 1;			/* Recalibrate */
 				verify = 0;
 				imitate = 0;
+				mfa = 2;
 			}
 
 			else if (argv[fa][1] == 'e') {
@@ -697,6 +699,7 @@ int main(int argc, char *argv[]) {
 				recal = 0;
 				verify = 1;			/* Verify */
 				imitate = 0;
+				mfa = 2;
 			}
 
 			else if (argv[fa][1] == 'I') {
@@ -704,6 +707,7 @@ int main(int argc, char *argv[]) {
 				recal = 0;
 				verify = 0;
 				imitate = 1;			/* Imitation target */
+				mfa = 1;
 			}
 
 			else if (argv[fa][1] == 'd')
@@ -714,36 +718,36 @@ int main(int argc, char *argv[]) {
 
 			/* Smoothing modfider */
 			else if (argv[fa][1] == 's') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to smoothing flag -s");
+				fa = nfa;
 				xsmooth = atof(na);
 			}
 
 			/* Manufacturer description string */
 			else if (argv[fa][1] == 'A') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to manufacturer description flag -A");
+				fa = nfa;
 				xpi.deviceMfgDesc = na;
 			}
 
 			/* Model description string */
 			else if (argv[fa][1] == 'M') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to model description flag -M");
+				fa = nfa;
 				xpi.modelDesc = na;
 			}
 
 			/* Profile Description */
 			else if (argv[fa][1] == 'D') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to profile description flag -D");
+				fa = nfa;
 				xpi.profDesc = na;
 			}
 
 			/* Copyright string */
 			else if (argv[fa][1] == 'C') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to copyright flag -C");
+				fa = nfa;
 				xpi.copyright = na;
 			}
 
@@ -755,9 +759,9 @@ int main(int argc, char *argv[]) {
 				char fch = argv[fa][1];
 				int chan = -1;
 				double val = -1.0;
-				fa = nfa;
 				if (na == NULL)
 					usage("Expect channel flag after flag -%c",argv[fa][1]);
+				fa = nfa;
     			switch (na[0]) {
 					case 'c': case 'r': case '0':
 						chan = 0;

@@ -819,7 +819,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 	if (*calt & inst_calt_emis_offset) {		/* Dark offset calibration */
 
-		if (*calc != inst_calc_man_em_dark) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_man_em_dark) {
 			*calc = inst_calc_man_em_dark;
 			return inst_cal_setup;
 		}
@@ -833,9 +833,9 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 	if (*calt & inst_calt_emis_ratio) {	/* Cell ratio calibration */
 
-		if (*calc != inst_calc_emis_grey
-		 && *calc != inst_calc_emis_grey_darker
-		 && *calc != inst_calc_emis_grey_ligher) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_emis_grey
+		 && (*calc & inst_calc_cond_mask) != inst_calc_emis_grey_darker
+		 && (*calc & inst_calc_cond_mask) != inst_calc_emis_grey_ligher) {
 			*calc = inst_calc_emis_grey;
 			return inst_cal_setup;
 		}
@@ -1405,7 +1405,7 @@ extern dtp92 *new_dtp92(icoms *icom, instType itype) {
 	p->del               = dtp92_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
 	set_base_disptype_list(p);

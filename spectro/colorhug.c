@@ -1213,7 +1213,7 @@ extern colorhug *new_colorhug(icoms *icom, instType itype) {
 	p->del               = colorhug_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	if (itype == instColorHug2)
 		p->stype = ch_two;

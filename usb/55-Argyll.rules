@@ -80,8 +80,13 @@ ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0400", ENV{COLORD_SENSOR_KIND}="spyd
 # Spyder 5
 ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0500", ENV{COLORD_SENSOR_KIND}="spyder5" ENV{COLORD_SENSOR_CAPS}="lcd crt ambient"
 
-# JETI & KLEIN FTDI
+# JETI & KLEIN serial port (not used)
 #KERNEL=="ttyUSB[0-9]*", TAG+="udev-acl", TAG+="uaccess"
+
+# ArgyllCMS USB serial chip driver for JETI & KLEIN (not used)
+#ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ENV{COLORD_SENSOR_KIND}="FT232R" 
+#ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ENV{COLORD_SENSOR_KIND}="FT231XS" 
+
 
 # ColorHug, old and new USB ID's, ColorHug 2
 ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="f8da", ENV{COLORD_SENSOR_KIND}="colorhug" ENV{COLORD_SENSOR_CAPS}="lcd" ENV{COLORD_IGNORE}="1"
@@ -93,7 +98,7 @@ ATTRS{idVendor}=="273f", ATTRS{idProduct}=="1004", ENV{COLORD_SENSOR_KIND}="colo
 # ColorHug Spectro
 ATTRS{idVendor}=="273f", ATTRS{idProduct}=="1002", ENV{COLORD_SENSOR_KIND}="colorhug-spectro", ENV{COLORD_SENSOR_CAPS}="lcd"
 
-# Image Engineering
+# Image Engineering EX1
 ATTRS{idVendor}=="2457", ATTRS{idProduct}=="4000", ENV{COLORD_SENSOR_KIND}="ex1", ENV{COLORD_SENSOR_CAPS}="lcd crt ambient"
 
 #########################################################

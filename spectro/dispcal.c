@@ -1632,7 +1632,7 @@ int main(int argc, char *argv[]) {
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int out_tvenc = 0;					/* 1 to use RGB Video Level encoding */
-	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
+	int fullscreen = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
 	int fake = 0;						/* Use the fake device for testing */
@@ -1978,7 +1978,8 @@ int main(int argc, char *argv[]) {
 
 			/* Number of verify passes */
 			} else if (argv[fa][1] == 'e') {
-				verify = 1;
+				if (verify == 0)
+					verify = 1;
 				nver = 1;
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
 					nver = atoi(na);
@@ -1987,6 +1988,8 @@ int main(int argc, char *argv[]) {
 
 			} else if (argv[fa][1] == 'z') {
 				verify = 2;
+				if (nver == 0)
+					nver = 1;
 				mfa = 0;
 
 #if defined(UNIX_X11)
@@ -2170,9 +2173,9 @@ int main(int argc, char *argv[]) {
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
-			/* Black background */
+			/* Full screen black background */
 			} else if (argv[fa][1] == 'F') {
-				blackbg = 1;
+				fullscreen = 1;
 
 			/* Extra flags */
 			} else if (argv[fa][1] == 'Y') {
@@ -2296,7 +2299,7 @@ int main(int argc, char *argv[]) {
 #ifdef NT
 			                         madvrdisp,
 #endif
-			                         out_tvenc, blackbg, override,
+			                         out_tvenc, fullscreen, override,
 			                         100.0 * hpatscale, 100.0 * vpatscale,
 			                         ho, vo, g_log)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
@@ -2325,6 +2328,7 @@ int main(int argc, char *argv[]) {
 		if (verify == 2)
 			warning("Verify flag ignored because we're doing a report only");
 		verify = 0;
+		nver = 0;
 	}
 
 	/* Normally calibrate against native response */
@@ -2334,11 +2338,11 @@ int main(int argc, char *argv[]) {
 	/* Get ready to do some readings */
 	if ((dr = new_disprd(&errc, ipath, fc, dtype, -1, 0, tele, nadaptive, nocal, noplace,
 	                     highres, refrate, native, &noramdac, &nocm, NULL, 0,
-		                 disp, out_tvenc, blackbg, override, webdisp, ccid,
+		                 disp, out_tvenc, fullscreen, override, webdisp, ccid,
 #ifdef NT
 		                 madvrdisp,
 #endif
-		                 ccallout, mcallout,
+		                 ccallout, mcallout, 0,
 	                     100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 	                     ccs != NULL ? ccs->dtech : cmx != NULL ? cmx->dtech : disptech_unknown,
 	                     cmx != NULL ? cmx->cc_cbid : 0,
@@ -4202,7 +4206,7 @@ int main(int argc, char *argv[]) {
 			x.twh[1] *= x.wh[1];
 			x.twh[2] *= x.wh[1];
 			if (verb)
-				printf("Initial native brightness target = %f cd/m^2\n", x.twh[1]);
+				printf("\nInitial native brightness target = %f cd/m^2\n", x.twh[1]);
 		}
 
 		/* Now make sure the target white will fit in gamut. */
@@ -4423,6 +4427,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - */
+	/* Make sure nver has a sane value */
+	if (verify == 0)
+		nver = 0;			/* 0 verify count if no verify */
+	else if (nver == 0)
+		nver = 1;			/* min 1 count if verify */
+
 	/* Start with a scaled down number of test points and refine threshold, */
 	/* and double/halve these on each iteration. */
 	if (verb && verify != 2)
@@ -4525,28 +4535,28 @@ int main(int argc, char *argv[]) {
 	dr->reset_targ_w(dr);			/* Reset white drift target at start of main cal. */
 
 	/* Now we go into the main verify & refine loop */
-	for (it = verify == 2 ? mxits : 0;
-	     it < mxits || verify != 0;
-	     rsteps *= 2, errthr /= (it < mxits) ? pow(2.0,THRESH_SCALE_POW) : 1.0, it++)  {
+	for (it = (verify == 2) ? mxits : 0;
+	     it < (mxits + nver);
+	     rsteps *= 2, errthr /= (it < mxits) ? pow(2.0,THRESH_SCALE_POW) : 1.0, it++) {
 		int totmeas = 0;		/* Total number of measurements in this pass */
 		col set[3];				/* Variable to read one to three values from the display */
 
-		/* Verify pass */
+		/* Verify pass ? */
 		if (it >= mxits)
 			rsteps = VER_RES;	/* Fixed verification resolution */
 		else
 			thrfail = 0;		/* Not verify pass */
 
-
 		/* re-init asgrey if the number of test points has changed */
-		reinit_csamp(&asgrey, &x, verify, (verify == 2 || it >= mxits) ? 1 : 0, rsteps, verb);
+		reinit_csamp(&asgrey, &x, verify, it >= mxits ? 1 : 0, rsteps, verb);
 
 		if (verb) {
 			if (it >= mxits)
-				printf("Doing verify pass with %d sample points\n",rsteps);
+				printf("\nDoing verify pass %d/%d with %d sample points\n",
+				                              it - mxits+1, nver, rsteps);
 			else
-				printf("Doing iteration %d with %d sample points and repeat threshold of %f DE\n",
-				                                                             it+1,rsteps, errthr);
+				printf("\nDoing iteration %d/%d with %d sample points and repeat threshold of %f DE\n",
+				                                                      it+1,mxits, rsteps, errthr);
 		}
 
 		/* Read and adjust each step */
@@ -5093,17 +5103,12 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		/* Verify loop exit */
-		if (nver > 0 && it >= (mxits + nver -1)) {
-			break;
-		}
-
 		/* Convert our test points into calibration curves. */
 		/* The call to reinit_csamp() will then convert the */
 		/* curves back to current test point values. */
 		/* This applies some level of cohesion between the test points, */
 		/* as well as forcing monotomicity */
-		if (it < mxits) {
+		if (it < mxits) {		/* If not verify pass */
 			mcvco *sdv[3];				/* Scattered data for mcv */
 
 			for (j = 0; j < 3; j++) {
@@ -5177,10 +5182,6 @@ int main(int argc, char *argv[]) {
 			}
 #endif
 		}
-
-		if (verify != 0)		/* Do only a single pass */
-			break;
-
 	}	/* Next refine/verify loop */
 
 	free_alloc_csamp(&asgrey);		/* We're done with test points */

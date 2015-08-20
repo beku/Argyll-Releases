@@ -1021,7 +1021,7 @@ static trend *new_tiff_trend(
 	else
 		ma[0] = ma[1] = ma[2] = ma[3] = 0;
 
-	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth, dith, NULL, NULL)) == NULL) {
+	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth, dith, NULL, NULL, 0.0)) == NULL) {
 		error("Failed to create a render2d object for tiff output");
 	} 
 

@@ -1720,6 +1720,9 @@ make_output_icc(
 
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (icg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 
 			if (isdisp) {

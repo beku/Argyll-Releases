@@ -1,4 +1,4 @@
-/* $Id: bmp2tiff.c,v 1.20.2.1 2010-06-08 18:50:43 bfriesen Exp $
+/* $Id: bmp2tiff.c,v 1.24 2014-12-21 15:15:32 erouault Exp $
  *
  * Project:  libtiff tools
  * Purpose:  Convert Windows BMP files in TIFF.
@@ -50,6 +50,10 @@
 
 #if HAVE_IO_H
 # include <io.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"
@@ -399,6 +403,13 @@ main(int argc, char* argv[])
 
 		width = info_hdr.iWidth;
 		length = (info_hdr.iHeight > 0) ? info_hdr.iHeight : -info_hdr.iHeight;
+        if( width <= 0 || length <= 0 )
+        {
+            TIFFError(infilename,
+                  "Invalid dimensions of BMP file" );
+            close(fd);
+            return -1;
+        }
 
 		switch (info_hdr.iBitCount)
 		{
@@ -428,7 +439,7 @@ main(int argc, char* argv[])
 				read(fd, clr_tbl, n_clr_elems * clr_tbl_size);
 
 				red_tbl = (unsigned short*)
-					_TIFFmalloc(1<<depth * sizeof(unsigned short));
+					_TIFFmalloc(((tmsize_t)1)<<depth * sizeof(unsigned short));
 				if (!red_tbl) {
 					TIFFError(infilename,
 				"Can't allocate space for red component table");
@@ -436,7 +447,7 @@ main(int argc, char* argv[])
 					goto bad1;
 				}
 				green_tbl = (unsigned short*)
-					_TIFFmalloc(1<<depth * sizeof(unsigned short));
+					_TIFFmalloc(((tmsize_t)1)<<depth * sizeof(unsigned short));
 				if (!green_tbl) {
 					TIFFError(infilename,
 				"Can't allocate space for green component table");
@@ -444,7 +455,7 @@ main(int argc, char* argv[])
 					goto bad2;
 				}
 				blue_tbl = (unsigned short*)
-					_TIFFmalloc(1<<depth * sizeof(unsigned short));
+					_TIFFmalloc(((tmsize_t)1)<<depth * sizeof(unsigned short));
 				if (!blue_tbl) {
 					TIFFError(infilename,
 				"Can't allocate space for blue component table");
@@ -589,6 +600,14 @@ main(int argc, char* argv[])
 
 			compr_size = file_hdr.iSize - file_hdr.iOffBits;
 			uncompr_size = width * length;
+            /* Detect int overflow */
+            if( uncompr_size / width != length )
+            {
+                TIFFError(infilename,
+                    "Invalid dimensions of BMP file" );
+                close(fd);
+                return -1;
+            }
 			comprbuf = (unsigned char *) _TIFFmalloc( compr_size );
 			if (!comprbuf) {
 				TIFFError(infilename,

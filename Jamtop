@@ -99,6 +99,8 @@ if $(UNIX) {
 		} else {
 			if [ GLOB /usr/X11R6/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/X11R6/lib ;
+			} else if [ GLOB /usr/lib/i386-linux-gnu : libX11.so libX11.a ] {
+				LibWinD = /usr/lib/i386-linux-gnu ;
 			} else if [ GLOB /usr/lib : libX11.so libX11.a ] {
 				LibWinD = /usr/lib ;
 			} else if [ GLOB /usr/local/lib : libX11.so libX11.a ] {
@@ -120,21 +122,27 @@ if $(UNIX) {
 
 # Standard system library support:
 
-# Check rule. $(<) is library name, $(>) is optional directory name
+# Check rule. $(<) is library name, $(>) is optional alternate library name
+# $(3) is optional #include sub-directory, i.e. "/openssl"
 rule CheckForLibrary {
 	UCASE = $(<:U) ;
 	lcase = $(<:L) ;
 	libname = $(lcase) ;
+	subd = "" ;
 
 	if $(>) {
 		libname = $(>) ;
 	}
 
+	if $(3) {
+		subd = $(3) ;
+	}
+
 	if ! $(BUILTIN_$(UCASE)) && $(UNIX) {
-		if  [ GLOB /usr/include : $(lcase).h $(lcase)lib.h ]
-	     || [ GLOB /usr/local/include : $(lcase).h $(lcase)lib.h ]
-		 || [ GLOB /usr/include/x86_64-linux-gnu : $(lcase).h $(lcase)lib.h ]
-	     || [ GLOB /usr/include/i386-linux-gnu : $(lcase).h $(lcase)lib.h ] {
+		if  [ GLOB /usr/include$(subd) : $(lcase).h $(lcase)lib.h ]
+	     || [ GLOB /usr/local/include$(subd) : $(lcase).h $(lcase)lib.h ]
+		 || [ GLOB /usr/include/x86_64-linux-gnu$(subd) : $(lcase).h $(lcase)lib.h ]
+	     || [ GLOB /usr/include/i386-linux-gnu$(subd) : $(lcase).h $(lcase)lib.h ] {
 			if  [ GLOB /usr/lib : lib$(lcase).so ] || [ GLOB /usr/lib : lib$(lcase).a ]
 			 || [ GLOB /usr/local/lib : lib$(lcase).so ] || [ GLOB /usr/local/lib : lib$(lcase).a ]
 			 || [ GLOB /usr/lib64 : lib$(lcase).so ] || [ GLOB /usr/lib64 : lib$(lcase).a ]
@@ -160,10 +168,19 @@ rule CheckForLibrary {
 }
 
 # See if we have a system TIFF, JPEG, PNG or ZLIB library.
+# Note this generates: $(TIFFLIB) $(TIFFINC) $(JPEGLIB) $(JPEGINC) $(PNGLIB)
+# $(PNGINC) $(ZLIBLIB) $(ZINC)
 CheckForLibrary "TIFF" ;
 CheckForLibrary "JPEG" ;
 CheckForLibrary "PNG" ;
 CheckForLibrary "Z" : "zlib" ;
+
+CheckForLibrary "SSL" : : "/openssl" ;
+# if OpenSSL not found:
+if $(SSLLIB) {
+	SSLINC = ../ccast/axTLS ; 
+	SSLLIB = ../ccast/axTLS/libaxtls ; 
+}
 
 # testing
 #DSTDIR = var ;

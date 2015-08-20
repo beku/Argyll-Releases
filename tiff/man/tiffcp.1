@@ -1,4 +1,4 @@
-.\" $Id: tiffcp.1,v 1.9.2.1 2010-06-04 16:51:14 fwarmerdam Exp $
+.\" $Id: tiffcp.1,v 1.13 2013-03-06 03:35:09 tgl Exp $
 .\"
 .\" Copyright (c) 1988-1997 Sam Leffler
 .\" Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -60,6 +60,9 @@ in a file, but it is explicitly intended to not alter or convert
 the image data content in any way.
 .SH OPTIONS
 .TP
+.B \-a
+Append to an existing output file instead of overwriting it.
+.TP
 .BI \-b " image"
 subtract the following monochrome image from all others
 processed.  This can be used to remove a noise bias
@@ -83,15 +86,19 @@ for no compression,
 for PackBits compression,
 .B lzw
 for Lempel-Ziv & Welch compression,
-.B jpeg
-for baseline JPEG compression,
 .B zip
 for Deflate compression,
+.B lzma
+for LZMA2 compression,
+.B jpeg
+for baseline JPEG compression,
 .B g3
 for CCITT Group 3 (T.4) compression,
-and
 .B g4
-for CCITT Group 4 (T.6) compression.
+for CCITT Group 4 (T.6) compression,
+or
+.B sgilog
+for SGILOG compression.
 By default
 .I tiffcp
 will compress data according to the value of the
@@ -118,20 +125,33 @@ list to the ``g3'' option; e.g.
 .B "\-c g3:2d:fill"
 to get 2D-encoded data with byte-aligned EOL codes.
 .IP
-.SM LZW
+.SM LZW, Deflate
+and
+.SM LZMA2
 compression can be specified together with a 
 .I predictor
-value.
-A predictor value of 2 causes
-each scanline of the output image to undergo horizontal
-differencing before it is encoded; a value
-of 1 forces each scanline to be encoded without differencing.
-LZW-specific options are specified by appending a ``:''-separated
-list to the ``lzw'' option; e.g.
+value. A predictor value of 2 causes each scanline of the output image to
+undergo horizontal differencing before it is encoded; a value of 1 forces each
+scanline to be encoded without differencing. A value 3 is for floating point
+predictor which you can use if the encoded data are in floating point format.
+LZW-specific options are specified by appending a ``:''-separated list to the
+``lzw'' option; e.g.
 .B "\-c lzw:2"
 for
 .SM LZW
 compression with horizontal differencing.
+.IP
+.SM Deflate
+and
+.SM LZMA2
+encoders support various compression levels (or encoder presets) set as
+character ``p'' and a preset number. ``p1'' is the fastest one with the worst
+compression ratio and ``p9'' is the slowest but with the best possible ratio;
+e.g.
+.B "\-c zip:3:p9"
+for
+.SM Deflate
+encoding with maximum compression level and floating point predictor.
 .TP
 .B \-f
 Specify the bit fill order to use in writing output data.
@@ -163,6 +183,9 @@ overwritten and not when it is appended to.
 .TP
 .B \-M
 Suppress the use of memory-mapped files when reading images.
+.TP
+.BI \-o " offset"
+Set initial directory offset.
 .TP
 .B \-p
 Specify the planar configuration to use in writing image data
@@ -212,6 +235,9 @@ appear in a tile.
 .TP
 .B \-x
 Force the output file to be written with PAGENUMBER value in sequence.
+.TP
+.B \-8
+Write BigTIFF instead of classic TIFF format.
 .TP
 .BI \-,= character
 substitute

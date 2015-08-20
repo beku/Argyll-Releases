@@ -39,7 +39,7 @@
 extern "C" {
 #endif
 
-#include "config.h"
+#include "axTLS_config.h"
 #include "bigint_impl.h"
 #include "bigint.h"
 

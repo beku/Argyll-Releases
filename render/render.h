@@ -90,8 +90,8 @@ struct _rect2d {
 	PRIM_STRUCT
 	double rx0, ry0, rx1, ry1;	/* Rectangle verticies */
 	color2d c;					/* Color of rectangle (if dpat == NULL) */
-	double (*dpat)[MXPATSIZE][MXPATSIZE][TOTC2D];
-	int dp_w, dp_h;
+	double (*dpat)[MXPATSIZE][MXPATSIZE][TOTC2D];	/* Special for ChromeCast experiments */
+	int dp_w, dp_h;				/* dpat dimensions */
 }; typedef struct _rect2d rect2d;
 
 prim2d *new_rect2d(struct _render2d *s, double x, double y, double w, double h, color2d c);
@@ -122,6 +122,48 @@ struct _trivs2d {
 prim2d *new_trivs2d(struct _render2d *s, double v[3][2], color2d c[3]);
 
 /* ------------------------------------ */
+/* Polygon */
+
+/* Solid polygon primitive */
+struct _poly2d {
+	PRIM_STRUCT
+	color2d c;			/* Color of polyangle (if dpat == NULL) */
+	int n;				/* Number of verticies */
+	double co[1][2];	/* Array of [n][2] verticies */
+}; typedef struct _poly2d poly2d;
+
+prim2d *new_poly2d(struct _render2d *s, int n, double v[][2], color2d c);
+
+#ifdef NEVER
+int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy) {
+  int i, j, c = 0;
+  for (i = 0, j = nvert-1; i < nvert; j = i++) {
+    if ( ((verty[i]>testy) != (verty[j]>testy)) &&
+     (testx < (vertx[j]-vertx[i]) * (testy-verty[i]) / (verty[j]-verty[i]) + vertx[i]) )
+       c = !c;
+  }
+  return c;
+}
+
+#endif // NEVER
+
+/* ------------------------------------ */
+
+/* Circular disk/line primitive */
+struct _disk2d {
+	PRIM_STRUCT
+	double cx, cy;				/* Center */
+	color2d c;					/* Color of disk/line */
+	double orr, irr;			/* Outer radius squared, inner radius squared (0.0 if disk) */
+}; typedef struct _disk2d disk2d;
+
+/* Center and radius */
+prim2d *new_disk2d(struct _render2d *s, double x, double y, double r, color2d c);
+
+/* Center, radius and line width */
+void add_circle2d(struct _render2d *s, double x, double y, double r, double w, color2d c);
+
+/* ------------------------------------ */
 /* A single line. */
 	
 struct _line2d {
@@ -137,6 +179,7 @@ struct _line2d {
 prim2d *new_line2d(struct _render2d *s, double x0, double y0, double x1, double y1, double w, int cap, color2d c);
 
 /* ------------------------------------ */
+/* Comound primitives */
 
 /* add a dashed line */
 void add_dashed_line2d(
@@ -185,6 +228,54 @@ double h,			/* Height of text in normal orientation */
 int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = up */
 );
 
+
+/* Convert an angle in degrees (0 = right) */
+/* into transform matrix */
+void deg2mat(double mat[2][2], double a);
+
+/* Convert a vector into a rotation matrix */
+void vec2mat(double mat[2][2], double dx, double dy);
+
+/* Add a text character at the given location using lines */
+/* (matrix orientation version) */
+void add_char2dmat(
+struct _render2d *s,
+double *xinc,		/* Return increment in position for next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char ch,			/* Character code to be printed */
+double x, double y,	/* Location of bottom left of normal orientation text */
+double h,			/* Height of text in normal orientation */
+double mat[2][2],	/* Unity orientation matrix */
+color2d c			/* Color of text */
+);
+
+/* Add a string from the given location using lines. */
+/* (matrix orientation version) */
+void add_string2dmat(
+struct _render2d *s,
+double *xinc,		/* Return increment in position for next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char *string,		/* Character code to be printed */
+double x, double y,	/* Location of bottom left of normal orientation text */
+double h,			/* Height of text in normal orientation */
+double mat[2][2],	/* Unity orientation matrix */
+color2d c			/* Color of text */
+);
+
+/* Return the total width of the string without adding it */
+/* (matrix orientation version) */
+void meas_string2dmat(
+struct _render2d *s,
+double *xinc,		/* Return increment in position for next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char *string,		/* Character code to be printed */
+double h,			/* Height of text in normal orientation */
+double mat[2][2]	/* Unity orientation matrix */
+);
+
 /* ------------------------------------ */
 
 /* Type of output to save to. */
@@ -214,6 +305,7 @@ struct _render2d {
 	int    dithfgo;			/* Dither F.G. only flag */
 	void (*quant)(void *qcntx, double *out, double *in); /* optional quantization func. for edith */
 	void *qcntx;
+	double mxerr;			/* Maximum error diffusion error */
 
 	color2d defc;			/* Default color value */
 
@@ -256,7 +348,8 @@ render2d *new_render2d(
 	int dither,		/* Dither flag, 1 = ordered, 2 = error diffusion, | 0x8000 to dither FG only */
 					/* | 0x4000 don't anti-alias by averaging pixels together. */
 	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edith */
-	void *qcntx
+	void *qcntx,
+	double mxerr	/* Maximum error diffusion error */
 );
 
 #endif /* RENDER2D_H */

@@ -972,7 +972,7 @@ extern munki *new_munki(icoms *icom, instType itype) {
 	p->del               = munki_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	/* Preliminary capabilities */
 	munki_determine_capabilities(p);

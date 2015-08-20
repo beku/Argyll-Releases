@@ -115,7 +115,7 @@ gedge *e		/* edge to test (may be from another gamut) */
 
 
 /* Return the total volume of the gamut */
-/* Return -1.0 if incomaptible gamuts */
+/* Return -1.0 if incompatible gamuts */
 double isect_volume(
 gamut *s1,
 gamut *s2

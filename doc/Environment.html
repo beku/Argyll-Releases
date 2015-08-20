@@ -41,6 +41,12 @@
       &nbsp;&nbsp;&nbsp; Note that while a reading is being made, a
       character input can abort the reading, just as with normal
       interactive mode.<br>
+      <br>
+      &nbsp;&nbsp;&nbsp; Note that on MSWin systems, the character and
+      return or line fee characters must be written to stdin in a single
+      operation (i.e. testing <span style="font-weight: bold;">ARGYLL_NOT_INTERACTIVE&nbsp;
+      </span>mode manually will probably fail, because the character and
+      return get split up.)<br>
     </div>
     <span style="font-weight: bold;"></span><br>
     <b><a name="ARGYLL_3D_DISP_FORMAT"></a>ARGYLL_3D_DISP_FORMAT<br>
@@ -51,8 +57,10 @@
 
 
 
+
       </b>or <b>X3DOM</b>, which will result in <b>.wrl</b>, <b>.x3d</b>
       and <b>.x3d.html</b> files respectively. See <a href="3dformat">3d
+
 
 
 
@@ -88,6 +96,7 @@ a
 
 
 
+
       delay of 200 msec is allowed between changing a patch color in
       software, and that change appearing in the displayed color itself.
       For some instuments (ie. i1d3, i1pro, ColorMunki, Klein K10-A)
@@ -103,6 +112,7 @@ a
 
 
 environment
+
 
 
 
@@ -243,6 +253,7 @@ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html">XD
 
 
 Base
+
 
 
 

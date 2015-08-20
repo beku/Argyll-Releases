@@ -39,7 +39,7 @@
 #include "render.h"
 
 #define DEF_DPI 200
-#define DITHER 0			/* 1 for test 8 bit dithering, 2 for test error diffusion */
+#define DITHER 0x8002			/* [0] 1 for test 8 bit dithering, 2 for test error diffusion */
 							/* 0x8001 for dithering FG only, 0x8002 for err. diff. FG only */
 #undef PNG_MEM				/* Test PNG save to memory */
 
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
 	char outname[MAXNAMEL+1] = { 0 };	/* Output TIFF name */
 	render2d *r;
 	color2d c;
-	double vv[4][2];
+	double vv[6][2];
 	color2d cc[4];
 	double gbf = 1.0;		/* Grey blend factor */
 	double w, h;			/* Size of page in mm */
@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
 		if (cmyk)
 			error("CMYK not supported for test chart");
 
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL, 0.0)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -248,6 +248,36 @@ int main(int argc, char *argv[]) {
 		cc[2][2] = 0.0;
 		r->add(r, new_trivs2d(r, vv, cc));
 
+		/* A circular disk right of the shaded triangle */
+		c[0] = 0.0;	/* Cyan */
+		c[1] = 1.0;
+		c[2] = 1.0;
+		r->add(r, new_disk2d(r, 65.0, 29.0, 9.0, c));
+
+		/* A circle right of the disk */
+		c[0] = 1.0;	/* Magenta */
+		c[1] = 0.0;
+		c[2] = 1.0;
+		add_circle2d(r, 90.0, 29.0, 9.0, 2.0, c);
+
+
+		/* A polygon */
+		c[0] = 0.8;	/* Brown */
+		c[1] = 0.8;
+		c[2] = 0.2;
+
+		vv[0][0] = 115.0;
+		vv[0][1] = 20.0;
+		vv[1][0] = 130.0;
+		vv[1][1] = 20.0;
+		vv[2][0] = 140.0;
+		vv[2][1] = 35.0;
+		vv[3][0] = 125.0;
+		vv[3][1] = 25.0;
+		vv[4][0] = 110.0;
+		vv[4][1] = 40.0;
+		r->add(r, new_poly2d(r, 5, vv, c));
+
 		/* A diagonal wide line */
 		c[0] = 0.0;
 		c[1] = 0.0;
@@ -274,11 +304,12 @@ int main(int argc, char *argv[]) {
 		/* A test string */
 		add_string2d(r, NULL, NULL, fo, "Testing 1234", 10.0, 70.0, 7.0, 3, c);
 
+		/* The full font */
 		{
 			double x, y;
 			char chars[33];
 
-			x = 10.0;
+			x = 15.0;
 			y = 125.0; 
 			for (j = 0; j < 4; j++) {
 				for (i = 0; i < 32; i++)
@@ -309,7 +340,7 @@ int main(int argc, char *argv[]) {
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (4.0 * bb + 0.25 + 2.0 * r3o2) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth, DITHER, NULL, NULL, 0.0)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -577,7 +608,7 @@ int main(int argc, char *argv[]) {
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (2.0 * bb + 0.20 * 7.0) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER, NULL, NULL, 0.0)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -647,7 +678,7 @@ int main(int argc, char *argv[]) {
 		bs = (bb * hh)/(schart + 1.0);
 		ss = hh * (1.0 - bb)/schart;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth, DITHER, NULL, NULL)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth, DITHER, NULL, NULL, 0.0)) == NULL) {
 			error("new_render2d() failed");
 		}
 	

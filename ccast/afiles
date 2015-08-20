@@ -22,7 +22,7 @@ axTLS/bigint.c
 axTLS/bigint.h
 axTLS/bigint_impl.h
 axTLS/cert.h
-axTLS/config.h
+axTLS/axTLS_config.h
 axTLS/crypto.h
 axTLS/crypto_misc.c
 axTLS/crypto_misc.h
@@ -46,7 +46,7 @@ axTLS/tls1.c
 axTLS/tls1.h
 axTLS/tls1_clnt.c
 axTLS/tls1_svr.c
-axTLS/version.h
+axTLS/axTLS_version.h
 axTLS/x509.c
 chan/cast_channel.pb-c.c
 chan/cast_channel.pb-c.h

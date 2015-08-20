@@ -2,6 +2,7 @@
 
 #PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 PREF_CCFLAGS    += $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS    += $(CCHEAPDEBUG) ;     # Heap Debugging & Debugging flags
 PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 # Compile .c as .m
@@ -10,7 +11,10 @@ if $(OS) = MACOSX {
 	ObjectCcFlags dispwin_dispwin : -ObjC ;
 }
 
-DEFINES += ENABLE_FTDI ;
+if [ GLOB [ NormPaths . ] : fastserio.c ]  {
+#	echo "!!!!!!!!! fastserio.c is enabled !!!!!!!!!" ;
+#	DEFINES += ENABLE_FTDI ;
+}
 
 MADVRSOURCE = ;
 
@@ -94,7 +98,7 @@ USB_INSTS = dtp20.c i1disp.c i1d3.c i1pro.c i1pro_imp.c
                       munki.c munki_imp.c hcfr.c spyd2.c huey.c
                       colorhug.c ex1.c usbio.c hidio.c ;
 
-FAST_SER_INSTS = specbos.c kleink10.c ;
+FAST_SER_INSTS = specbos.c kleink10.c smcube.c ;
 
 SER_USB_INSTS = dtp92.c ;
 
@@ -123,7 +127,7 @@ if $(USE_DEMOINST) = true && [ GLOB [ NormPaths . ] : demoinst.c ] {
 	INST_SRCS += demoinst.c ;
 }
 
-Library libinst : inst.c insttypes.c icoms.c disptechs.c $(INST_SRCS) ;
+Library libinst : inst.c insttypes.c icoms.c disptechs.c rspec.c $(INST_SRCS) ;
 
 # Display access library 
 ObjectKeep mongoose.c ;
@@ -153,7 +157,7 @@ LINKLIBS = libinst libinstapp
            ../gamut/libgamut
            ../rspl/librspl ../cgats/libcgats
            ../icc/libicc ../plot/libplot ../plot/libvrml
-		   ../ccast/libccast ../ccast/axTLS/libaxtls ../yajl/libyajl ../render/librender
+		   ../ccast/libccast $(SSLLIB) ../yajl/libyajl ../render/librender
            $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIB)
            ../numlib/libui ../numlib/libnum
            $(CMMLIBS) libconv ;
@@ -242,9 +246,6 @@ NDepends exe : strange.cal ;	# Normally create it
 # Individual stand alone test of xdg_bds library
 MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 
-# Simple test code of aglob
-#Main globtest : globtest.c : : : : : libconv ;
-
 # fp conversion code test
 #Main fp : fp.c ;
 
@@ -258,21 +259,37 @@ MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 #Main t9 : t9.c ;
 #Main i1d3eval : i1d3eval.c ;
 
-
-# Test code
-if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/spectro" {
-	# /SUBSYSTEM:WINDOWS on NT link ?
-#	GuiBin oemdnld ;
-	Main oemdnld : oemdnld.c : : : : oemarch vinflate inflate LzmaDec mongoose : libconv ;
-#	Main fakeindev : fakeindev.c ;
-#	Main cmtest : cmtest.c : : : : : libconv ;
-#	Main webdisp : webdisp.c : : : : : libconv ;
+# Simple test code of aglob
+if [ GLOB [ NormPaths . ] : globtest.c ]  {
+	Main globtest : globtest.c : : : : : libconv ;
 }
 
-if $(OLD_GRETAG) && $(UNIX) && $(OS) != MACOSX {
+# reflect_db.txt parser */
+if [ GLOB [ NormPaths . ] : txt2sp.c ]  {
+	Main txt2sp : txt2sp.c ;
+}
 
+# SwatchMate Cube calibration
+if [ GLOB [ NormPaths . ] : cubecal.c ]  {
+	Main cubecal : cubecal.c ;
+}
+
+# ColorMeter utility
+if [ GLOB [ NormPaths . ] : oemdnld.c ]  {
+	echo "Found oemdnld.c !" ;
+	Main oemdnld : oemdnld.c : : : : oemarch vinflate inflate LzmaDec mongoose : libconv ;
+}
+
+# Test code
+if $(BUILD_JUNK) {
+
+	# /SUBSYSTEM:WINDOWS on NT link ?
+
+	#	Main fakeindev : fakeindev.c ;
+	#	Main cmtest : cmtest.c : : : : : libconv ;
+	#	Main webdisp : webdisp.c : : : : : libconv ;
 	# test for parsing a VISE archive
-	Main visetest : visetest.c vinflate.c ;
+	#Main visetest : visetest.c vinflate.c ;
 
 	# Compute deconvolution filter for i1pro
 	#Main i1deconv : i1deconv.c ;

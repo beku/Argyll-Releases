@@ -37,8 +37,12 @@
 #include "aconfig.h"
 #include "sort.h"
 #include "numlib.h"
-#include "tiffio.h"
-#include "png.h"
+#ifdef RENDER_TIFF
+# include "tiffio.h"
+#endif	/* TIFF */
+#ifdef RENDER_PNG
+# include "png.h"
+#endif	/* PNG */
 #include "render.h"
 #include "thscreen.h"
 
@@ -98,6 +102,8 @@ static void cvt_Lab_to_CIELAB16(double *out, double *in) {
 }
 
 /* ------------------------------------------------------------- */
+#ifdef RENDER_PNG
+
 /* PNG memory write support */
 typedef struct {
 	unsigned char *buf;
@@ -126,6 +132,8 @@ static void mem_write_data(png_structp png_ptr, png_bytep data, png_size_t lengt
 static void mem_flush_data(png_structp png_ptr) {
 	return;
 }
+
+#endif	/* PNG */
 
 /* ------------------------------------------------------------- */
 #ifdef CCTEST_PATTERN
@@ -241,8 +249,10 @@ static void render2d_del(render2d *s) {
 
 /* Add a primitive */
 static void render2d_add(render2d *s, prim2d *p) {
-	if (p == NULL)
-		error("render2d: Adding NULL primitive");
+	if (p == NULL) {
+		a1loge(g_log, 1, "render2d: Adding NULL primitive\n");
+		return;
+	}
 
 	p->next = s->head;
 	s->head = p;
@@ -291,8 +301,8 @@ static int colordiff(render2d *s, color2d c1, color2d c2) {
 	return 0;
 }
 
-#define MIXPOW 1.3
-#define OSAMLS 16
+#define MIXPOW 2.0			// Blending power
+#define OSAMLS 16			// [16] Oversampling
 
 /* Render and write to a TIFF or PNG file or memory buffer */
 /* Return NZ on error */
@@ -304,6 +314,7 @@ static int render2d_write(
 	size_t *olen,			/* pointer to returned length of data in buffer */
 	rend_format fmt			/* Output format, tiff/png, file/memory */
 ) {
+#ifdef RENDER_TIFF
 	TIFF *wh = NULL;
 	uint16 samplesperpixel = 0, bitspersample = 0;
 	uint16 extrasamples = 0;	/* Extra "alpha" samples */
@@ -311,8 +322,9 @@ static int render2d_write(
 	uint16 photometric = 0;
 	uint16 inkset = 0xffff;
 	char *inknames = NULL;
-	tdata_t *outbuf = NULL;
+#endif
 
+#ifdef RENDER_PNG
 	FILE *png_fp = NULL;
 	png_mem_info png_minfo = { NULL, 0, 0 };
 	png_structp png_ptr = NULL;
@@ -320,7 +332,9 @@ static int render2d_write(
 	png_uint_32 png_width = 0, png_height = 0;
 	int png_bit_depth = 0, png_color_type = 0;
 	int png_samplesperpixel = 0;
+#endif
 
+	unsigned char *outbuf = NULL;
 	unsigned char *dithbuf16 = NULL;	/* 16 bit buffer for dithering */
 	thscreens *screen = NULL;			/* dithering object */
 	int foundfg;						/* Found a forground object in this line */
@@ -356,6 +370,7 @@ static int render2d_write(
 		return 1;
 
 	if (fmt == tiff_file) {
+#ifdef RENDER_TIFF
 		switch (s->csp) {
 			case w_2d:			/* Video style grey */
 				samplesperpixel = 1;
@@ -399,10 +414,13 @@ static int render2d_write(
 				inknames = NULL;	// ~~99 should fix this
 				break;
 			default:
-				error("render2d: Illegal colorspace for TIFF file '%s'",filename);
+				a1loge(g_log, 1, "render2d: Illegal colorspace for TIFF file '%s'\n",filename);
+				return 1;
 		}
-		if (samplesperpixel != s->ncc)
-			error("render2d: mismatched number of color components");
+		if (samplesperpixel != s->ncc) {
+			a1loge(g_log, 1, "render2d: mismatched number of color components\n");
+			return 1;
+		}
 
 		switch (s->dpth) {
 			case bpc8_2d:		/* 8 bits per component */
@@ -412,11 +430,14 @@ static int render2d_write(
 				bitspersample = 16;
 				break;
 			default:
-				error("render2d: Illegal bits per component for TIFF file '%s'",filename);
+				a1loge(g_log, 1, "render2d: Illegal bits per component for TIFF file '%s'\n",filename);
+				return 1;
 		}
 
-		if ((wh = TIFFOpen(filename, "w")) == NULL)
-			error("render2d: Can\'t create TIFF file '%s'!",filename);
+		if ((wh = TIFFOpen(filename, "w")) == NULL) {
+			a1loge(g_log, 1, "render2d: Can\'t create TIFF file '%s'!\n",filename);
+			return 1;
+		}
 		
 		TIFFSetField(wh, TIFFTAG_IMAGEWIDTH,  s->pw);
 		TIFFSetField(wh, TIFFTAG_IMAGELENGTH, s->ph);
@@ -446,9 +467,15 @@ static int render2d_write(
 
 		/* Allocate one TIFF line buffer */
 		outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
+#else
+		a1loge(g_log, 1, "render2d: TIFF format not compiled in\n");
+		return 1;
+
+#endif	/* !TIFF */
 
 	} else if (fmt == png_file
 	        || fmt == png_mem) {
+#ifdef RENDER_PNG
 		char *nmode = "w";
 
 #if !defined(O_CREAT) && !defined(_O_CREAT)
@@ -468,7 +495,8 @@ static int render2d_write(
 				png_bit_depth = 16;
 				break;
 			default:
-				error("render2d: Illegal bits per component for PNG file '%s'",filename);
+				a1loge(g_log, 1, "render2d: Illegal bits per component for PNG file '%s'\n",filename);
+				return 1;
 		}
 
 		switch (s->csp) {
@@ -481,17 +509,22 @@ static int render2d_write(
 				png_samplesperpixel = 3;
 				break;
 			default:
-				error("render2d: Illegal colorspace for PNG file '%s'",filename);
+				a1loge(g_log, 1, "render2d: Illegal colorspace for PNG file '%s'\n",filename);
+				return 1;
 		}
 
 		if (fmt == png_file) {
-			if ((png_fp = fopen(filename, nmode)) == NULL)
-				error("render2d: Can\'t create PNG file '%s'!",filename);
+			if ((png_fp = fopen(filename, nmode)) == NULL) {
+				a1loge(g_log, 1, "render2d: Can\'t create PNG file '%s'!\n",filename);
+				return 1;
+			}
 		}
 
 		if ((png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING,
-		                                    NULL, NULL, NULL)) == NULL)
-			error("render2d: png_create_write_struct failed");
+		                                    NULL, NULL, NULL)) == NULL) {
+			a1loge(g_log, 1, "render2d: png_create_write_struct failed\n");
+			return 1;
+		}
 
 		if (fmt == png_file) {
 			png_init_io(png_ptr, png_fp);
@@ -499,7 +532,8 @@ static int render2d_write(
 
 		if ((png_info = png_create_info_struct(png_ptr)) == NULL) {
 			png_destroy_write_struct(&png_ptr, &png_info);
-			error("render2d: png_create_info_struct failed");
+			a1loge(g_log, 1, "render2d: png_create_info_struct failed\n");
+			return 1;
 		}
 
 	   if (setjmp(png_jmpbuf(png_ptr))) {
@@ -556,11 +590,19 @@ static int render2d_write(
 		}
 
 		/* Allocate one PNG line buffer */
-		if ((outbuf = malloc((png_bit_depth >> 3) * png_samplesperpixel * s->pw) ) == NULL)
-			error("malloc of PNG line buffer failed");
+		if ((outbuf = malloc((png_bit_depth >> 3) * png_samplesperpixel * s->pw) ) == NULL) {
+			a1loge(g_log, 1, "malloc of PNG line buffer failed\n");
+			return 1;
+		}
 
+#else
+		a1loge(g_log, 1, "render2d: PNG format not compiled in\n\n");
+		return 1;
+#endif	/* !PNG */
+		
 	} else {
-		error("render2d: Illegal output format %d",fmt);
+		a1loge(g_log, 1, "render2d: Illegal output format %d\n",fmt);
+		return 1;
 	}
 
 	/* Allocate pixel value storage for aliasing detection */
@@ -581,11 +623,11 @@ static int render2d_write(
 		}
 		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, LEVELS, olevs,
 		                           scoo_l, OVERLAP, s->pw, NULL, NULL,
-		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx)) == NULL)
+		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx, s->mxerr)) == NULL)
 #else
 		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, 256, NULL,
 		                           scoo_l, OVERLAP, s->pw, NULL, NULL,
-		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx)) == NULL)
+		                           s->dither == 2 ? 1 : 0, s->quant, s->qcntx, s->mxerr)) == NULL)
 #endif
 			return 1;
 		if ((dithbuf16 = malloc(s->pw * s->ncc * 2)) == NULL)
@@ -836,26 +878,24 @@ static int render2d_write(
 						unsigned char *op = ((unsigned char *)outbuf);
 
 						/* Copy pixels up to first non-BG */
-						for (x = 0; x < s->pw; x++, ip += s->ncc, op += s->ncc) {
-							if (pixv1[x][PRIX2D] == -1) {
+						for (st = 0; st < s->pw; st++, ip += s->ncc, op += s->ncc) {
+							if (pixv1[st][PRIX2D] == -1) {
 								for (j = 0; j < s->ncc; j++)
 									op[j] = (ip[j] * 255 + 128)/65535;
 							} else {
-								st = x;
 								break;
 							}
 						}
-						if (x < s->pw) {	/* If there are FG pixels */
+						if (st < s->pw) {	/* If there are some FG pixels */
 
 							/* Copy down to first non-BG */
 							ip = ((unsigned short *)dithbuf16) + (s->pw-1) * s->ncc;
 							op = ((unsigned char *)outbuf) + (s->pw-1) * s->ncc;
-							for (x = s->pw-1; x > st; x--, ip -= s->ncc, op -= s->ncc) {
-								if (pixv1[x][PRIX2D] == -1) {
+							for (ed = s->pw-1; ed >= st; ed--, ip -= s->ncc, op -= s->ncc) {
+								if (pixv1[ed][PRIX2D] == -1) {
 									for (j = 0; j < s->ncc; j++)
 										op[j] = (ip[j] * 255 + 128)/65535;
 								} else {
-									ed = x;
 									break;
 								}
 							}
@@ -891,12 +931,18 @@ static int render2d_write(
 			}
 #endif
 			if (fmt == tiff_file) {
-				if (TIFFWriteScanline(wh, outbuf, y, 0) < 0)
-					error ("Failed to write TIFF file '%s' line %d",filename,y);
+#ifdef RENDER_TIFF
+				if (TIFFWriteScanline(wh, outbuf, y, 0) < 0) {
+					a1loge(g_log, 1, "Failed to write TIFF file '%s' line %d\n",filename,y);
+					return 1;
+				}
+#endif	/* TIFF */
 			} else if (fmt == png_file
 			        || fmt == png_mem) {
+#ifdef RENDER_PNG
 				png_bytep pixdata = (png_bytep)outbuf;
 				png_write_rows(png_ptr, &pixdata, 1);
+#endif	/* PNG */
 			}
 		}
 
@@ -920,12 +966,15 @@ static int render2d_write(
 		screen->del(screen);
 
 	if (fmt == tiff_file) {
+#ifdef RENDER_TIFF
 		_TIFFfree(outbuf);
 		TIFFClose(wh);		/* Close Output file */
+#endif	/* TIFF */
 
 	} else if (fmt == png_file
 	        || fmt == png_mem) {
 
+#ifdef RENDER_PNG
 		free(outbuf);
 		png_write_end(png_ptr, NULL);
 //		png_destroy_info_struct(png_ptr, &png_info);
@@ -936,6 +985,7 @@ static int render2d_write(
 			*obuf = png_minfo.buf;
 			*olen = png_minfo.off;
 		}
+#endif	/* PNG */
 	}
 
 	so->del(so);
@@ -955,7 +1005,8 @@ int nd,			/* Number of channels if c = ncol */
 depth2d dpth,	/* Pixel depth */
 int dither,		/* Dither flag, 1 = ordered, 2 = error diffusion, | 0x8000 to dither FG only  */
 void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edith */
-void *qcntx
+void *qcntx,
+double mxerr	/* Maximum error diffusion error */
 ) {
 	render2d *s;
 
@@ -973,10 +1024,16 @@ void *qcntx
 	}
 	w = s->fw - s->lm - s->rm;
 	h = s->fh - s->tm - s->bm;
-	if (w < 0.0)
-		error("render2d: Left & Right margines %f %f exceed width %f",s->lm,s->rm,s->fw); 
-	if (h < 0.0)
-		error("render2d: Top & Bottom margines %f %f exceed height %f",s->tm,s->bm,s->fh); 
+	if (w < 0.0) {
+		a1loge(g_log, 1, "render2d: Left & Right margines %f %f exceed width %f\n",s->lm,s->rm,s->fw); 
+		free(s);
+		return NULL;
+	}
+	if (h < 0.0) {
+		a1loge(g_log, 1, "render2d: Top & Bottom margines %f %f exceed height %f\n",s->tm,s->bm,s->fh); 
+		free(s);
+		return NULL;
+	}
 	s->hres = hres;
 	s->vres = vres;
 	s->csp = csp;
@@ -986,6 +1043,7 @@ void *qcntx
 	s->dithfgo = 0x8000 & dither;
 	s->quant = quant;
 	s->qcntx = qcntx;
+	s->mxerr = mxerr;
 
 	s->del = render2d_del;
 	s->set_defc = render2d_set_defc;
@@ -1015,12 +1073,18 @@ void *qcntx
 			break;
 		case ncol_2d:
 		case ncol_a_2d:
-			if (nd > MXCH2D)
-				error("render2d: Too many color chanels %d, max is %d",nd,MXCH2D); 
+			if (nd > MXCH2D) {
+				a1loge(g_log, 1, "render2d: Too many color chanels %d, max is %d\n",nd,MXCH2D); 
+				free(s);
+				return NULL;
+			}
 			s->ncc = nd;
 			break;
-		default:
-			error("render2d: Illegal colorspace");
+		default: {
+			a1loge(g_log, 1, "render2d: Illegal colorspace\n");
+			free(s);
+			return NULL;
+		}
 	}
 	return s;
 }
@@ -1309,8 +1373,11 @@ color2d c[3]			/* Corresponding colors */
 		tt[1][i] = vv[i][1];
 		tt[2][i] = 1.0;
 	}
-	if (inverse3x3(s->be, tt))
-		error("trivs2d: Matrix inversion failed");
+	if (inverse3x3(s->be, tt)) {
+		a1loge(g_log, 1, "trivs2d: Matrix inversion failed\n");
+		free(s);
+		return NULL;
+	}
 
 	/* Copy vertex colors */
 	for (i = 0; i < 3; i++) {
@@ -1319,6 +1386,212 @@ color2d c[3]			/* Corresponding colors */
 	}
 
 	return (prim2d *)s;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Flat shaded rectangle */
+
+/* Render the polyangle object at location. Return nz if in primitive */
+static int poly2d_rend(prim2d *ss, color2d rv, double x, double y) {
+	poly2d *s = (poly2d *)ss;
+	int i, j, pip = 0;
+
+	/* Classic point in polygon test */ 
+	for (i = 0, j = s->n-1; i < s->n; j = i++) {
+		if ( ((s->co[i][1] > y) != (s->co[j][1] > y))
+		  && (x <   (s->co[j][0] - s->co[i][0]) * (y - s->co[i][1])
+	              / (s->co[j][1] - s->co[i][1]) + s->co[i][0]))
+			pip = !pip;
+	}
+	if (pip == 0)
+		return 0;
+
+	for (j = 0; j < s->ncc; j++)
+		rv[j] = s->c[j];
+
+	rv[PRIX2D] = s->ix;
+
+	return 1;
+}
+
+prim2d *new_poly2d(
+render2d *ss,
+int n,
+double v[][2],
+color2d c
+) {
+	int i, j;
+	poly2d *s;
+
+	if (n < 3)
+		return NULL;
+	
+	/* Allocate array at end to hold vertex locations */
+	if ((s = (poly2d *)calloc(1, sizeof(poly2d) + (n-1) * 2 * sizeof(double))) == NULL) {
+		return NULL;
+	}
+
+	/* Set bounding box and coords */
+	s->x0 = 1e38;
+	s->y0 = 1e38;
+	s->x1 = -1e39;
+	s->y1 = -1e39;
+	for (i = 0; i < n; i++) {
+		double x, y;
+		x = v[i][0] - ss->lm;	/* Account for margines */
+		y = v[i][1] - ss->bm;
+		if (x < s->x0)
+			s->x0 = x;
+		if (y < s->y0)
+			s->y0 = y;
+		if (x > s->x1)
+			s->x1 = x;
+		if (y > s->y1)
+			s->y1 = y;
+		s->co[i][0] = x;
+		s->co[i][1] = y;
+	}
+	s->n = n;
+
+
+	s->ncc = ss->ncc;
+	s->del = prim2d_del; 
+	s->rend = poly2d_rend; 
+
+	for (j = 0; j < s->ncc; j++)
+		s->c[j] = c[j];
+
+	return (prim2d *)s;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Flat shaded disk/circle */
+
+/* Render the disk object at location. Return nz if in primitive */
+static int disk2d_rend(prim2d *ss, color2d rv, double x, double y) {
+	disk2d *s = (disk2d *)ss;
+	int j;
+	double rr;
+
+	/* Position relative to center */
+	x -= s->cx;
+	y -= s->cy;
+
+	/* Radius squared */
+	rr = x * x + y * y;
+
+	/* Within outer and inner radius suqared ? */
+	if (rr > s->orr
+	 || (s->irr > 0.0 && rr < s->irr))
+		return 0;
+
+	for (j = 0; j < s->ncc; j++)
+		rv[j] = s->c[j];
+
+	rv[PRIX2D] = s->ix;
+
+	return 1;
+}
+
+/* Center and radius */
+prim2d *new_disk2d(
+render2d *ss,
+double x,
+double y,
+double r,
+color2d c
+) {
+	int j;
+	disk2d *s;
+
+	if ((s = (disk2d *)calloc(1, sizeof(disk2d))) == NULL) {
+		return NULL;
+	}
+
+	/* Account for margines */
+	x -= ss->lm;
+	y -= ss->bm;
+
+	s->ncc = ss->ncc;
+	s->del = prim2d_del;
+	s->rend = disk2d_rend; 
+
+	s->cx = x;
+	s->cy = y;
+
+	/* Outer radius squared */
+	s->orr = r * r;
+	s->irr = 0.0;
+
+	/* Set bounding box */
+	s->x0 = x - r;
+	s->y0 = y - r;
+	s->x1 = x + r;
+	s->y1 = y + r;
+
+	/* Copy color */
+	for (j = 0; j < s->ncc; j++)
+		s->c[j] = c[j];
+
+	return (prim2d *)s;
+}
+
+disk2d *clone_disk2d(disk2d *s) {
+	disk2d *d;
+	if ((d = (disk2d *)calloc(1, sizeof(disk2d))) == NULL) {
+		return NULL;
+	}
+
+	*d = *s;
+
+	return d;
+}
+
+/* Center, radius and line width */
+void add_circle2d(render2d *ss, double x, double y, double r, double w, color2d c) {
+	disk2d *s1, *s2, *s3, *s4;
+	double a, b;
+
+	w *= 0.5;		/* half width */
+
+	/* Disk at outer extent of line width */
+	s1 = (disk2d *)new_disk2d(ss, x, y, r + w, c);
+
+	/* Inner radius at inner extend of line width */
+	if (w < r) {
+		s1->irr = (r-w) * (r-w);
+	}
+
+	/* Make 4 copies with tighter bounding boxes */
+	s2 = clone_disk2d(s1);
+	s3 = clone_disk2d(s1);
+	s4 = clone_disk2d(s1);
+
+	a = 0.5 * sqrt(2.0);		/* Half width of box */
+	b = (1.0 - a);				/* Height of box */
+	a *= r;
+	b *= r;
+
+	s1->x0 = s1->cx - a - w;
+	s1->x1 = s1->cx + a + w;
+	s1->y1 = s1->y0 + b + 2.0 * w;
+
+	s2->x1 = s2->cx + a + w;
+	s2->x0 = s2->cx - a - w;
+	s2->y0 = s2->y1 - b - 2.0 * w;
+
+	s3->x1 = s3->x0 + b + 2.0 * w;
+	s3->y0 = s3->cy - a - w;
+	s3->y1 = s3->cy + a + w;
+
+	s4->x0 = s4->x1 - b - 2.0 * w;
+	s4->y0 = s4->cy - a - w;
+	s4->y1 = s4->cy + a + w;
+
+	ss->add(ss, (prim2d *)s1);
+	ss->add(ss, (prim2d *)s2);
+	ss->add(ss, (prim2d *)s3);
+	ss->add(ss, (prim2d *)s4);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1538,28 +1811,9 @@ hyfont fonts[];
 
 double h2dbl(unsigned char c) { return (double)(c-'R'); }
 
-/* Add a text character at the given location using lines */
-static void add_char_imp(
-render2d *s,
-double *xinc,		/* Add increment to next character */
-double *yinc,
-font2d fo,			/* Font to use */
-char ch,			/* Character code to be printed */
-double x, double y,	/* Location of bottom left of normal orientation text */
-double h,			/* Height of text in normal orientation */
-int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
-color2d c,			/* Color of text */
-int add				/* NZ if character is to be added */
-) {
-	hyfont *fp = &fonts[fo];
-	char *cp = fp->enc[ch % 128];
-	double lm, rm;
-	double x0, y0, x1 = 0.0, y1 = 0.0;
-	int got1 = 0;
-	double w = fp->sw * h;
-	double tx, ty;
-	double mat[2][2];		/* Transformation matrix */
-
+/* Convert orientation 0 = right, 1 = down, 2 = left, 3 = right */
+/* into transform matrix */
+static void or2mat(double mat[2][2], int or) {
 	if (or == 0) {
 		mat[0][0] = 1.0; 
 		mat[0][1] = 0.0; 
@@ -1581,6 +1835,53 @@ int add				/* NZ if character is to be added */
 		mat[1][0] = 1.0; 
 		mat[1][1] = 0.0; 
 	}
+}
+
+/* Convert an angle in radians */
+/* into transform matrix */
+static void rad2mat(double mat[2][2], double rad) {
+	double sinv = sin(rad);
+	double cosv = cos(rad);
+	mat[0][0] = cosv;
+	mat[0][1] = -sinv;
+	mat[1][0] = sinv;
+	mat[1][1] = cosv;
+}
+
+/* Convert an angle in degrees (0 = right) */
+/* into transform matrix */
+void deg2mat(double mat[2][2], double a) {
+	double rad = a * 3.1415926/180.0;
+	rad2mat(mat, rad);
+}
+
+/* Convert a vector into a rotation matrix */
+void vec2mat(double mat[2][2], double dx, double dy) {
+	double rad = atan2(dy, dx);
+	rad2mat(mat, rad);
+}
+
+/* Add a text character at the given location using lines */
+static void add_char_imp(
+render2d *s,
+double *xinc,		/* Add increment to next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char ch,			/* Character code to be printed */
+double x, double y,	/* Location of bottom left of normal orientation text */
+double h,			/* Height of text in normal orientation */
+double mat[2][2],	/* Unity transformation matrix */
+color2d c,			/* Color of text */
+int add				/* NZ if character is to be added */
+) {
+	hyfont *fp = &fonts[fo];
+	char *cp = fp->enc[ch % 128];
+	double lm, rm;
+	double x0, y0, x1 = 0.0, y1 = 0.0;
+	int got1 = 0;
+	double w = fp->sw * h;
+	double tx, ty;
+
 	if (cp[0] == '\000' || cp[1] == '\000') {
 		if (xinc != NULL && yinc != NULL) {
 			*xinc = 0.0;
@@ -1625,6 +1926,89 @@ int add				/* NZ if character is to be added */
 }
 
 /* Add a text character at the given location using lines */
+/* (matrix orientation version) */
+void add_char2dmat(
+render2d *s,
+double *xinc,		/* Add increment to next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char ch,			/* Character code to be printed */
+double x, double y,	/* Location of bottom left of normal orientation text */
+double h,			/* Height of text in normal orientation */
+double mat[2][2],	/* Unity orientation matrix */
+color2d c			/* Color of text */
+) {
+	add_char_imp(s, xinc, yinc, fo, ch, x, y, h, mat, c, 1);
+}
+
+/* Return the total width of the character without adding it */
+/* (matrix orientation version) */
+void meas_char2dmat(
+render2d *s,
+double *xinc,		/* Add increment to next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char ch,			/* Character code to be printed */
+double h,			/* Height of text in normal orientation */
+double mat[2][2]	/* Unity orientation matrix */
+) {
+	color2d c;
+	add_char_imp(s, xinc, yinc, fo, ch, 0.0, 0.0, h, mat, c, 0);
+}
+
+/* Add a string from the given location using lines. */
+/* Return the total width of the string  */
+/* (matrix orientation version) */
+void add_string2dmat(
+render2d *s,
+double *xinc,		/* Add increment to next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char *string,		/* Character code to be printed */
+double x, double y,	/* Location of bottom left of normal orientation text */
+double h,			/* Height of text in normal orientation */
+double mat[2][2],	/* Unity orientation matrix */
+color2d c			/* Color of text */
+) {
+	char *ch;
+	double xoff = 0.0, yoff = 0.0;
+
+	for (ch = string; *ch != '\000'; ch++) {
+		add_char2dmat(s, &xoff, &yoff, fo, *ch, x + xoff, y + yoff, h, mat, c);
+	}
+
+	if (xinc != NULL)
+		*xinc = xoff;
+	if (yinc != NULL)
+		*yinc = yoff;
+}
+
+/* Return the total width of the string without adding it */
+/* (matrix orientation version) */
+void meas_string2dmat(
+struct _render2d *s,
+double *xinc,		/* Add increment to next character */
+double *yinc,
+font2d fo,			/* Font to use */
+char *string,		/* Character code to be printed */
+double h,			/* Height of text in normal orientation */
+double mat[2][2]	/* Unity orientation matrix */
+) {
+	char *ch;
+	double xoff = 0.0, yoff = 0.0;
+
+	for (ch = string; *ch != '\000'; ch++) {
+		meas_char2dmat(s, &xoff, &yoff, fo, *ch, h, mat);
+	}
+
+	if (xinc != NULL)
+		*xinc = xoff;
+	if (yinc != NULL)
+		*yinc = yoff;
+}
+
+
+/* Add a text character at the given location using lines */
 void add_char2d(
 render2d *s,
 double *xinc,		/* Add increment to next character */
@@ -1636,7 +2020,10 @@ double h,			/* Height of text in normal orientation */
 int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
 color2d c			/* Color of text */
 ) {
-	add_char_imp(s, xinc, yinc, fo, ch, x, y, h, or, c, 1);
+	double mat[2][2];
+
+	or2mat(mat, or);
+	add_char_imp(s, xinc, yinc, fo, ch, x, y, h, mat, c, 1);
 }
 
 /* Return the total width of the character without adding it */
@@ -1649,9 +2036,11 @@ char ch,			/* Character code to be printed */
 double h,			/* Height of text in normal orientation */
 int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
 ) {
+	double mat[2][2];
 	color2d c;
 
-	add_char_imp(s, xinc, yinc, fo, ch, 0.0, 0.0, h, or, c, 0);
+	or2mat(mat, or);
+	add_char_imp(s, xinc, yinc, fo, ch, 0.0, 0.0, h, mat, c, 0);
 }
 
 /* Add a string from the given location using lines. */

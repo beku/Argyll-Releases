@@ -31,12 +31,6 @@
 
 #define MAXGRAPHS 10
 
-#ifdef PLANKIAN
-#define BBTYPE icxIT_Ptemp
-#else
-#define BBTYPE icxIT_Dtemp
-#endif
-
 /* Display a spectrum etc. */
 /* We are guaranteed that the x range/increments are identical, */
 /* and that there is only one spectrum if douv */
@@ -60,6 +54,9 @@ static int do_spec(
 	double cct, vct;
 	double cct_xyz[3], vct_xyz[3];
 	double cct_lab[3], vct_lab[3];
+	double cdt, vdt;
+	double cdt_xyz[3], vdt_xyz[3];
+	double cdt_lab[3], vdt_lab[3];
 	icmXYZNumber wp;
 	double de;
 	double uv = uvmin;
@@ -129,24 +126,37 @@ static int do_spec(
 #endif
 
 			/* Compute CCT */
-			if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
+			if ((cct = icx_XYZ2ill_ct(cct_xyz, icxIT_Ptemp, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
 				warning("Got bad cct\n");
 
 			/* Compute VCT */
-			if ((vct = icx_XYZ2ill_ct(vct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
+			if ((vct = icx_XYZ2ill_ct(vct_xyz, icxIT_Ptemp, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
 				warning("Got bad vct\n");
 
-#ifdef PLANKIAN
 			printf("CCT = %f, VCT = %f\n",cct, vct);
-#else
+
+			/* Compute CDT */
+			if ((cct = icx_XYZ2ill_ct(cct_xyz, icxIT_Dtemp, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
+				warning("Got bad cct\n");
+
+			/* Compute VDT */
+			if ((vct = icx_XYZ2ill_ct(vct_xyz, icxIT_Dtemp, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
+				warning("Got bad vct\n");
+
 			printf("CDT = %f, VDT = %f\n",cct, vct);
-#endif
 
 			{
 				int invalid = 0;
+				double RR[14];
 				double cri;
-				cri = icx_CIE1995_CRI(&invalid, &tsp);
-				printf("CRI = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
+				cri = icx_CIE1995_CRI(&invalid, RR, &tsp);
+				printf("CRI = %.1f [ R9 = %.1f ]%s\n",cri,RR[9-1],invalid ? " (Invalid)" : "");
+			}
+			{
+				int invalid = 0;
+				double tlci;
+				tlci = icx_EBU2012_TLCI(&invalid, &tsp);
+				printf("TLCI = %.1f%s\n",tlci,invalid ? " (Invalid)" : "");
 			}
 
 			/* Use modern color difference - gives a better visual match */
@@ -320,8 +330,12 @@ main(
 					inm = "D50"; break;
 			    case icxIT_D50M2:
 					inm = "D50M2"; break;
+			    case icxIT_D55:
+					inm = "D55"; break;
 			    case icxIT_D65:
 					inm = "D65"; break;
+			    case icxIT_D75:
+					inm = "D75"; break;
 			    case icxIT_E:
 					inm = "E"; break;
 			    case icxIT_F5:
@@ -336,21 +350,28 @@ main(
 			}
 	
 			if (standardIlluminant(&sp[0], ilType, 0) != 0)
-				error ("standardIlluminant returned error");
+				error ("standardIlluminant returned error for %d (%s)",ilType,inm);
 		
 			strcpy(buf[0],inm);
 			do_spec(buf, sp, 1, zero, douv, uvmin, uvmax);
 		}
 
 		/* For each material and illuminant */
-		for (temp = 2500; temp <= 9000; temp += 500) {
+		for (k = 0; k < 2; k++) {
+			double start, end;
+
+			if (k == 0)
+				start = 3400, end = 9000;
+			else
+				start = 500, end = 9000;
+
+			for (temp = start; temp <= end; temp += 500) {
 		
-			for (k = 0; k < 2; k++) {
-	
 				ilType = k == 0 ? icxIT_Dtemp : icxIT_Ptemp;
 	
 				if (standardIlluminant(&sp[0], ilType, temp) != 0)
-					error ("standardIlluminant returned error");
+					error ("standardIlluminant returned error for %s temp %f",
+					k == 0 ? "Daylight" : "Plankian", temp);
 		
 				sprintf(buf[0], "%s at %f", k == 0 ? "Daylight" : "Black body", temp);
 	

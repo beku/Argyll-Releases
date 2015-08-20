@@ -100,6 +100,7 @@ void make_input_icc(
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
+	int emis,				/* emissive reference data */
 	int spec,				/* Use spectral data flag */
 	icxIllumeType illum,	/* Spectral illuminant */
 	xspect *cust_illum,		/* Possible custom illumination */

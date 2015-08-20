@@ -3,7 +3,7 @@
   <head>
     <title>Target Information 3 Format File (.ti3)</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -55,10 +55,16 @@
     There shall be a <span style="font-weight: bold;">DEVICE_CLASS</span>
     keyword that has a value of <span style="font-weight: bold;">"OUTPUT</span>",
 
-    "<span style="font-weight: bold;">DISPLAY</span>" or <span
-      style="font-weight: bold;">"INPUT"</span>.<br>
+
+
+    "<span style="font-weight: bold;">DISPLAY</span>",&nbsp; <span
+      style="font-weight: bold;">"INPUT"</span> or <span
+      style="font-weight: bold;">"EMISINPUT"</span>.<br>
     This indicates to the profile program what type of device the color
-    information is from.<br>
+    information is from. (An OUTPUT device is typically a printer. An
+    INPUT device is typically a Scanner or Camera with data from a
+    reflective reference chart. An EMISINPUT is a camera with emissive
+    reference data. ).<br>
     <br>
     An <span style="font-weight: bold;">"OUTPUT"</span> type device may
     have a <span style="font-weight: bold;">TOTAL_INK_LIMIT</span>
@@ -72,6 +78,8 @@
     have a <span style="font-weight: bold;">LUMINANCE_XYZ_CDM2</span>
     keyword that contains the absolute XYZ value of white in candelas
     per meter squared, e.g. <span style="font-weight: bold;">"112.334770
+
+
 
       119.657745 121.474236".<br>
       <br>
@@ -93,32 +101,36 @@
     This is used by the profiling program to determine the spectral
     characteristics of the instrument illuminant if Fluorescent Whitener
     Compensation is desired. The value shall be one of:<br>
-    <br>
-    <b>&nbsp;&nbsp;&nbsp; "Xrite DTP20"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Xrite DTP22"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Xrite DTP41"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Xrite DTP51"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Xrite DTP92"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Xrite DTP94"</b><b><br>
-    </b><b> &nbsp;&nbsp; "GretagMacbeth Spectrolino"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth SpectroScan"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth SpectroScanT"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Spectrocam"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth i1 Display 1"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "GretagMacbeth i1 Display 2"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "Xrite i1 DisplayPro, ColorMunki Display"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth i1 Monitor"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth i1 Pro"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "X-Rite i1 Pro 2"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "X-Rite ColorMunki"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Colorimtre HCFR"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "ColorVision Spyder2"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "Datacolor Spyder3"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "Datacolor Spyder4"</b><b><br>
-    </b><b> &nbsp;&nbsp;&nbsp; "GretagMacbeth Huey"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "ColorMunki Smile"</b><b><br>
-    </b><b>&nbsp;&nbsp;&nbsp; "Hughski ColorHug"</b><br>
-    <br>
+    <blockquote> <b>"X-Rite DTP20"</b><br>
+      <b>"X-Rite DTP22"</b><br>
+      <b>"X-Rite DTP41"</b><br>
+      <b>"X-Rite DTP51"</b><br>
+      <b>"X-Rite DTP92"</b><br>
+      <b>"X-Rite DTP94"</b><br>
+      <b>"GretagMacbeth Spectrolino"</b><br>
+      <b>"GretagMacbeth SpectroScan"</b><br>
+      <b>"GretagMacbeth SpectroScanT"</b><br>
+      <b>"Spectrocam"</b><br>
+      <b>"GretagMacbeth i1 Display 1"</b><br>
+      <b>"GretagMacbeth i1 Display 2"</b><br>
+      <b>"X-Rite i1 DisplayPro, ColorMunki Display"</b><br>
+      <b>"GretagMacbeth i1 Monitor"</b><br>
+      <b>"GretagMacbeth i1 Pro"</b><br>
+      <b>"X-Rite i1 Pro 2"</b><br>
+      <b>"X-Rite ColorMunki"</b><br>
+      <b>"Colorimtre HCFR"</b><br>
+      <b>"ColorVision Spyder1"</b><br>
+      <b>"ColorVision Spyder2"</b><br>
+      <b>"Datacolor Spyder3"</b><br>
+      <b>"Datacolor Spyder4"</b><br>
+      <b>"Datacolor Spyder5"</b><br>
+      <b>"GretagMacbeth Huey"</b><br>
+      <b>"ColorMunki Smile"</b><br>
+      <b>"JETI specbos 1201"</b><br>
+      <b>"JETI specbos"</b><br>
+      <b>"Klein K-10"</b><br>
+      <b>"Image Engineering EX1"</b><br>
+    </blockquote>
     All instruments except the Spectrocam are assumed to have an "A"
     type illuminant (incandescent lamp of&nbsp; 2850 degrees Kelvin.)<br>
     <br>
@@ -157,8 +169,12 @@
     <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span>&nbsp;&nbsp;&nbsp;
 Cyan
 
+
+
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     C<br>
     &nbsp;&nbsp;&nbsp; Magenta &nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;
@@ -166,25 +182,37 @@ Cyan
     &nbsp;&nbsp;&nbsp; Yellow &nbsp; &nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
     Y<br>
     &nbsp;&nbsp;&nbsp; Black &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     K<br>
     &nbsp;&nbsp;&nbsp; Orange &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
     O<br>
     &nbsp;&nbsp;&nbsp; Red
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     R<br>
     &nbsp;&nbsp;&nbsp; Green &nbsp; &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
     G<br>
     &nbsp;&nbsp;&nbsp; Blue &nbsp;&nbsp; &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     B<br>
     &nbsp;&nbsp;&nbsp; White &nbsp;
@@ -193,17 +221,25 @@ Cyan
     &nbsp;&nbsp;&nbsp; Light Cyan
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
     c<br>
     &nbsp;&nbsp;&nbsp; Light
     Magenta&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     m<br>
     &nbsp;&nbsp;&nbsp; Light
     Yellow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
     y<br>
     &nbsp;&nbsp;&nbsp; Light
     Black&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
     k<br>
     &nbsp;&nbsp;&nbsp; Medium Cyan&nbsp;

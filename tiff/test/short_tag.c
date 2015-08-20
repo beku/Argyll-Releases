@@ -1,4 +1,4 @@
-/* $Id: short_tag.c,v 1.6.2.2 2010-06-10 22:52:45 bfriesen Exp $ */
+/* $Id: short_tag.c,v 1.9 2013-12-17 14:41:58 bfriesen Exp $ */
 
 /*
  * Copyright (c) 2004, Andrey Kiselev  <dron@ak4719.spb.edu>
@@ -38,11 +38,9 @@
 #endif 
 
 #include "tiffio.h"
+#include "tifftest.h"
 
-extern int CheckLongField(TIFF *, ttag_t, uint32);
-extern int CheckShortField(TIFF *, ttag_t, uint16);
-
-const char	*filename = "short_test.tiff";
+static const char filename[] = "short_test.tiff";
 
 #define	SPP	3		/* Samples per pixel */
 const uint16	width = 1;
@@ -52,30 +50,39 @@ const uint16	photometric = PHOTOMETRIC_RGB;
 const uint16	rows_per_strip = 1;
 const uint16	planarconfig = PLANARCONFIG_CONTIG;
 
-static struct SingleTags {
-	ttag_t		tag;
-	uint16		value;
+static const struct {
+	const ttag_t	tag;
+	const uint16	value;
 } short_single_tags[] = {
 	{ TIFFTAG_COMPRESSION, COMPRESSION_NONE },
 	{ TIFFTAG_FILLORDER, FILLORDER_MSB2LSB },
 	{ TIFFTAG_ORIENTATION, ORIENTATION_BOTRIGHT },
 	{ TIFFTAG_RESOLUTIONUNIT, RESUNIT_INCH },
-	{ TIFFTAG_INKSET, INKSET_MULTIINK },
 	{ TIFFTAG_MINSAMPLEVALUE, 23 },
 	{ TIFFTAG_MAXSAMPLEVALUE, 241 },
+	{ TIFFTAG_INKSET, INKSET_MULTIINK },
 	{ TIFFTAG_NUMBEROFINKS, SPP },
 	{ TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT }
-	/*{ TIFFTAG_IMAGEDEPTH, 1 },
-	{ TIFFTAG_TILEDEPTH, 1 }*/
 };
 #define NSINGLETAGS   (sizeof(short_single_tags) / sizeof(short_single_tags[0]))
 
+static const struct {
+	const ttag_t	tag;
+	const uint16	values[2];
+} short_paired_tags[] = {
+	{ TIFFTAG_PAGENUMBER, {1, 1} },
+	{ TIFFTAG_HALFTONEHINTS, {0, 255} },
+	{ TIFFTAG_DOTRANGE, {8, 16} },
+	{ TIFFTAG_YCBCRSUBSAMPLING, {2, 1} }
+};
+#define NPAIREDTAGS   (sizeof(short_paired_tags) / sizeof(short_paired_tags[0]))
+
 int
-main(int argc, char **argv)
+main()
 {
 	TIFF		*tif;
-	int		i;
-	unsigned char	buf[3] = { 0, 127, 255 };
+	size_t		i;
+	unsigned char	buf[SPP] = { 0, 127, 255 };
 
 	/* Test whether we can write tags. */
 	tif = TIFFOpen(filename, "w");
@@ -116,14 +123,24 @@ main(int argc, char **argv)
 	for (i = 0; i < NSINGLETAGS; i++) {
 		if (!TIFFSetField(tif, short_single_tags[i].tag,
 				  short_single_tags[i].value)) {
-			fprintf(stderr, "Can't set tag %d.\n",
-				(int)short_single_tags[i].tag);
+			fprintf(stderr, "Can't set tag %lu.\n",
+				(unsigned long)short_single_tags[i].tag);
+			goto failure;
+		}
+	}
+
+	for (i = 0; i < NPAIREDTAGS; i++) {
+		if (!TIFFSetField(tif, short_paired_tags[i].tag,
+				  short_paired_tags[i].values[0],
+				  short_paired_tags[i].values[1])) {
+			fprintf(stderr, "Can't set tag %lu.\n",
+				(unsigned long)short_paired_tags[i].tag);
 			goto failure;
 		}
 	}
 
 	/* Write dummy pixel data. */
-	if (!TIFFWriteScanline(tif, buf, 0, 0) < 0) {
+	if (TIFFWriteScanline(tif, buf, 0, 0) == -1) {
 		fprintf (stderr, "Can't write image data.\n");
 		goto failure;
 	}
@@ -164,6 +181,12 @@ main(int argc, char **argv)
 			goto failure;
 	}
 
+	for (i = 0; i < NPAIREDTAGS; i++) {
+		if (CheckShortPairedField(tif, short_paired_tags[i].tag,
+					  short_paired_tags[i].values) < 0)
+			goto failure;
+	}
+
 	TIFFClose(tif);
 	
 	/* All tests passed; delete file and exit with success status. */
@@ -171,17 +194,12 @@ main(int argc, char **argv)
 	return 0;
 
 failure:
-	/* Something goes wrong; close file and return unsuccessful status. */
+	/* 
+	 * Something goes wrong; close file and return unsuccessful status.
+	 * Do not remove the file for further manual investigation.
+	 */
 	TIFFClose(tif);
-	unlink(filename);
 	return 1;
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */
-/*
- * Local Variables:
- * mode: c
- * c-basic-offset: 8
- * fill-column: 78
- * End:
- */

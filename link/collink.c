@@ -358,8 +358,8 @@ struct _clink {
 	int wphack;		/* 0 = off, 1 = hack to map input wp to output wp, 2 = to hwp[] */
 	int rgbbkhack;	/* 0 = off, 1 = hack to map input bp to output bp  (RGB -> RGB only) */
 	double hwp[3];	/* hack destination white point in PCS space */
-	int wphacked;	/* Operation flag, set nz if white point was translated */
-	int bkhacked;	/* Operation flag, set nz if black was translated */
+	int wphacked;	/* Operation flag, set > 0 if white point was translated */
+	int bkhacked;	/* Operation flag, set > 0 if black was translated */
 	int rel_oride;	/* Relative override flag */
 
 	icmFile *abs_fp;	/* Abstract profile transform */
@@ -1058,7 +1058,11 @@ void devip_devop(void *cntx, double *out, double *in) {
 	     && win[1] < thr
 	     && win[2] < thr) {
 			rgbbktrig = 1;
-			p->bkhacked++;
+			if (clip == 0)			/* Don't count zero's caused by video input clipping */
+				p->bkhacked++;
+#ifdef DEBUG
+		DEBUGCND printf("black hack triggerted on dev %s clip 0x%x\n",icmPdv(p->in.chan, win),clip);
+#endif
 		}
 	}
 
@@ -1201,7 +1205,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 		dd = sqrt(dd);
 
 		if (dd < 1.0) {		/* Triggered withing 1 delta E */
-			p->wphacked++;
+			if (clip == 0)			/* Don't count zero's white caused by video input clipping */
+				p->wphacked++;
 			wptrig = 1;
 			if (p->wphack == 2) {
 				for (e = 0; e < 3; e++)		/* Map input white to given white */
@@ -1850,6 +1855,7 @@ main(int argc, char *argv[]) {
 	li.pcs2k = NULL;
 	li.wphack = 0;
 	li.wphacked = 0;
+	li.bkhacked = 0;
 	li.abs_luo = NULL;					/* No abstract */
 	li.xyzscale = 1.0;					/* No XYZ scaling */
 	li.hwp[0] = li.hwp[1] = li.hwp[2] = 0.0;
@@ -1934,29 +1940,29 @@ main(int argc, char *argv[]) {
 
 			/* Manufacturer description string */
 			else if (argv[fa][1] == 'A') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to manufacturer description flag -A");
+				fa = nfa;
 				xpi.deviceMfgDesc = na;
 			}
 
 			/* Model description string */
 			else if (argv[fa][1] == 'M') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to model description flag -M");
+				fa = nfa;
 				xpi.modelDesc = na;
 			}
 
 			/* Profile Description */
 			else if (argv[fa][1] == 'D') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to profile description flag -D");
+				fa = nfa;
 				xpi.profDesc = na;
 			}
 
 			/* Copyright string */
 			else if (argv[fa][1] == 'C') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to copyright flag -C");
+				fa = nfa;
 				xpi.copyright = na;
 			}
 
@@ -2015,8 +2021,8 @@ main(int argc, char *argv[]) {
 
 			/* Quality */
 			else if (argv[fa][1] == 'q') {
-				fa = nfa;
 				if (na == NULL) usage("Quality flag (-q) needs an argument");
+				fa = nfa;
     			switch (na[0]) {
 					case 'f':				/* fast */
 					case 'l':
@@ -2045,8 +2051,8 @@ main(int argc, char *argv[]) {
 			/* CLUT resolution override */
 			else if (argv[fa][1] == 'r') {
 				int rr;
-				fa = nfa;
 				if (na == NULL) usage("Resolution flag (-r) needs an argument");
+				fa = nfa;
 				rr = atoi(na);
 				if (rr < 1 || rr > 256) usage("Resolution flag (-r) argument out of range (%d)",rr);
 				li.clutres = rr;
@@ -2062,12 +2068,12 @@ main(int argc, char *argv[]) {
 			/* Calibration curves */
 			else if (argv[fa][1] == 'a'
 			     || argv[fa][1] == 'H') {
-				if (na == NULL) usage("Expected calibration filename after -%c",argv[fa][1]);
-				strncpy(cal_name,na,MAXNAMEL); cal_name[MAXNAMEL] = '\000';
 				addcal = 1;
 				if (argv[fa][1] == 'H')
 					addcal = 2;
+				if (na == NULL) usage("Expected calibration filename after -%c",argv[fa][1]);
 				fa = nfa;
+				strncpy(cal_name,na,MAXNAMEL); cal_name[MAXNAMEL] = '\000';
 			}
 
 			/* Simple mode */
@@ -2083,7 +2089,6 @@ main(int argc, char *argv[]) {
 				if (argv[fa][1] == 'G') {
 					li.mode = 2;
 				}
-
 				if (na != NULL) {	/* Found an optional source gamut */
 					fa = nfa;
 					strncpy(sgam_name,na,MAXNAMEL); sgam_name[MAXNAMEL] = '\000';
@@ -2110,8 +2115,8 @@ main(int argc, char *argv[]) {
 
 			/* Input profile Intent or Mapping mode intent */
 			else if (argv[fa][1] == 'i') {
-				fa = nfa;
 				if (na == NULL) usage("Input intent flag (-i) needs an argument");
+				fa = nfa;
 				/* Record it for simple mode */
     			switch (na[0]) {
 					case 'p':
@@ -2141,8 +2146,8 @@ main(int argc, char *argv[]) {
 
 			/* Output profile Intent */
 			else if (argv[fa][1] == 'o') {
-				fa = nfa;
 				if (na == NULL) usage("Output intent flag (-o) needs an argument");
+				fa = nfa;
     			switch (na[0]) {
 					case 'p':
 					case 'P':
@@ -2175,7 +2180,6 @@ main(int argc, char *argv[]) {
 					vc = &ovc;
 				}
 
-				fa = nfa;
 				if (na == NULL) usage("Viewing conditions flag (-%c) needs an argument",argv[fa][1]);
 #ifdef NEVER
 				if (na[0] >= '0' && na[0] <= '9') {
@@ -2246,17 +2250,18 @@ main(int argc, char *argv[]) {
 				} else
 					usage("Viewing condition (-%c) unrecognised sub flag '%c'",argv[fa][1],na[0]);
 				vcset = 1;			/* Viewing conditions were set by user */
+				fa = nfa;
 			}
 
 			/* Inking rule */
 			else if (argv[fa][1] == 'k'
 				  || argv[fa][1] == 'K') {
-				fa = nfa;
-				if (na == NULL) usage("Inking rule flag (-k) needs an argument");
 				if (argv[fa][1] == 'k')
 					li.out.locus = 0;			/* Use K value target */
 				else
 					li.out.locus = 1;			/* Use K locus target */
+				if (na == NULL) usage("Inking rule flag (-k) needs an argument");
+				fa = nfa;
     			switch (na[0]) {
 					case 't':
 					case 'T':
@@ -2341,8 +2346,8 @@ main(int argc, char *argv[]) {
 			/* Input ink limits */
 			else if (argv[fa][1] == 't') {
 				int tlimit;
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -t");
+				fa = nfa;
 				tlimit = atoi(na);
 				if (tlimit >= 0)
 					li.in.ink.tlimit = tlimit/100.0;
@@ -2351,8 +2356,8 @@ main(int argc, char *argv[]) {
 			}
 			else if (argv[fa][1] == 'T') {
 				int klimit;
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -T");
+				fa = nfa;
 				klimit = atoi(na);
 				if (klimit >= 0)
 					li.in.ink.klimit = klimit/100.0;
@@ -2362,8 +2367,8 @@ main(int argc, char *argv[]) {
 			/* Output ink limits */
 			else if (argv[fa][1] == 'l') {
 				int tlimit;
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -l");
+				fa = nfa;
 				tlimit = atoi(na);
 				if (tlimit >= 0)
 					li.out.ink.tlimit = tlimit/100.0;
@@ -2374,8 +2379,8 @@ main(int argc, char *argv[]) {
 			}
 			else if (argv[fa][1] == 'L') {
 				int klimit;
-				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -L");
+				fa = nfa;
 				klimit = atoi(na);
 				if (klimit >= 0)
 					li.out.ink.klimit = klimit/100.0;
@@ -2387,8 +2392,8 @@ main(int argc, char *argv[]) {
 
 			/* 3DLut output */
 			else if (argv[fa][1] == '3') {
-				fa = nfa;
 				if (na == NULL) usage("3dLut format flag (-3) needs an argument");
+				fa = nfa;
     			switch (na[0]) {
 					case 'e':
 						li.tdlut = 1;
@@ -2406,8 +2411,8 @@ main(int argc, char *argv[]) {
 
 			/* Intent modifier */
 			else if (argv[fa][1] == 'I') {
-				fa = nfa;
 				if (na == NULL) usage("Intent modifier flag (-I) needs an argument");
+				fa = nfa;
 				
     			switch (na[0]) {
 					case 'b':
@@ -5007,20 +5012,20 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 	} else {
 		h[0] = '3'; h[1] = 'D'; h[2] = 'L'; h[3] = 'T'; of += 4;	/* Signature */
 	}
-	write_ORD32_le(1, h + of); of += 4;								/* File format version */
+	write_ORD32_le(h + of, 1); of += 4;								/* File format version */
 	strncpy((char *)h+of, "ArgyllCMS collink", 31); of += 32;				/* Creation program */
-	write_ORD64_le(ARGYLL_VERSION, h + of);	of += 8;				/* Program version */
-	write_ORD32_le(8, h + of); of += 4;								/* input bit depth */
-	write_ORD32_le(8, h + of); of += 4;
-	write_ORD32_le(8, h + of); of += 4;
-	write_ORD32_le(li->in.tvenc >= 3 ? 1 : 0, h + of); of += 4;			/* Input BGR or cCbCr enc */
+	write_ORD64_le(h + of, ARGYLL_VERSION);	of += 8;				/* Program version */
+	write_ORD32_le(h + of, 8); of += 4;								/* input bit depth */
+	write_ORD32_le(h + of, 8); of += 4;
+	write_ORD32_le(h + of, 8); of += 4;
+	write_ORD32_le(h + of, li->in.tvenc >= 3 ? 1 : 0); of += 4;			/* Input BGR or cCbCr enc */
 	if (dov2)
-		write_ORD32_le(li->in.tvenc != 0 ? 1 : 0, h + of), of += 4;		/* Range */
-	write_ORD32_le(16, h + of); of += 4;								/* Output bit depth */
-	write_ORD32_le(li->out.tvenc >= 3 ? 1 : 0, h + of); of += 4;		/* Output BGR or YCbCr encoding */
+		write_ORD32_le(h + of, li->in.tvenc != 0 ? 1 : 0), of += 4;		/* Range */
+	write_ORD32_le(h + of, 16); of += 4;								/* Output bit depth */
+	write_ORD32_le(h + of, li->out.tvenc >= 3 ? 1 : 0); of += 4;		/* Output BGR or YCbCr encoding */
 	if (dov2)
-		write_ORD32_le(li->out.tvenc != 0 ? 1 : 0, h + of), of += 4;	/* Range */
-	write_ORD32_le(0x200, h + of); of += 4;								/* Bytes to parameters */
+		write_ORD32_le(h + of, li->out.tvenc != 0 ? 1 : 0), of += 4;	/* Range */
+	write_ORD32_le(h + of, 0x200); of += 4;								/* Bytes to parameters */
 	hoff = 0x200;
 	hoff += sprintf((char *)h+hoff, "Input_Primaries %f %f %f %f %f %f %f %f\r\n",	/* For V0.66+ */
 	                        rgbw[0][1], rgbw[0][2], rgbw[1][1], rgbw[1][2],
@@ -5035,12 +5040,12 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 		hoff += sprintf((char *)h+hoff, "Output_Range 0 255\r\n");
 	else
 		hoff += sprintf((char *)h+hoff, "Output_Range 16 235\r\n");
-	write_ORD32_le(hoff - 0x200 + 1, h + of); of += 4;				/* Bytes of parameter data + nul */
-	write_ORD32_le(0x4000, h + of); of += 4;						/* Bytes to clut data */
-	write_ORD32_le(0, h + of); of += 4;								/* No compression */
+	write_ORD32_le(h + of, hoff - 0x200 + 1); of += 4;				/* Bytes of parameter data + nul */
+	write_ORD32_le(h + of, 0x4000); of += 4;						/* Bytes to clut data */
+	write_ORD32_le(h + of, 0); of += 4;								/* No compression */
 	clutsize = (1 << (3 * 8)) * 3 * 2;
-	write_ORD32_le(clutsize, h + of); of += 4;						/* Compressed clut size */
-	write_ORD32_le(clutsize, h + of); of += 4;						/* Uncompressed clut size */
+	write_ORD32_le(h + of, clutsize); of += 4;						/* Compressed clut size */
+	write_ORD32_le(h + of, clutsize); of += 4;						/* Uncompressed clut size */
 
 	if (li->verb)
 		printf("Writing MadVR 3dLut '%s'\n",fname);
@@ -5100,14 +5105,14 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 			}
 
 			if (li->out.tvenc >= 3) {	/* YCbCr order is YCbCr */
-				write_ORD16_le(iout[0], buf + 0);
-				write_ORD16_le(iout[1], buf + 2);
-				write_ORD16_le(iout[2], buf + 4);
+				write_ORD16_le(buf + 0, iout[0]);
+				write_ORD16_le(buf + 2, iout[1]);
+				write_ORD16_le(buf + 4, iout[2]);
 
 			} else {					/* RGB order is BGR */
-				write_ORD16_le(iout[2], buf + 0);
-				write_ORD16_le(iout[1], buf + 2);
-				write_ORD16_le(iout[0], buf + 4);
+				write_ORD16_le(buf + 0, iout[2]);
+				write_ORD16_le(buf + 2, iout[1]);
+				write_ORD16_le(buf + 4, iout[0]);
 			}
 
 			if (fp->write(fp, buf, 1, 6) != 6)
@@ -5143,16 +5148,16 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 		      + ('a' << 8) 
 		      + ('l' << 16) 
 		      + ('1' << 24);  
-		write_ORD32_le(magic, of); of += 4;		/* Magic number */
+		write_ORD32_le(of, magic); of += 4;		/* Magic number */
 
 		vers = 1;
-		write_ORD32_le(vers, of); of += 4;		/* Format version */
+		write_ORD32_le(of, vers); of += 4;		/* Format version */
 
 		entries = 256;
-		write_ORD32_le(entries, of); of += 4;	/* Number of entries per channel */
+		write_ORD32_le(of, entries); of += 4;	/* Number of entries per channel */
 
 		depth = 2;
-		write_ORD32_le(depth, of); of += 4;		/* Depth per entry in bytes */
+		write_ORD32_le(of, depth); of += 4;		/* Depth per entry in bytes */
 
 		for (j = 0; j < 3; j++) {
 			for (i = 0; i < 256; i++) {
@@ -5161,7 +5166,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 				if (li->addcal == 2)
 					v = li->cal->interp_ch(li->cal, j, v);
 				val = (int)(v * 65535.0 + 0.5);
-				write_ORD16_le(val, of); of += 2;
+				write_ORD16_le(of, val); of += 2;
 			}
 		}
 		if (fp->write(fp, buf, 1, sizeof(buf)) != sizeof(buf))

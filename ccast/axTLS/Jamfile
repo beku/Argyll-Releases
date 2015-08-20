@@ -3,11 +3,9 @@ PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
 #PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
 PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
-# Copy the configuration file
 if $(NT) {
 	DEFINES += WIN32 ;
 } else {
-#	File conf.h :     tiffconf.vc.h ;
 	if $(OS) = MACOSX {
 	} else if $(OS) = FREEBSD {
 	} else {

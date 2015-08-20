@@ -250,6 +250,7 @@ main(int argc, char *argv[]) {
 				if (na == NULL) {
 					verb = 2;
 				} else {
+					fa = nfa;
 					if (na[0] == '0')
 						verb = 0;
 					else if (na[0] == '1')
@@ -258,7 +259,6 @@ main(int argc, char *argv[]) {
 						verb = 2;
 					else
 						usage("Illegal verbosity level");
-					fa = nfa;
 				}
 			}
 
@@ -269,6 +269,7 @@ main(int argc, char *argv[]) {
 			/* Plot start or end override */
 			else if (argv[fa][1] == 'G') {
 				if (na == NULL) usage("No parameter after flag -G");
+				fa = nfa;
 				if (na[0] == 's' || na[0] == 'S') {
 					if (sscanf(na+1,":%lf:%lf:%lf",&pstart[0],&pstart[1],&pstart[2]) != 3)
 						usage("Unrecognised parameters after -Gs");
@@ -277,7 +278,6 @@ main(int argc, char *argv[]) {
 						usage("Unrecognised parameters after -Ge");
 				} else
 					usage("Unrecognised parameters after -G");
-				fa = nfa;
 			}
 			/* Actual target values */
 			else if (argv[fa][1] == 'a') {
@@ -302,15 +302,16 @@ main(int argc, char *argv[]) {
 			/* Device scale */
 			else if (argv[fa][1] == 's') {
 				if (na == NULL) usage("No parameter after flag -s");
+				fa = nfa;
 				scale = atof(na);
 				if (scale <= 0.0) usage("Illegal scale value");
-				fa = nfa;
 			}
 			/* Video RGB encoding */
 			else if (argv[fa][1] == 'e'
 			      || argv[fa][1] == 'E') {
 				int enc;
 				if (na == NULL) usage("Video encodong flag (-e/E) needs an argument");
+				fa = nfa;
     			switch (na[0]) {
 					case 'n':				/* Normal */
 						enc = 0;
@@ -340,12 +341,12 @@ main(int argc, char *argv[]) {
 					in_tvenc = enc;
 				else
 					out_tvenc = enc;
-				fa = nfa;
 			}
 
 			/* function */
 			else if (argv[fa][1] == 'f') {
 				if (na == NULL) usage("No parameter after flag -f");
+				fa = nfa;
     			switch (na[0]) {
 					case 'f':
 					case 'F':
@@ -376,12 +377,12 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -f");
 				}
-				fa = nfa;
 			}
 
 			/* Intent */
 			else if (argv[fa][1] == 'i') {
 				if (na == NULL) usage("No parameter after flag -i");
+				fa = nfa;
     			switch (na[0]) {
 					case 'p':
 						intent = icPerceptual;
@@ -406,12 +407,12 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -i");
 				}
-				fa = nfa;
 			}
 
 			/* PCS override */
 			else if (argv[fa][1] == 'p') {
 				if (na == NULL) usage("No parameter after flag -i");
+				fa = nfa;
     			switch (na[0]) {
 					case 'x':
 						pcsor = icSigXYZData;
@@ -466,12 +467,12 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -i");
 				}
-				fa = nfa;
 			}
 
 			/* Search order */
 			else if (argv[fa][1] == 'o') {
 				if (na == NULL) usage("No parameter after flag -o");
+				fa = nfa;
     			switch (na[0]) {
 					case 'n':
 					case 'N':
@@ -484,13 +485,13 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -o");
 				}
-				fa = nfa;
 			}
 
 			/* Inking rule */
 			else if (argv[fa][1] == 'k'
 			      || argv[fa][1] == 'K') {
 				if (na == NULL) usage("No parameter after flag -k");
+				fa = nfa;
 				if (argv[fa][1] == 'k')
 					locus = 0;			/* K value target */
 				else
@@ -574,19 +575,18 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Unknown parameter after flag -k");
 				}
-				fa = nfa;
 			}
 
 			else if (argv[fa][1] == 'l') {
 				if (na == NULL) usage("No parameter after flag -l");
-				tlimit = atoi(na)/100.0;
 				fa = nfa;
+				tlimit = atoi(na)/100.0;
 			}
 
 			else if (argv[fa][1] == 'L') {
 				if (na == NULL) usage("No parameter after flag -L");
-				klimit = atoi(na)/100.0;
 				fa = nfa;
+				klimit = atoi(na)/100.0;
 			}
 
 #ifdef SPTEST
@@ -600,6 +600,7 @@ main(int argc, char *argv[]) {
 			/* Viewing conditions */
 			else if (argv[fa][1] == 'c') {
 				if (na == NULL) usage("No parameter after flag -c");
+				fa = nfa;
 #ifdef NEVER
 				if (na[0] >= '0' && na[0] <= '9') {
 					vc_e = atoi(na);
@@ -659,7 +660,6 @@ main(int argc, char *argv[]) {
 						usage("Unrecognised parameters after -cg");
 				} else
 					usage("Unrecognised parameters after -c");
-				fa = nfa;
 			}
 
 			else 

@@ -2252,7 +2252,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	/* Do the appropriate calibration */
 	if (*calt & inst_calt_emis_offset) {
 
-		if (*calc != inst_calc_man_em_dark) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_man_em_dark) {
 			*calc = inst_calc_man_em_dark;
 			return inst_cal_setup;
 		}
@@ -2797,7 +2797,7 @@ extern kleink10 *new_kleink10(icoms *icom, instType itype) {
 	p->del               = k10_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 	p->dtech = disptech_unknown;
 
 	amutex_init(p->lock);

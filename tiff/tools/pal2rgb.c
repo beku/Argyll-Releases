@@ -1,4 +1,4 @@
-/* $Id: pal2rgb.c,v 1.10.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: pal2rgb.c,v 1.14 2014-12-21 20:04:31 erouault Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -33,6 +33,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"
@@ -361,14 +365,14 @@ static struct cpTag {
     { TIFFTAG_DATETIME,			1, TIFF_ASCII },
     { TIFFTAG_ARTIST,			1, TIFF_ASCII },
     { TIFFTAG_HOSTCOMPUTER,		1, TIFF_ASCII },
-    { TIFFTAG_WHITEPOINT,		1, TIFF_RATIONAL },
+    { TIFFTAG_WHITEPOINT,		2, TIFF_RATIONAL },
     { TIFFTAG_PRIMARYCHROMATICITIES,	(uint16) -1,TIFF_RATIONAL },
     { TIFFTAG_HALFTONEHINTS,		2, TIFF_SHORT },
     { TIFFTAG_BADFAXLINES,		1, TIFF_LONG },
     { TIFFTAG_CLEANFAXDATA,		1, TIFF_SHORT },
     { TIFFTAG_CONSECUTIVEBADFAXLINES,	1, TIFF_LONG },
     { TIFFTAG_INKSET,			1, TIFF_SHORT },
-    { TIFFTAG_INKNAMES,			1, TIFF_ASCII },
+    /*{ TIFFTAG_INKNAMES,			1, TIFF_ASCII },*/ /* Needs much more complicated logic. See tiffcp */
     { TIFFTAG_DOTRANGE,			2, TIFF_SHORT },
     { TIFFTAG_TARGETPRINTER,		1, TIFF_ASCII },
     { TIFFTAG_SAMPLEFORMAT,		1, TIFF_SHORT },

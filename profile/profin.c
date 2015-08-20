@@ -270,6 +270,7 @@ make_input_icc(
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
+	int emis,				/* emissive reference data */
 	int spec,				/* Use spectral data flag */
 	icxIllumeType illum,	/* Spectral illuminant */
 	xspect *cust_illum,		/* Possible custom illumination */
@@ -678,15 +679,15 @@ make_input_icc(
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
 			error ("Input file doesn't contain field RGB_R");
 		if (icg->t[0].ftype[ri] != r_t)
-			error ("Field RGB_R is wrong type - corrupted file ?");
+			error ("Field RGB_R is wrong type - expect float");
 		if ((gi = icg->find_field(icg, 0, "RGB_G")) < 0)
 			error ("Input file doesn't contain field RGB_G");
 		if (icg->t[0].ftype[gi] != r_t)
-			error ("Field RGB_G is wrong type - corrupted file ?");
+			error ("Field RGB_G is wrong type - expect float");
 		if ((bi = icg->find_field(icg, 0, "RGB_B")) < 0)
 			error ("Input file doesn't contain field RGB_B");
 		if (icg->t[0].ftype[bi] != r_t)
-			error ("Field RGB_B is wrong type - corrupted file ?");
+			error ("Field RGB_B is wrong type - expect float");
 
 		if (spec == 0) {        /* Using instrument tristimulous value */
 
@@ -694,28 +695,28 @@ make_input_icc(
 				if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
 					error ("Input file doesn't contain field LAB_L");
 				if (icg->t[0].ftype[Xi] != r_t)
-					error ("Field LAB_L is wrong type - corrupted file ?");
+					error ("Field LAB_L is wrong type - expect float");
 				if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
 					error ("Input file doesn't contain field LAB_A");
 				if (icg->t[0].ftype[Yi] != r_t)
-					error ("Field LAB_A is wrong type - corrupted file ?");
+					error ("Field LAB_A is wrong type - expect float");
 				if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
 					error ("Input file doesn't contain field LAB_B");
 				if (icg->t[0].ftype[Zi] != r_t)
-					error ("Field LAB_B is wrong type - corrupted file ?");
+					error ("Field LAB_B is wrong type - expect float");
 			} else {
 				if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
 					error ("Input file doesn't contain field XYZ_X");
 				if (icg->t[0].ftype[Xi] != r_t)
-					error ("Field XYZ_X is wrong type - corrupted file ?");
+					error ("Field XYZ_X is wrong type - expect float");
 				if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
 					error ("Input file doesn't contain field XYZ_Y");
 				if (icg->t[0].ftype[Yi] != r_t)
-					error ("Field XYZ_Y is wrong type - corrupted file ?");
+					error ("Field XYZ_Y is wrong type - expect float");
 				if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
 					error ("Input file doesn't contain field XYZ_Z");
 				if (icg->t[0].ftype[Zi] != r_t)
-					error ("Field XYZ_Z is wrong type - corrupted file ?");
+					error ("Field XYZ_Z is wrong type - expect float");
 			}
 
 			for (i = 0; i < npat; i++) {
@@ -773,9 +774,16 @@ make_input_icc(
 
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (icg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 
 			/* Create a spectral conversion object */
+			if (emis) {
+				illum = icxIT_none;
+				cust_illum = NULL;
+			}
 			if ((sp2cie = new_xsp2cie(illum, cust_illum, observ, NULL,
 			                          wantLab ? icSigLabData : icSigXYZData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
@@ -788,7 +796,7 @@ make_input_icc(
 				if (tpat[i].p[0] > 1.0
 				 || tpat[i].p[1] > 1.0
 				 || tpat[i].p[2] > 1.0) {
-					error("Device value field exceeds 100.0!");
+					error("Patch %d device value field exceeds 100.0!",i+1);
 				}
 
 				/* Read the spectral values for this patch */

@@ -119,6 +119,7 @@
 #define PNTR UINT_PTR
 
 #define vsnprintf _vsnprintf
+#define snprintf _snprintf
 
 #define PF64PREC "I64"				/* printf format precision specifier */
 #define CF64PREC "LL"				/* Constant precision specifier */
@@ -1466,6 +1467,7 @@ struct _icc {
 	int          (*set_version)(struct _icc *p, icmICCVersion ver);
 	                                                       /* For creation, use ICC V4 etc. */
 	unsigned int (*get_size)(struct _icc *p);				/* Return total size needed, 0 = err. */
+															/* Will add auto tags ('arts' etc.) */
 	int          (*read)(struct _icc *p, icmFile *fp, unsigned int of);	/* Returns error code */
 	int          (*read_x)(struct _icc *p, icmFile *fp, unsigned int of, int take_fp);
 	int          (*write)(struct _icc *p, icmFile *fp, unsigned int of);/* Returns error code */
@@ -1627,6 +1629,7 @@ struct _icmMD5 {
   /* Private: */
 //	icc *icp;				/* ICC we're part of */
 	icmAlloc *al;			/* Heap allocator */
+	int del_al;				/* NZ if heap allocator should be deleted */
 	int fin;				/* Flag, nz if final has been called */
 	ORD32 sum[4];			/* Current/final checksum */
 	unsigned int tlen;		/* Total length added in bytes */
@@ -1641,9 +1644,11 @@ struct _icmMD5 {
 }; typedef struct _icmMD5 icmMD5;
 
 /* Create a new MD5 checksumming object, with a reset checksum value */
-/* Return it or NULL if there is an error */
-icmMD5 *new_icmMD5(icmAlloc *al);
+/* Return it or NULL if there is an error. */
+extern ICCLIB_API icmMD5 *new_icmMD5_a(icmAlloc *al);
 
+/* If SEPARATE_STD not defined: */
+extern ICCLIB_API icmMD5 *new_icmMD5(void);
 
 /* Implementation of file access class to compute an MD5 checksum */
 struct _icmFileMD5 {
@@ -1787,10 +1792,10 @@ double icmNorm33sq(double in1[3], double in0[3]);
 /* Compute the norm (length) of of a vector defined by two points */
 double icmNorm33(double in1[3], double in0[3]);
 
-/* Scale a two point vector by the given ratio. in0[] is the origin. */
+/* Scale a vector from 0->1 by the given ratio. in0[] is the origin. */
 void icmScale33(double out[3], double in1[3], double in0[3], double rat);
 
-/* Normalise a two point vector to the given length. */
+/* Normalise a vector from 0->1 to the given length. */
 /* The new location of in1[] is returned in out[], in0[] is the origin. */
 /* Return nz if not normalisable */
 int icmNormalize33(double out[3], double in1[3], double in0[3], double len);
@@ -1855,9 +1860,14 @@ void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], doub
 /* return nz if there is no intersection */
 int icmVecPlaneIsect(double isect[3], double pl_const, double pl_norm[3], double ve_1[3], double ve_0[3]);
 
+/* Compute the closest point on a line to a point. */
+/* Return closest points and parameter values if not NULL. */
+int icmLinePointClosest(double ca[3], double *pa,
+                       double la0[3], double la1[3], double pp[3]);
+
 /* Compute the closest points between two lines a and b. */
 /* Return closest points and parameter values if not NULL. */
-/* Return nz if they are paralel. */
+/* Return nz if they are parallel. */
 int icmLineLineClosest(double ca[3], double cb[3], double *pa, double *pb,
                        double la0[3], double la1[3], double lb0[3], double lb1[3]);
 

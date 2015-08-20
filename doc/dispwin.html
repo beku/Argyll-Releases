@@ -51,6 +51,7 @@ Verbose
 
 
 
+
         mode<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;</span><a style="font-family: monospace;"
@@ -65,6 +66,7 @@ Verbose
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 and
 optionally
+
 
 
 
@@ -100,9 +102,11 @@ X11]
 
 
 
+
         Choose the display from the following list (default 1)<br>
       </span></font><span style="font-family: monospace;">&nbsp;<a
         href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -124,6 +128,7 @@ X11]
     <tt>&nbsp;</tt><tt><a href="#dcc">-dcc[:n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
     </tt><tt></tt><tt>Display via n'th ChromeCast (default 1, ? for
       list)</tt><br style="font-family: monospace;">
     <font size="-1"><span style="font-family: monospace;"></span><span
@@ -133,6 +138,7 @@ X11]
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
+
 
 
 
@@ -168,8 +174,10 @@ ss:
 
 
 
+
         = half, 1.0 = normal, 2.0 = double etc.<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -202,10 +210,12 @@ whole
 
 
 
+
         screen with black background</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span></font><font
       size="-1"><span style="font-family: monospace;"><a href="#E">-E</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -248,12 +258,14 @@ just
 
 
 
+
         video LUT loading &amp; Beeps<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#n">-n</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Test
 native
+
 
 
 
@@ -288,12 +300,14 @@ the
 
 
 
+
         currently loaded Video LUT to 'filename'<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#c">-c</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 a
+
 
 
 
@@ -331,10 +345,12 @@ that
 
 
 
+
         calfile/profile cal. is currently loaded in LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#I">-I</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -370,6 +386,7 @@ that
 
 
 
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Un-install profile for display<br>
         &nbsp;<a href="#S">-S d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -390,10 +407,12 @@ the
 
 
 
+
         install/uninstall scope for OS X [nlu] or Vista [lu]<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 d
 is
+
 
 
 
@@ -429,11 +448,13 @@ is
 
 
 
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Load installed profiles cal. into Video LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#X">-<font size="-1">X</font></a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -471,6 +492,7 @@ debug
 
 
 
+
         diagnostics to stderr</span></font><font size="-1"><span
         style="font-family: monospace;"></span></font><font size="-1"><span
         style="font-family: monospace;"></span><span style="font-family:
@@ -481,6 +503,7 @@ debug
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 display
+
 
 
 
@@ -567,6 +590,7 @@ the
 
 
 
+
     difficulty cause by TwinView and MergedFB in X11 based systems, you
     can optionally specify a separate display number after the display
     that is going to be used to present test patches, for accessing the
@@ -605,13 +629,11 @@ the
     <br>
     <a name="dmadvr"></a><span style="font-weight: bold;">-dmadvr</span>
     [MSWin only] causes test patches to be displayed using the MadVR
-    video renderer. Note that you may have to start the video playback
-    software and load a video clip in pause for this to work. MadVR
-    rendering does not need or support VideoLUT access, but be aware
-    that the state of the Graphics Card VideoLUTs may affect the results
-    (check this using dispwin). Test patch colors <u>will</u> be
-    processed by the MadVR 3dLut by default (see <a href="#n">-n</a>
-    flag).<br>
+    video renderer. Note that will have to start <b>MadTPG</b> before
+    running dispread, and that while you can adjust the "Test Pattern
+    Configuration" controls, you should <u>not</u> normally alter the
+    "Existing Calibration" controls, as dispread will set these
+    appropriately. See <a href="#n">-n</a> flag.<br>
     <br>
     <a name="dcc"></a><span style="font-weight: bold;">-dcc</span> or <b>-dcc:<i>no</i></b>
     causes test patches to be displayed using and available <a
@@ -623,6 +645,7 @@ the
     but should be accurate within ± 1 bit. You may have to modify any
     firewall to permit port 8081 to be accessed on your machine if it
     falls back to the Default receiver (see <a href="Installing.html">installation
+
       instructions</a> for your platform).<br>
     <br>
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>

@@ -119,13 +119,21 @@ int main(int argc, char ** argv) {
 
 	/* Call the real main() in another thread */
 	int rv;
+	pthread_attr_t stackSzAtrbt;
 	pthread_t thid;
 	g_argc = argc;
 	g_argv = argv;
 
 	ui_initialized = 1;
 
-	if ((rv = pthread_create(&thid, NULL, callMain, (void *)NULL)) != 0) {
+	/* Default stack size is 512K - this is a bit small - raise it */
+	if ((rv = pthread_attr_init(&stackSzAtrbt)) != 0
+	 || (rv = pthread_attr_setstacksize(&stackSzAtrbt, 4 * 1024 * 1024)) != 0) {
+		fprintf(stderr,"ui: thread_attr_setstacksize failed with %d\n",rv);
+		return -1;
+	}
+
+	if ((rv = pthread_create(&thid, &stackSzAtrbt, callMain, (void *)NULL)) != 0) {
 		fprintf(stderr,"ui: pthread_create failed with %d\n",rv);
 		return -1;
 	}

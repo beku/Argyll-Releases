@@ -2,6 +2,65 @@
 Argyll CMS change log
 =====================
 
+Version 1.8.0 (20th August 2015)
+-------------
+
+* Added support for "EMISINPUT" type .ti3 file.
+
+* Build using OpenSSL rather than axTLS if it is built on Linux.
+
+* Added Added Television Lighting Consistency Index (EBU TLCI-2012 Qa)
+  to spotread and specplot output.
+
+* Added R9 value to CRI value in spotread and specplot output.
+
+* Added support for the Image Engineering EX1 spectroradiometer.
+
+* Added support for the SwatchMate Cube reflective colorimeter with
+  improved accuracy.
+
+* Fixed stack space problem in OS X UI programs by expanding
+  main thread proxy to have 8MB instead of the default 512K.
+
+* Updated built in libtiff to V4.0.4beta
+
+* Changed CGATS format to not emit unknown keyword declaration ("KEYWORD")
+  by default.
+
+* Added inst_calc_cond_mask to inst.h to allow for flags in
+  calibration conditions. A consequence of this is that
+  calc needs to be masked with this when comparing against
+  a specific condition, and the inst_calc_optional_flag should
+  be cleared if it is set, before callint inst->calibrate() if
+  the user wants to proceed with a particular calibration.
+
+* Fixed bug with dispcal -e N
+
+* Fixed bug in xicclu -fg and -kp
+
+* Added dispcal -x x option to allow reading a chart and manually
+  entering the XYZ values.
+
+* Fix spyder4 & 5 bug where some display types were set as refresh
+  when they shouldn't be.
+
+* Fix collink "Warning :- RGB black hack trigger more than once!"
+  when -b is used with input video encoding (-e).
+
+* Changed colprof so that the default ICC description is the base
+  filename rather than the whole file path.
+
+* Fix technology type and display type selector "uniqueification" bug
+  that shows up in "ccxxmake -??".
+
+* Add OEM field to ccmx and ccss files to mark files that have
+  been installed from OEM disk, so that custom ccmx & ccss files
+  can be given suggested selector letter priority (+ ref/CRT.ccss).
+
+* Tweak CGATS write format to avoid scientific notation until the
+  numbers are bigger and smaller (i.e until e6 and e-6 are needed).
+
+
 Version 1.7.0  (1st May 2015)
 -------------
 

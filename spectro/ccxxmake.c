@@ -119,7 +119,7 @@ usage(int flag, char *diag, ...) {
 	fprintf(stderr,"usage: ccmxmake -t dtech [-options] output.ccmx\n");
 	fprintf(stderr," -v                Verbose mode\n");
 	fprintf(stderr," -S                Create CCSS rather than CCMX\n");
-	fprintf(stderr," -f file1.ti3[,file2.ti3]    Create from one or two .ti3 files rather than measure.\n");
+	fprintf(stderr," -f ref.ti3[,targ.ti3]  Create from one or two .ti3 files rather than measure.\n");
 #if defined(UNIX_X11)
 	fprintf(stderr," -display displayname   Choose X11 display name\n");
 	fprintf(stderr," -d n[,m]          Choose the display n from the following list (default 1)\n");
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
 	disppath *disp = NULL;				/* Display being used */
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
-	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
+	int fullscreen = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
 	int doccss = 0;						/* Create CCSS rather than CCMX */
@@ -441,9 +441,9 @@ int main(int argc, char *argv[]) {
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
-			/* Black background */
+			/* Full screen black background */
 			} else if (argv[fa][1] == 'F') {
-				blackbg = 1;
+				fullscreen = 1;
 
 			/* No initial calibration */
 			} else if (argv[fa][1] == 'N') {
@@ -651,6 +651,9 @@ int main(int argc, char *argv[]) {
 
 			if ((spi[j] = cgf->find_field(cgf, 0, buf)) < 0)
 				error("Input file '%s' doesn't contain field %s",innames[0],buf);
+
+			if (cgf->t[0].ftype[spi[j]] != r_t)
+				error("Field %s is wrong type - expect float",buf);
 		}
 
 		/* Transfer all the spectral values */
@@ -698,7 +701,7 @@ int main(int argc, char *argv[]) {
 			error("new_ccss() failed");
 
 		if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-		                 dtinfo->dtech, refrmode, uisel, refname, samples, npat)) {
+		                 dtinfo->dtech, refrmode, uisel, refname, 0, samples, npat)) {
 			error("set_ccss failed with '%s'\n",cc->err);
 		}
 		if(cc->write_ccss(cc, outname))
@@ -890,29 +893,29 @@ int main(int argc, char *argv[]) {
 					if ((xix = cgf->find_field(cgf, 0, "LAB_L")) < 0)
 						error("Input file '%s' doesn't contain field LAB_L",innames[n]);
 					if (cgf->t[0].ftype[xix] != r_t)
-						error("Field LAB_L is wrong type");
+						error("Field LAB_L is wrong type - expect float");
 					if ((yix = cgf->find_field(cgf, 0, "LAB_A")) < 0)
 						error("Input file '%s' doesn't contain field LAB_A",innames[n]);
 					if (cgf->t[0].ftype[yix] != r_t)
-						error("Field LAB_A is wrong type");
+						error("Field LAB_A is wrong type - expect float");
 					if ((zix = cgf->find_field(cgf, 0, "LAB_B")) < 0)
 						error("Input file '%s' doesn't contain field LAB_B",innames[n]);
 					if (cgf->t[0].ftype[zix] != r_t)
-						error("Field LAB_B is wrong type");
+						error("Field LAB_B is wrong type - expect float");
 
 				} else { 		/* Expect XYZ */
 					if ((xix = cgf->find_field(cgf, 0, "XYZ_X")) < 0)
 						error("Input file '%s' doesn't contain field XYZ_X",innames[n]);
 					if (cgf->t[0].ftype[xix] != r_t)
-						error("Field XYZ_X is wrong type");
+						error("Field XYZ_X is wrong type - expect float");
 					if ((yix = cgf->find_field(cgf, 0, "XYZ_Y")) < 0)
 						error("Input file '%s' doesn't contain field XYZ_Y",innames[n]);
 					if (cgf->t[0].ftype[yix] != r_t)
-						error("Field XYZ_Y is wrong type");
+						error("Field XYZ_Y is wrong type - expect float");
 					if ((zix = cgf->find_field(cgf, 0, "XYZ_Z")) < 0)
 						error("Input file '%s' doesn't contain field XYZ_Z",innames[n]);
 					if (cgf->t[0].ftype[zix] != r_t)
-						error("Field XYZ_Z is wrong type");
+						error("Field XYZ_Z is wrong type - expect float");
 				}
 
 				for (i = 0; i < npat; i++) {
@@ -964,7 +967,7 @@ int main(int argc, char *argv[]) {
 			error("new_ccmx() failed");
 
 		if (cc->create_ccmx(cc, description, colname, displayname, dtinfo->dtech,
-			                     refrmode, cbid, uisel, refname, npat, refs, cols)) {
+			                     refrmode, cbid, uisel, refname, 0, npat, refs, cols)) {
 			error("create_ccmx failed with '%s'\n",cc->err);
 		}
 		if (verb) {
@@ -1246,12 +1249,12 @@ int main(int argc, char *argv[]) {
 				if ((dr = new_disprd(&errc, icmps->get_path(icmps, comno),
 				                     fc, dtype, sdtype, 1, tele, nadaptive,
 				                     noinitcal, 0, highres, refrate, 3, NULL, NULL,
-					                 NULL, 0, disp, 0, blackbg,
+					                 NULL, 0, disp, 0, fullscreen,
 				                     override, webdisp, ccid,
 #ifdef NT
 					                 madvrdisp,
 #endif
-					                 ccallout, NULL,
+					                 ccallout, NULL, 0,
 					                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 					                 disptech_unknown, 0, NULL, NULL, 0, 2, icxOT_default, NULL, 
 				                     0, 0, "fake" ICC_FILE_EXT, g_log)) == NULL) {
@@ -1396,7 +1399,7 @@ int main(int argc, char *argv[]) {
 						error("new_ccss() failed");
 	
 					if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-					                 dtinfo->dtech, refrmode, NULL, refname, samples, npat)) {
+					                 dtinfo->dtech, refrmode, NULL, refname, 0, samples, npat)) {
 						error("set_ccss failed with '%s'\n",cc->err);
 					}
 					if(cc->write_ccss(cc, outname))
@@ -1451,7 +1454,7 @@ int main(int argc, char *argv[]) {
 						error("new_ccmx() failed");
 	
 					if (cc->create_ccmx(cc, description, colname, displayname, dtinfo->dtech,
-					                    refrmode, cbid, uisel, refname, npat, refs, cols)) {
+					                    refrmode, cbid, uisel, refname, 0, npat, refs, cols)) {
 						error("create_ccmx failed with '%s'\n",cc->err);
 					}
 					if (verb) {

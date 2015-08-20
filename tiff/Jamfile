@@ -47,7 +47,7 @@ LIBSRCS = tif_fax3.c tif_aux.c tif_close.c tif_codec.c tif_fax3sm.c tif_predict.
 if $(UNIX) {
 	LIBSRCS += tif_unix.c ;
 } else {
-	LIBSRCS += tif_msdos.c ;
+	LIBSRCS += tif_win32.c ;
 }
 
 # Optional codecs not included

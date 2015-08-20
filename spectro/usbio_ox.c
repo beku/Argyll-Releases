@@ -91,18 +91,18 @@ icompaths *p
 		    CFRelease(lidpref);
 		}
 
-		a1logd(p->log, 6, "usb_check_and_add: checking vid 0x%04x, pid 0x%04x, lid 0x%x\n",vid,pid,lid);
+		a1logd(p->log, 6, "usb_get_paths: checking vid 0x%04x, pid 0x%04x, lid 0x%x\n",vid,pid,lid);
 
 		/* Do a preliminary match */
 		if ((itype = inst_usb_match(vid, pid, 0)) == instUnknown) {
-			a1logd(p->log, 6 , "usb_check_and_add: 0x%04x 0x%04x not reconized\n",vid,pid);
+			a1logd(p->log, 6 , "usb_get_paths: 0x%04x 0x%04x not reconized\n",vid,pid);
 		    IOObjectRelease(ioob);		/* Release found object */
 			continue;
 		}
 
 		/* Allocate an idevice so that we can fill in the end point information */
 		if ((usbd = (struct usb_idevice *) calloc(sizeof(struct usb_idevice), 1)) == NULL) {
-			a1loge(p->log, ICOM_SYS, "icoms: calloc failed!\n");
+			a1loge(p->log, ICOM_SYS, "usb_get_paths: calloc failed!\n");
 			return ICOM_SYS;
 		}
 
@@ -115,7 +115,7 @@ icompaths *p
 		                          kIORegistryIterateRecursively, &it1)) != KERN_SUCCESS) {
 			IOObjectRelease(ioob);
 			IOObjectRelease(mit);
-			a1loge(p->log, kstat, "usb_check_and_add: IORegistryEntryCreateIterator() with %d\n",kstat);
+			a1loge(p->log, kstat, "usb_get_paths: IORegistryEntryCreateIterator() with %d\n",kstat);
 		    return ICOM_SYS;
 		}
 		usbd->nifce = 0;
@@ -162,7 +162,7 @@ icompaths *p
 				 && p->paths[i]->pid == pid
 				 && p->paths[i]->hidd != NULL
 				 && p->paths[i]->hidd->lid == lid) {
-					a1logd(p->log, 1, "usb_check_and_add: Ignoring device because it is already in list as HID\n");
+					a1logd(p->log, 1, "usb_get_paths: Ignoring device because it is already in list as HID\n");
 					break;
 				}
 			}
@@ -172,7 +172,7 @@ icompaths *p
 
 			} else {
 			
-				a1logd(p->log, 1, "usb_check_and_add: found instrument vid 0x%04x, pid 0x%04x\n",vid,pid);
+				a1logd(p->log, 1, "usb_get_paths: found instrument vid 0x%04x, pid 0x%04x\n",vid,pid);
 				usbd->lid = lid;
 				usbd->ioob = ioob;
 

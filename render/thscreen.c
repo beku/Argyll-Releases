@@ -130,6 +130,16 @@ void screen_edscreens(
 		for (; ip != ein1; ip += pinc, op += pinc, x += xinc) {
 			double ov[THMXCH2D], tv[THMXCH2D], ev[THMXCH2D];
 
+			/* Limit error propogation if asked */
+			if (t->mxerr != 0.0) {
+				for (j = 0; j < t->np; j++) {
+					if (t->ebuf[j][x] < -t->mxerr)
+						t->ebuf[j][x] = -t->mxerr;
+					else if (t->ebuf[j][x] > t->mxerr)
+						t->ebuf[j][x] = t->mxerr;
+				}
+			}
+
 			/* For each plane */
 			for (j = 0; j < t->np; j++) {
 				tv[j] = t->luts[j][ip[j]] / 65535.0;		/* 0.0 - 1.0 value */
@@ -253,7 +263,8 @@ thscreens *new_thscreens(
 	double (**lutfunc)(void *cntx, double in),	/* List of callback functions, NULL if none */
 	int edif,				/* nz if using error diffusion */
 	void (*quant)(void *qcntx, double *out, double *in), /* optional quantization func. for edif */
-	void *qcntx
+	void *qcntx,
+	double mxerr			/* If error diffusion anf != 0, max error to propogate */
 ) {
 	thscreens *t;
 	int i, bi = -1;
@@ -287,6 +298,7 @@ thscreens *new_thscreens(
 	t->qcntx = qcntx;
 
 	t->mxwidth = mxwidth;
+	t->mxerr = mxerr;
 	t->lastyoff = -1;
 
 	/* Allocate and initialise a next line error buffer. */

@@ -635,8 +635,9 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 	if (*calt & inst_calt_ref_white) {
 
-		if (*calc != inst_calc_uop_ref_white) {
-			*calc = inst_calc_uop_ref_white;	/* Ask user to do calibration */
+		if ((*calc & inst_calc_cond_mask) != inst_calc_uop_ref_white) {
+			/* Ask user to do calibration */
+			*calc = inst_calc_uop_ref_white;
 			return inst_cal_setup;
 		}
 		p->need_cal = 0;
@@ -892,7 +893,7 @@ extern dtp51 *new_dtp51(icoms *icom, instType itype) {
 	p->del          	= dtp51_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	return p;
 }

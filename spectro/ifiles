@@ -17,3 +17,5 @@ hcfr.c
 colorhug.c
 specbos.c
 kleink10.c
+ex1.c
+smcube.c

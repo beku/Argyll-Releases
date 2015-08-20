@@ -236,7 +236,7 @@ int md5_test() {
 	if ((icco = new_icc()) == NULL)
 		error ("Creation of ICC object failed");
 
-	m = new_icmMD5(icco->al);
+	m = new_icmMD5_a(icco->al);
 
 	for (i = 0; ; i++) {
 		if (tc[i].s == NULL)

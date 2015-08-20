@@ -31,7 +31,8 @@ int native,						/* X0 = use current per channel calibration curve */
 int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
 int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
 int out_tvenc,					/* 1 = use RGB Video Level encoding */
-int blackbg,					/* NZ if whole screen should be filled with black */
+int fullscreen,					/* NZ if whole screen should be filled with black */
+int noinitpatch,				/* NZ if no initial test patch should be shown */
 int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */
 );

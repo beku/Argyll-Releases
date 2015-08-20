@@ -204,9 +204,9 @@ int main(int argc, char *argv[]) {
 	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
 	xspect cust_tillum;			/* Custom target/simulated illumination spectrum */
 								/* xspect will use illum/cust_illum if tillum == none */
-	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
+	icxIllumeType illum = icxIT_none;	/* Spectral illuminant (defaults to D50) */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_CIE_1931_2;	/* The classic observer */
+	icxObserverType observ = icxOT_none;	/* Observer (defaults to 1931 2 degree) */
 	char ipname[MAXNAMEL+1] = "";	/* Input icc profile - enables gamut map */
 	char sgname[MAXNAMEL+1] = "";	/* Image source gamut name */
 	char absstring[3 * MAXNAMEL +1];	/* Storage for absnames */
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
 	char inname[MAXNAMEL+1] = "";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "";	/* Output cgats file base name */
 	cgats *icg;					/* input cgats structure */
-	int ti;						/* Temporary CGATs index */
+	int dti, ti;				/* Device type index, Temporary CGATs index */
 	prof_atype ptype = prof_default;	/* Default for each type of device */
 	int mtxtoo = 0;				/* NZ if matrix tags should be created for Display XYZ cLUT */
 	icmICCVersion iccver = icmVersionDefault;	/* ICC profile version to create */
@@ -290,29 +290,29 @@ int main(int argc, char *argv[]) {
 
 			/* Manufacturer description string */
 			else if (argv[fa][1] == 'A') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to manufacturer description flag -A");
+				fa = nfa;
 				xpi.deviceMfgDesc = na;
 			}
 
 			/* Model description string */
 			else if (argv[fa][1] == 'M') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to model description flag -M");
+				fa = nfa;
 				xpi.modelDesc = na;
 			}
 
 			/* Profile Description */
 			else if (argv[fa][1] == 'D') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to profile description flag -D");
+				fa = nfa;
 				xpi.profDesc = na;
 			}
 
 			/* Copyright string */
 			else if (argv[fa][1] == 'C') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to copyright flag -C");
+				fa = nfa;
 				xpi.copyright = na;
 			}
 
@@ -320,8 +320,8 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'Z') {
 				int i, j;
 
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to attribute flag -Z");
+				fa = nfa;
 				for (j = i = 0; j == 0; i++) {
 
 					switch(na[i]) {
@@ -371,9 +371,9 @@ int main(int argc, char *argv[]) {
 
 			/* Quality */
 			else if (argv[fa][1] == 'q') {
-				fa = nfa;
 //				if (na == NULL) usage("Expect argument to quality flag -q");
 				if (na == NULL) usage("Expect argument to speed flag -q");
+				fa = nfa;
    	 			switch (na[0]) {
 					case 'f':				/* Fast */
 					case 'l':
@@ -434,10 +434,10 @@ int main(int argc, char *argv[]) {
 
 			/* Disable input or output luts */
 			else if (argv[fa][1] == 'n') {
-				fa = nfa;
 				if (na == NULL) {	/* Backwards compatible */
 					nooluts = 1;
 				} else {
+					fa = nfa;
 					if (na[0] == 'i')
 						noisluts = 1;
 					else if (na[0] == 'p')
@@ -466,8 +466,8 @@ int main(int argc, char *argv[]) {
 				}
 			}
 			else if (argv[fa][1] == 'U') {
-				fa = nfa;
 				if (na == NULL) usage("Expected argument to input white point scale flag -U");
+				fa = nfa;
 				iwpscale = atof(na);
 				if (iwpscale < 0.0 || iwpscale > 200.0)
 					usage("Argument '%s' to flag -U out of range",na);
@@ -492,21 +492,21 @@ int main(int argc, char *argv[]) {
 			/* Degree of dark region emphasis */
 			else if (argv[fa][1] == 'V') {
 				if (na == NULL) usage(0,"Expected argument to dark emphasis flag -V");
+				fa = nfa;
 				demph = atof(na);
 				if (demph < 1.0 || demph > 3.0)
 					usage("Dark weighting argument %f to '-V' is out of range",demph);
-				fa = nfa;
 			}
 
 			/* Inking rule */
 			else if (argv[fa][1] == 'k'
 			      || argv[fa][1] == 'K') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to inking flag -k");
 				if (argv[fa][1] == 'k')
 					locus = 0;		/* Use K value target */
 				else
 					locus = 1;		/* Use K locus target */
+				if (na == NULL) usage("Expect argument to inking flag -k");
+				fa = nfa;
     			switch (na[0]) {
 					case 'z':
 					case 'Z':
@@ -554,22 +554,22 @@ int main(int argc, char *argv[]) {
 
 			/* Total Ink Limit */
 			else if (argv[fa][1] == 'l') {
-				fa = nfa;
 				if (na == NULL) usage("Expected argument to total ink limit flag -l");
+				fa = nfa;
 				tlimit = atoi(na);
 			}
 
 			/* Black Ink Limit */
 			else if (argv[fa][1] == 'L') {
-				fa = nfa;
 				if (na == NULL) usage("Expected argument to black ink limit flag -L");
+				fa = nfa;
 				klimit = atoi(na);
 			}
 
 			/* Algorithm type */
 			else if (argv[fa][1] == 'a') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to algorithm flag -a");
+				fa = nfa;
     			switch (na[0]) {
 					case 'l':
 					case 'L':
@@ -602,8 +602,8 @@ int main(int argc, char *argv[]) {
 			}
 			/* Profile version */
 			else if (argv[fa][1] == 'I') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to version flag -I");
+				fa = nfa;
     			switch (na[0]) {
 					case '4':
 						iccver = icmVersion4_1;
@@ -616,38 +616,30 @@ int main(int argc, char *argv[]) {
 			/* FWA compensation */
 			else if (argv[fa][1] == 'f') {
 				fwacomp = 1;
+				spec = 1;		/* Have to use spectral data */
 
 				if (na != NULL) {	/* Argument is present - target/simulated instr. illum. */
 					fa = nfa;
 					if (strcmp(na, "A") == 0
 					 || strcmp(na, "M0") == 0) {
-						spec = 1;
 						tillum = icxIT_A;
 					} else if (strcmp(na, "C") == 0) {
-						spec = 1;
 						tillum = icxIT_C;
 					} else if (strcmp(na, "D50") == 0
 					        || strcmp(na, "M1") == 0) {
-						spec = 1;
 						tillum = icxIT_D50;
 					} else if (strcmp(na, "D50M2") == 0
 					        || strcmp(na, "M2") == 0) {
-						spec = 1;
 						tillum = icxIT_D50M2;
 					} else if (strcmp(na, "D65") == 0) {
-						spec = 1;
 						tillum = icxIT_D65;
 					} else if (strcmp(na, "F5") == 0) {
-						spec = 1;
 						tillum = icxIT_F5;
 					} else if (strcmp(na, "F8") == 0) {
-						spec = 1;
 						tillum = icxIT_F8;
 					} else if (strcmp(na, "F10") == 0) {
-						spec = 1;
 						tillum = icxIT_F10;
 					} else {	/* Assume it's a filename */
-						spec = 1;
 						tillum = icxIT_custom;
 						if (read_xspect(&cust_tillum, na) != 0)
 							usage("Failed to read custom target illuminant spectrum in file '%s'",na);
@@ -657,8 +649,8 @@ int main(int argc, char *argv[]) {
 
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to illuminant flag -i");
+				fa = nfa;
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
@@ -693,8 +685,8 @@ int main(int argc, char *argv[]) {
 
 			/* Spectral Observer type */
 			else if (argv[fa][1] == 'o') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to observer flag -o");
+				fa = nfa;
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 1;
 					observ = icxOT_CIE_1931_2;
@@ -717,8 +709,8 @@ int main(int argc, char *argv[]) {
 
 			/* Average Deviation percentage */
 			else if (argv[fa][1] == 'r') {
-				fa = nfa;
 				if (na == NULL) usage("Expected argument to average deviation flag -r");
+				fa = nfa;
 				if (na[0] == 's') {			/* (relative, for verification) */
 					smooth = atof(na+1);
 					if (smooth < 0.0)
@@ -742,7 +734,6 @@ int main(int argc, char *argv[]) {
 					sepsat = 1;
 				if (na == NULL)
 					usage("Unrecognised argument to source gamut flag -%c",argv[fa][1]);
-
 				fa = nfa;
 				strncpy(ipname,na,MAXNAMEL); ipname[MAXNAMEL] = '\000';
 			}
@@ -778,8 +769,8 @@ int main(int argc, char *argv[]) {
 
 			/* Perceptual Mapping intent override */
 			else if (argv[fa][1] == 't') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to perceptul intent override flag -t");
+				fa = nfa;
 				if (xicc_enum_gmapintent(&pgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
 					usage("Unrecognised intent '%s' to perceptual override flag -t",na);
 				pgmi_set = 1;
@@ -787,8 +778,8 @@ int main(int argc, char *argv[]) {
 
 			/* Saturation Mapping intent override */
 			else if (argv[fa][1] == 'T') {
-				fa = nfa;
 				if (na == NULL) usage("Expect argument to saturation intent override flag -T");
+				fa = nfa;
 				if (xicc_enum_gmapintent(&sgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
 					usage("Unrecognised intent '%s' to saturation override flag -T",na);
 				sgmi_set = 1;
@@ -805,8 +796,8 @@ int main(int argc, char *argv[]) {
 					vc = &ovc_p;
 				}
 
-				fa = nfa;
 				if (na == NULL) usage("Viewing conditions flag (-%c) needs an argument",argv[fa][1]);
+				fa = nfa;
 				if (na[1] != ':') {
 					if (vc == &ivc_p) {
 						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
@@ -874,8 +865,8 @@ int main(int argc, char *argv[]) {
 
 			/* Output file name */
 			else if (argv[fa][1] == 'O') {
-				fa = nfa;
 				if (na == NULL) usage("Output filename override (-O) needs an argument");
+				fa = nfa;
 				strncpy(outname,na,MAXNAMEL); outname[MAXNAMEL] = '\000';
 			}
 
@@ -888,13 +879,20 @@ int main(int argc, char *argv[]) {
 	/* Get the file name argument */
 	if (fa >= argc || argv[fa][0] == '-') usage("Missing input .ti3 and output ICC basename");
 	strncpy(baname,argv[fa++],MAXNAMEL-4); baname[MAXNAMEL-4] = '\000';
-	if (xpi.profDesc == NULL)
-		xpi.profDesc = baname;	/* Default description */
-	strcpy(inname,baname);
+	if (xpi.profDesc == NULL) {
+		char *cp;
+		if ((cp = strrchr(baname, '/')) == NULL
+		 && (cp = strrchr(baname, '\\')) == NULL)
+			cp = baname;
+		else
+			cp++;
+		xpi.profDesc = cp;	/* Default description = file name of base path */
+	}
+	strcpy(inname, baname);
 	strcat(inname,".ti3");
 	if (outname[0] == '\000') {		/* If not overridden */
-		strcpy(outname,baname);
-		strcat(outname,ICC_FILE_EXT);
+		strcpy(outname, baname);
+		strcat(outname, ICC_FILE_EXT);
 	}
 
 	/* Issue some errors & warnings for strange combinations */
@@ -936,6 +934,31 @@ int main(int argc, char *argv[]) {
 	if (icg->ntables < 1)
 		error ("Input file doesn't contain at least one table");
 
+	/* Read the device/profile type tag */
+	if ((dti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
+		error ("Input file doesn't contain keyword DEVICE_CLASS");
+
+	/* Issue some errors & warnings for strange combinations for profile type */
+
+	/* Reflective options when not a reflective profile type */
+	if (strcmp(icg->t[0].kdata[dti],"DISPLAY") == 0
+	 || strcmp(icg->t[0].kdata[dti],"EMISINPUT") == 0) {
+		if (illum != icxIT_none)
+			warning("-i illuminant ignored for emissive reference type");
+		if (fwacomp != icxIT_none)
+			warning("-f FWA compensation ignored for emissive reference type");
+
+		fwacomp = 0;
+		tillum = icxIT_none;
+	}
+
+	/* Set defaults */
+	if (illum == icxIT_none)
+		illum = icxIT_D50;
+	
+	if (observ = icxOT_none)
+		observ = icxOT_CIE_1931_2;
+
 	/* See if CIE is actually available - some sources of .TI3 don't provide it */
 	if (!spec
 	 && icg->find_field(icg, 0, "LAB_L") < 0
@@ -970,11 +993,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* read the device class, and call function to create profile. */
-	if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
-		error ("Input file doesn't contain keyword DEVICE_CLASS");
-
-	if (strcmp(icg->t[0].kdata[ti],"OUTPUT") == 0) {
+	/* check the device class, and call function to create profile. */
+	if (strcmp(icg->t[0].kdata[dti],"OUTPUT") == 0) {		/* i.e. printer */
 		icxInk ink;							/* Ink parameters */
 
 //		if (bpo[1] >= 0.0)
@@ -1100,7 +1120,11 @@ int main(int argc, char *argv[]) {
 						sepsat, &ivc_p, &ovc_p, ivc_e, ovc_e,
 						&pgmi, &sgmi, &xpi);
 
-	} else if (strcmp(icg->t[0].kdata[ti],"INPUT") == 0) {
+	/* Scanner, Camera with reflective target, or Camera with emissive target */
+	} else if (strcmp(icg->t[0].kdata[dti],"INPUT") == 0
+	        || strcmp(icg->t[0].kdata[dti],"EMISINPUT") == 0) {
+
+		int emis = strcmp(icg->t[0].kdata[dti],"EMISINPUT") == 0;
 
 //		if (bpo[1] >= 0.0)
 //			error("-B option not valid for input profile");
@@ -1113,10 +1137,11 @@ int main(int argc, char *argv[]) {
 
 		make_input_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts, nocied,
 		               verify, autowpsc, clipovwp, iwpscale, doinb2a, doinextrap, clipprims,
-		               inname, outname, icg, spec, illum, &cust_illum, observ,
+		               inname, outname, icg, emis, spec, illum, &cust_illum, observ,
 		               smooth, avgdev, &xpi);
 
-	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
+	/* Display or Projector */
+	} else if (strcmp(icg->t[0].kdata[dti],"DISPLAY") == 0) {
 
 		if (autowpsc)
 			error ("Input auto WP scale mode isn't applicable to an output device");

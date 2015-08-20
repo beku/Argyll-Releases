@@ -133,36 +133,36 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
-				fa = nfa;
+			else if (argv[fa][1] == 'v') {
 				if (na == NULL) {
 					verb = 1;
 				} else {
+					fa = nfa;
 					verb = atoi(na);
 				}
 			}
 
 			/* Ink Limit */
 			else if (argv[fa][1] == 'l') {
-				fa = nfa;
 				if (na == NULL) usage();
+				fa = nfa;
 				limit = atof(na);
 			}
 
 			/* Verify model against input points */
-			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
-				fa = nfa;
+			else if (argv[fa][1] == 'y') {
 				if (na == NULL) {
 					verify = 1;
 				} else {
+					fa = nfa;
 					verify = atoi(na);
 				}
 			}
 
 			/* Quality */
-			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
-				fa = nfa;
+			else if (argv[fa][1] == 'q') {
 				if (na == NULL) usage();
+				fa = nfa;
     			switch (na[0]) {
 					case 'v':				/* Very fast */
 					case 'V':
@@ -192,11 +192,11 @@ int main(int argc, char *argv[])
 			}
 
 			/* Output spectral model */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+			else if (argv[fa][1] == 's')
 				ospec = 1;
 
 			/* Output mixing model */
-			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M')
+			else if (argv[fa][1] == 'm')
 				omix = 1;
 
 			/* Output Lab values rather than XYZ */
@@ -412,7 +412,7 @@ make_output_mpp(
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
 			if (icg->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",fname);
+				error ("Field %s is wrong type - expect float",fname);
 	
 			chix[j] = ii;
 		}
@@ -423,15 +423,15 @@ make_output_mpp(
 			if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
 				error("Input file doesn't contain field LAB_L");
 			if (icg->t[0].ftype[Xi] != r_t)
-				error("Field LAB_L is wrong type");
+				error("Field LAB_L is wrong type - expect float");
 			if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
 				error("Input file doesn't contain field LAB_A");
 			if (icg->t[0].ftype[Yi] != r_t)
-				error("Field LAB_A is wrong type");
+				error("Field LAB_A is wrong type - expect float");
 			if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
 				error("Input file doesn't contain field LAB_B");
 			if (icg->t[0].ftype[Zi] != r_t)
-				error("Field LAB_B is wrong type");
+				error("Field LAB_B is wrong type - expect float");
 
 		} else { 		/* Expect XYZ */
 			if (verb)
@@ -439,15 +439,15 @@ make_output_mpp(
 			if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
 				error("Input file doesn't contain field XYZ_X");
 			if (icg->t[0].ftype[Xi] != r_t)
-				error("Field XYZ_X is wrong type");
+				error("Field XYZ_X is wrong type - expect float");
 			if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
 				error("Input file doesn't contain field XYZ_Y");
 			if (icg->t[0].ftype[Yi] != r_t)
-				error("Field XYZ_Y is wrong type");
+				error("Field XYZ_Y is wrong type - expect float");
 			if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
 				error("Input file doesn't contain field XYZ_Z");
 			if (icg->t[0].ftype[Zi] != r_t)
-				error("Field XYZ_Z is wrong type");
+				error("Field XYZ_Z is wrong type - expect float");
 		}
 
 		/* If we need the spectral information, find the fields */
@@ -475,6 +475,9 @@ make_output_mpp(
 	
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (icg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 		}
 

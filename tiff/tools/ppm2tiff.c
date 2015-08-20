@@ -1,4 +1,4 @@
-/* $Id: ppm2tiff.c,v 1.13.2.2 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: ppm2tiff.c,v 1.18 2012-12-10 18:19:11 tgl Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -43,6 +43,10 @@
 # include <io.h>
 #endif
 
+#ifdef NEED_LIBPORT
+# include "libport.h"
+#endif
+
 #include "tiffio.h"
 
 #ifndef HAVE_GETOPT
@@ -68,6 +72,17 @@ BadPPM(char* file)
 	exit(-2);
 }
 
+static tmsize_t
+multiply_ms(tmsize_t m1, tmsize_t m2)
+{
+	tmsize_t bytes = m1 * m2;
+
+	if (m1 && bytes / m1 != m2)
+		bytes = 0;
+
+	return bytes;
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -75,7 +90,7 @@ main(int argc, char* argv[])
 	uint32 rowsperstrip = (uint32) -1;
 	double resolution = -1;
 	unsigned char *buf = NULL;
-	tsize_t linebytes = 0;
+	tmsize_t linebytes = 0;
 	uint16 spp = 1;
 	uint16 bpp = 8;
 	TIFF *out;
@@ -85,6 +100,7 @@ main(int argc, char* argv[])
 	int c;
 	extern int optind;
 	extern char* optarg;
+	tmsize_t scanline_size;
 
 	if (argc < 2) {
 	    fprintf(stderr, "%s: Too few arguments\n", argv[0]);
@@ -217,7 +233,8 @@ main(int argc, char* argv[])
 	}
 	switch (bpp) {
 		case 1:
-			linebytes = (spp * w + (8 - 1)) / 8;
+			/* if round-up overflows, result will be zero, OK */
+			linebytes = (multiply_ms(spp, w) + (8 - 1)) / 8;
 			if (rowsperstrip == (uint32) -1) {
 				TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, h);
 			} else {
@@ -226,15 +243,31 @@ main(int argc, char* argv[])
 			}
 			break;
 		case 8:
-			linebytes = spp * w;
+			linebytes = multiply_ms(spp, w);
 			TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,
 			    TIFFDefaultStripSize(out, rowsperstrip));
 			break;
 	}
-	if (TIFFScanlineSize(out) > linebytes)
+	if (linebytes == 0) {
+		fprintf(stderr, "%s: scanline size overflow\n", infile);
+		(void) TIFFClose(out);
+		exit(-2);					
+	}
+	scanline_size = TIFFScanlineSize(out);
+	if (scanline_size == 0) {
+		/* overflow - TIFFScanlineSize already printed a message */
+		(void) TIFFClose(out);
+		exit(-2);					
+	}
+	if (scanline_size < linebytes)
 		buf = (unsigned char *)_TIFFmalloc(linebytes);
 	else
-		buf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));
+		buf = (unsigned char *)_TIFFmalloc(scanline_size);
+	if (buf == NULL) {
+		fprintf(stderr, "%s: Not enough memory\n", infile);
+		(void) TIFFClose(out);
+		exit(-2);
+	}
 	if (resolution > 0) {
 		TIFFSetField(out, TIFFTAG_XRESOLUTION, resolution);
 		TIFFSetField(out, TIFFTAG_YRESOLUTION, resolution);

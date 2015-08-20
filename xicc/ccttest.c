@@ -74,9 +74,10 @@ static int do_spec(char *name, xspect *sp) {
 
 	{
 		int invalid = 0;
+		double RR[14];
 		double cri;
-		cri = icx_CIE1995_CRI(&invalid, sp);
-		printf("CRI = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
+		cri = icx_CIE1995_CRI(&invalid, RR, sp);
+		printf("CRI = %.1f [ R9 = %.1f ]%s\n",cri,RR[9],invalid ? " (Invalid)" : "");
 	}
 
 	/* Use modern color difference - gives a better visual match */

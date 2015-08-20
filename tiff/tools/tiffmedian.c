@@ -1,4 +1,4 @@
-/* $Id: tiffmedian.c,v 1.8.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: tiffmedian.c,v 1.10 2010-03-10 18:56:50 bfriesen Exp $ */
 
 /*
  * Apply median cut on an image.
@@ -48,6 +48,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"

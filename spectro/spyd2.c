@@ -925,7 +925,7 @@ spyd2_GetReading_ll(
 		/* hence the transitions-1 counted. */
 
 		int *map;
-		int nat[8]  = { 0,1,2,3,4,5,6,7 };	/* Natural order */
+//		int nat[8]  = { 0,1,2,3,4,5,6,7 };	/* Natural order */
 		int map3[8] = { 0,0,1,2,5,6,7,4 };	/* Map Sp3 sensors into Spyder 2 order */
 		int map4[8] = { 0,0,1,2,5,6,7,4 };	/* Map Sp4 sensors into Spyder 2 order */
 		int map5[8] = { 1,1,0,5,2,7,6,4 };	/* Map Sp5 sensors into Spyder 2 order */
@@ -1729,8 +1729,15 @@ spyd2_GetReading(
 		/* Accumulate it for weighted average */
 		for (k = 0; k < 8; k++) {
 			if (sensv[k] != 0.0) {		/* Skip value where we didn't get any transitions */
+#ifndef NEVER
+				/* Accumulate it for weighted average */
 				a_sensv[k] += sensv[k] * itime;
 				a_w[k] += itime;
+#else
+				/* Just use the last measurement */
+				a_sensv[k] = sensv[k] * itime;
+				a_w[k] = itime;
+#endif
 			}
 		}
 		
@@ -1767,6 +1774,7 @@ spyd2_GetReading(
 		}
 	}
 
+	/* hwver == 5 hasn't been tested... */
 	if (p->hwver == 5) {
 		double gainscale = 1.0;
 		unsigned int v381;
@@ -1781,7 +1789,7 @@ spyd2_GetReading(
 		for (j = 0; j < 3; j++) {
 			XYZ[j] = p->cal_A[p->icx & 1][j][0];		/* First entry is a constant */
 			for (k = 1; k < 8; k++)
-				XYZ[j] += a_sensv[k] * p->cal_A[p->icx & 1][j][k+2] * gainscale;
+				XYZ[j] += a_sensv[k] * p->cal_A[p->icx & 1][j][k+1] * gainscale;
 		}
 
 	} else {
@@ -3268,7 +3276,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 	if ((*calt & inst_calt_ref_freq) && p->refrmode != 0) {
 
-		if (*calc != inst_calc_emis_80pc) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_emis_80pc) {
 			*calc = inst_calc_emis_80pc;
 			return inst_cal_setup;
 		}
@@ -3664,8 +3672,8 @@ static inst_disptypesel spyd4_disptypesel[8] = {
 		0,
 		"f",
 		"LCD, CCFL Backlight",
-		disptech_lcd_ccfl,
 		0,
+		disptech_lcd_ccfl,
 		(1 << 1) | 1
 	},
 	{
@@ -3682,83 +3690,8 @@ static inst_disptypesel spyd4_disptypesel[8] = {
 		0,
 		"e",
 		"LCD, White LED Backlight",
+		0,
 		disptech_lcd_wled,
-		0,
-		(3 << 1) | 1
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		0,
-		"B",
-		"Wide Gamut LCD, RGB LED Backlight",
-		0,
-		disptech_lcd_rgbled,
-		(4 << 1) | 1
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		0,
-		"x",
-		"LCD, CCFL Backlight (Laptop ?)",
-		0,
-		disptech_lcd_ccfl,
-		(5 << 1) | 1
-	},
-	{
-		inst_dtflags_end,
-		0,
-		"",
-		"",
-		0,
-		disptech_none,
-		0
-	}
-};
-
-static inst_disptypesel spyd5_disptypesel[8] = {
-	{
-		inst_dtflags_default,
-		1,
-		"nl",
-		"Generic Non-Refresh Display",
-		0,
-		disptech_lcd,
-		1
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		2,							/* cbid */
-		"rc",						/* sel */
-		"Generic Refresh Display",	/* desc */
-		1,							/* refr */
-		disptech_crt,				/* disptype */
-		1							/* ix = hw bit + spec table << 1 */
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		0,
-		"f",
-		"LCD, CCFL Backlight",
-		disptech_lcd_ccfl,
-		0,
-		(1 << 1) | 1
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		0,
-		"L",
-		"Wide Gamut LCD, CCFL Backlight",
-		0,
-		disptech_lcd_ccfl_wg,
-		(2 << 1) | 1
-	},
-	{
-		inst_dtflags_none,			/* flags */
-		0,
-		"e",
-		"LCD, White LED Backlight",
-		disptech_lcd_wled,
-		0,
 		(3 << 1) | 1
 	},
 	{
@@ -3799,6 +3732,7 @@ static void set_base_disptype_list(spyd2 *p) {
 		} else {							/* spyd4_nocals == 6 or 7, Spyder 4 or 5. */
 			/* Spyder 5 has exactly the same list as the Spyder 4, with an extra */
 			/* entry at the end that is the same as the first (flat spectrum). */
+			/* So use the spyder 4 list */
 			p->_dtlist = spyd4_disptypesel;
 		}
 	} else if (p->itype == instSpyder3) {
@@ -3819,7 +3753,7 @@ int recreate				/* nz to re-check for new ccmx & ccss files */
 	spyd2 *p = (spyd2 *)pp;
 	inst_code rv = inst_ok;
 
-	/* Create/Re-create a current list of abailable display types */
+	/* Create/Re-create a current list of available display types */
 	if (p->dtlist == NULL || recreate) {
 		if ((rv = inst_creat_disptype_list(pp, &p->ndtlist, &p->dtlist,
 		    p->_dtlist, p->hwver >= 7 ? 1 : 0 /* doccss*/, 1 /* doccmx */)) != inst_ok)
@@ -3838,7 +3772,6 @@ int recreate				/* nz to re-check for new ccmx & ccss files */
 /* Given a display type entry, setup for that type */
 static inst_code set_disp_type(spyd2 *p, inst_disptypesel *dentry) {
 	inst_code ev;
-	int refrmode;
 
 	p->icx = dentry->ix;
 	p->dtech = dentry->dtech;
@@ -3969,8 +3902,9 @@ int *cbid) {
 	spyd2 *p = (spyd2 *)pp;
 	if (dtech != NULL)
 		*dtech = p->dtech;
-	if (refrmode != NULL)
+	if (refrmode != NULL) {
 		*refrmode = p->refrmode;
+	}
 	if (cbid != NULL)
 		*cbid = p->cbid;
 	return inst_ok;
@@ -4142,7 +4076,7 @@ extern spyd2 *new_spyd2(icoms *icom, instType itype) {
 	p->del               = spyd2_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	/* Load manufacturers Spyder4 calibrations */
 	if (itype == instSpyder4

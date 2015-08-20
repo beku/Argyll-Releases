@@ -1,4 +1,4 @@
-/* $Id: tiff2bw.c,v 1.12.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
+/* $Id: tiff2bw.c,v 1.17 2014-12-21 20:58:30 erouault Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -33,6 +33,10 @@
 
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
+#endif
+
+#ifdef NEED_LIBPORT
+# include "libport.h"
 #endif
 
 #include "tiffio.h"
@@ -167,6 +171,11 @@ main(int argc, char* argv[])
 		    argv[optind], samplesperpixel);
 		return (-1);
 	}
+	if( photometric == PHOTOMETRIC_RGB && samplesperpixel != 3) {
+		fprintf(stderr, "%s: Bad samples/pixel %u for PHOTOMETRIC_RGB.\n",
+		    argv[optind], samplesperpixel);
+		return (-1);
+	}
 	TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);
 	if (bitspersample != 8) {
 		fprintf(stderr,
@@ -201,7 +210,7 @@ main(int argc, char* argv[])
 		}
 	}
 	TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
-	sprintf(thing, "B&W version of %s", argv[optind]);
+	snprintf(thing, sizeof(thing), "B&W version of %s", argv[optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
 	TIFFSetField(out, TIFFTAG_SOFTWARE, "tiff2bw");
 	outbuf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));
@@ -395,7 +404,7 @@ static struct cpTag {
 	{ TIFFTAG_DATETIME,		1, TIFF_ASCII },
 	{ TIFFTAG_ARTIST,		1, TIFF_ASCII },
 	{ TIFFTAG_HOSTCOMPUTER,		1, TIFF_ASCII },
-	{ TIFFTAG_WHITEPOINT,		1, TIFF_RATIONAL },
+	{ TIFFTAG_WHITEPOINT,		2, TIFF_RATIONAL },
 	{ TIFFTAG_PRIMARYCHROMATICITIES,(uint16) -1,TIFF_RATIONAL },
 	{ TIFFTAG_HALFTONEHINTS,	2, TIFF_SHORT },
 	{ TIFFTAG_INKSET,		1, TIFF_SHORT },

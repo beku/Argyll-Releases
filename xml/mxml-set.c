@@ -30,7 +30,7 @@
  * Include necessary headers...
  */
 
-#include "config.h"
+#include "mxml-config.h"
 #include "mxml.h"
 
 

@@ -117,7 +117,7 @@
 # RmTemps target : sources ;			remove temp sources after target made
 # Setuid images ;						mark executables Setuid
 #	set SHLINKDEFFILE on for Windows to define exports using .def file.
-#	set SHLINKSEARCHEXEPATH true on UNIX to have applications search exeutable location for it 
+#	set SHLINKSEARCHEXEPATH true on UNIX/OSX to have applications search exeutable location for it 
 # ShLibrary shlib : source ;				link shared library from compiled sources
 # ShLibraryFromObjects shlib : objects ;	link shared library from objects
 # ShLibraryLibraries shlib : libraries ;	add static libraries onto shared libraries link
@@ -1193,7 +1193,7 @@ rule _RatPath
 	local _in = $(<) ;
 	local _rio = ;		# reversed intermediate output
 	local _out = ;
-	local _gotdot = ;	# There was at a dot in the input path
+	local _gotdot = ;	# There was a dot in the input path
 	local _first = ;	# Fixed first elements 
 
 #Echo "_RatPath called with '" $(_in) "'" ;
@@ -1388,6 +1388,10 @@ rule NormDstPaths
 # If paths is empty, nothing is returned.
 # paths = NormPaths paths : dir : type ;
 # (This and the other rules it calls, is probably a good candidate for speed optimization!)
+#
+#  ~~~~~ This isn't working correctly -
+#  i.e. given "." where . = ccast and "../ccast",
+#  it still returns "../ccast".
 rule _NormPaths
 {
 	local _p _i _t ;
@@ -1409,7 +1413,7 @@ rule _NormPaths
 	{
 #Echo "_i = '" $(_i) "'" ; 
 		_t =    [ _SepPath $(_i) ] ;
-#Echo "_SepPath _i = '" $(_i) "'" ; 
+#Echo "_SepPath _i = '" $(_t) "'" ; 
 		_t =    [ _RootPath $(_p) : $(_t) ] ;
 #Echo "_RootPath _t = '" $(_t) "'" ; 
 

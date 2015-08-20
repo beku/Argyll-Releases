@@ -1,4 +1,4 @@
-/* $Id: strip_rw.c,v 1.5.2.1 2010-06-08 18:50:43 bfriesen Exp $ */
+/* $Id: strip_rw.c,v 1.6 2008-03-28 01:42:07 bfriesen Exp $ */
 
 /*
  * Copyright (c) 2004, Andrey Kiselev  <dron@ak4719.spb.edu>
@@ -57,6 +57,8 @@ main(int argc, char **argv)
 	uint32		rowsperstrip;
 	uint16		compression;
 	uint16		spp, bps, photometric, sampleformat, planarconfig;
+        (void) argc;
+        (void) argv;
 
 	/* 
 	 * Test two special cases: image consisting from single line and image
@@ -153,10 +155,3 @@ failure:
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */
-/*
- * Local Variables:
- * mode: c
- * c-basic-offset: 8
- * fill-column: 78
- * End:
- */

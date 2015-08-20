@@ -148,6 +148,7 @@ CFUUIDRef CGDisplayCreateUUIDFromDisplayID (uint32_t displayID);
 # define debugrr2l(lev, xx) if (callback_ddebug >= lev) fprintf xx
 #endif
 
+
 /* ----------------------------------------------- */
 /* Dealing with locating displays */
 
@@ -286,7 +287,6 @@ static unsigned short *char2wchar(char *s) {
 }
 
 #endif /* NT */
-
 
 #if defined(UNIX_X11)
 /* Hack to notice if the error handler has been triggered */
@@ -3916,6 +3916,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	return 0;
 }
 
+
 /* ----------------------------------------------- */
 
 /* Set a patch delay and instrument reaction time values. */
@@ -3927,9 +3928,9 @@ void dispwin_set_update_delay(dispwin *p, int patch_delay, int inst_reaction) {
 	p->inst_reaction = inst_reaction;
 }
 
-/* Set/unset the blackground color flag */
+/* Set/unset the full screen black flag */
 /* Return nz on error */
-static int dispwin_set_bg(dispwin *p, int blackbg) {
+static int dispwin_set_fc(dispwin *p, int fullscreen) {
 	return 1;		/* Need to re-create window */
 }
 
@@ -3955,6 +3956,7 @@ int dispwin_compute_delay(dispwin *p, double *orgb) {
 	int update_delay = 0, disp_settle = 0;
 
 	if (p->do_update_del == 0) {
+		if (p->ddebug) fprintf(stderr,"dispwin: update delay disabled\n");
 		return 0;
 	}
 
@@ -3978,6 +3980,7 @@ int dispwin_compute_delay(dispwin *p, double *orgb) {
 
 	return update_delay;
 }
+
 
 /* ----------------------------------------------- */
 /* Set the shell set color callout */
@@ -4337,6 +4340,7 @@ int win_message_thread(void *pp) {
 
 #endif /* NT */
 
+
 /* Set the defauly update delay values */
 void dispwin_set_default_delays(dispwin *p) {
 	char *cp;
@@ -4373,6 +4377,7 @@ void dispwin_set_default_delays(dispwin *p) {
 	p->do_update_del = 1;			/* Default this to on */
 }
 
+
 /* Create a RAMDAC access and display test window, default grey */
 dispwin *new_dispwin(
 disppath *disp,					/* Display to calibrate. */
@@ -4386,7 +4391,7 @@ int native,						/* X0 = use current per channel calibration curve */
 int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
 int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
 int out_tvenc,					/* 1 = use RGB Video Level encoding */
-int blackbg,					/* NZ if whole screen should be filled with black */
+int fullscreen,					/* NZ if whole screen should be filled with black */
 int override,					/* NZ if override_redirect is to be used on X11 */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
@@ -4415,7 +4420,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->nowin = nowin;
 	p->native = native;
 	p->out_tvenc = out_tvenc;
-	p->blackbg = blackbg;
+	p->fullscreen = fullscreen;
 	p->ddebug = ddebug;
 	p->get_ramdac          = dispwin_get_ramdac;
 	p->set_ramdac          = dispwin_set_ramdac;
@@ -4423,7 +4428,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->uninstall_profile   = dispwin_uninstall_profile;
 	p->get_profile         = dispwin_get_profile;
 	p->set_color           = dispwin_set_color;
-	p->set_bg              = dispwin_set_bg;
+	p->set_fc              = dispwin_set_fc;
 	p->set_update_delay    = dispwin_set_update_delay;
 	p->set_settling_delay  = dispwin_set_settling_delay;
 	p->enable_update_delay = dispwin_enable_update_delay;
@@ -4482,7 +4487,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		if (he > disp_vrz)
 			he = disp_vrz;
 
-		if (p->blackbg) {	/* Window fills the screen, test area is within it */
+		if (p->fullscreen) {	/* Window fills the screen, test area is within it */
 			p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
 			p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
 			p->tw = wi;
@@ -4688,7 +4693,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		/* (Because Cocoa origin is botton left, we flip voff) */
 		/* (Cocoa doesn't use disp->sx/sy either - each screen origin is at 0,0) */
-		if (p->blackbg) {	/* Window fills the screen, test area is within it */
+		if (p->fullscreen) {	/* Window fills the screen, test area is within it */
 			p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
 			p->ty = (int)((-voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
 			p->tw = wi;
@@ -4837,7 +4842,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 			if (he > disp_vrz)
 				he = disp_vrz;
 
-			if (p->blackbg) {	/* Window fills the screen, test area is within it */
+			if (p->fullscreen) {	/* Window fills the screen, test area is within it */
 				p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
 				p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
 				p->tw = wi;
@@ -5357,7 +5362,8 @@ int x11_daemon_mode(disppath *disp, int verb, int ddebug) {
 	return -1;
 }
 
-#endif
+#endif 	/* UNIX_X11 */
+
 
 /* ================================================================ */
 #ifdef STANDALONE_TEST
@@ -5477,7 +5483,7 @@ main(int argc, char *argv[]) {
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;	/* Test window offsets, -1.0 to 1.0 */
 	int out_tvenc = 0;			/* 1 to use RGB Video Level encoding */
-	int blackbg = 0;       		/* NZ if whole screen should be filled with black */
+	int fullscreen = 0;       		/* NZ if whole screen should be filled with black */
 	int nowin = 0;				/* Don't create test window */
 	int ramd = 0;				/* Just test ramdac */
 	int fade = 0;				/* Test greyramp fade */
@@ -5612,25 +5618,25 @@ main(int argc, char *argv[]) {
 			/* Test patch offset and size */
 			else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage(0,"-p parameters are missing");
+				if (na == NULL) usage(0,"-P parameters are missing");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
 					;
 				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
 					vpatscale = hpatscale;
 				} else {
-					usage(0,"-p parameters '%s' is badly formatted",na);
+					usage(0,"-P parameters '%s' is badly formatted",na);
 				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || hpatscale <= 0.0 || hpatscale > 50.0
 				 || vpatscale <= 0.0 || vpatscale > 50.0)
-					usage(0,"-p parameters '%s' is out of range",na);
+					usage(0,"-P parameters '%s' is out of range",na);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
 			/* Black background */
 			} else if (argv[fa][1] == 'F') {
-				blackbg = 1;
+				fullscreen = 1;
 
 			/* Video mode encoding */
 			} else if (argv[fa][1] == 'E') {
@@ -5769,7 +5775,7 @@ main(int argc, char *argv[]) {
 
 	if (webdisp != 0) {
 		if ((dw = new_webwin(webdisp, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native,
-			                        &noramdac, &nocm, out_tvenc, blackbg, verb, ddebug)) == NULL) {
+			                        &noramdac, &nocm, out_tvenc, fullscreen, verb, ddebug)) == NULL) {
 			printf("Error - new_webwin failed!\n");
 			return -1;
 		}
@@ -5793,7 +5799,7 @@ main(int argc, char *argv[]) {
 		
 		if ((dw = new_ccwin(ids[ccdisp-1], 100.0 * hpatscale, 100.0 * vpatscale,
 			                   ho, vo, nowin, native, &noramdac, &nocm, out_tvenc,
-			                   blackbg, verb, ddebug)) == NULL) {
+			                   fullscreen, 0, verb, ddebug)) == NULL) {
 			printf("Error - new_ccwin failed!\n");
 			free_ccids(ids);
 			return -1;
@@ -5808,7 +5814,7 @@ main(int argc, char *argv[]) {
 		}
 			
 		if ((dw = new_madvrwin(100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native,
-			                   &noramdac, &nocm, out_tvenc, blackbg, verb, ddebug)) == NULL) {
+			                   &noramdac, &nocm, out_tvenc, fullscreen, verb, ddebug)) == NULL) {
 			printf("Error - new_madvrwin failed! (Is it running and up to date?)\n");
 			return -1;
 		}
@@ -5816,7 +5822,7 @@ main(int argc, char *argv[]) {
 	} else {
 		if (verb) printf("About to open dispwin object on the display\n");
 		if ((dw = new_dispwin(disp, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native,
-			                         &noramdac, &nocm, out_tvenc, blackbg, 1, ddebug)) == NULL) {
+			                         &noramdac, &nocm, out_tvenc, fullscreen, 1, ddebug)) == NULL) {
 			printf("Error - new_dispwin failed!\n");
 			return -1;
 		}
@@ -6174,6 +6180,7 @@ main(int argc, char *argv[]) {
 		else
 			printf("Verify: '%s' is NOT loaded (discrepancy %.1f%%)\n", calname, berr * 100);
 	}
+
 
 	/* If no other command selected, do a Window or VideoLUT test */
 	if (sname[0] == '\000' && clear == 0 && installprofile == 0 && loadfile == 0 && verify == 0 && loadprofile == 0) {

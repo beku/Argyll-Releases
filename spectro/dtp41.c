@@ -923,8 +923,9 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
 		if (*calt & inst_calt_trans_white) {
 
-			if (*calc != inst_calc_uop_trans_white)
-				*calc = inst_calc_uop_trans_white;	/* Ask user to do calibration */
+			if ((*calc & inst_calc_cond_mask) != inst_calc_uop_trans_white)
+				/* Ask user to do calibration */
+				*calc = inst_calc_uop_trans_white;
 				return inst_cal_setup;
 			}
 	
@@ -934,8 +935,9 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	} else {
 		if (*calt & inst_calt_ref_white) {
 
-			if (*calc != inst_calc_uop_ref_white) {
-				*calc = inst_calc_uop_ref_white;	/* Ask user to do calibration */
+			if ((*calc & inst_calc_cond_mask) != inst_calc_uop_ref_white) {
+				/* Ask user to do calibration */
+				*calc = inst_calc_uop_ref_white;
 				return inst_cal_setup;
 			}
 		
@@ -1283,7 +1285,7 @@ extern dtp41 *new_dtp41(icoms *icom, instType itype) {
 	p->del           = dtp41_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 	p->cap = inst_mode_none;			/* Unknown until set */
 	p->mode = inst_mode_none;			/* Not in a known mode yet */
 	p->nstaticr = 5;					/* Number of static readings */

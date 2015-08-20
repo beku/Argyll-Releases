@@ -1314,8 +1314,10 @@ static void check_format() {
 
 /* Return the global format file extension */
 static char *ret_ext(vrml_fmt fmt) {
-	if (fmt == fmt_uninit)
+	if (fmt == fmt_uninit) {
 		check_format();
+		fmt = g_fmt;
+	}
 
 	if (fmt == fmt_x3dom)	
 		return ".x3d.html";
@@ -1327,8 +1329,10 @@ static char *ret_ext(vrml_fmt fmt) {
 
 /* Return the global format type name */
 static char *ret_format(vrml_fmt fmt) {
-	if (fmt == fmt_uninit)
+	if (fmt == fmt_uninit) {
 		check_format();
+		fmt = g_fmt;
+	}
 
 	if (fmt == fmt_x3dom)	
 		return "X3DOM";

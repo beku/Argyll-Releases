@@ -33,7 +33,8 @@ extern "C" {
 
 #if (__STDC_VERSION__ >= 199901L)	/* C99 */		\
  || defined(_STDINT_H_) || defined(_STDINT_H)		\
- || defined(_SYS_TYPES_H)
+ || defined(_SYS_TYPES_H)							\
+ || (defined(__APPLE__) && defined(__POWERPC__))
 
 #include <stdint.h> 
 

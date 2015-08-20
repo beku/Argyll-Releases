@@ -291,7 +291,7 @@ int main(int argc, char *argv[])
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
 			if (icg->t[0].ftype[ii] != r_t)
-				error ("Field %s is wrong type",fname);
+				error ("Field %s is wrong type - expect float",fname);
 	
 			chix[j] = ii;
 		}
@@ -302,15 +302,15 @@ int main(int argc, char *argv[])
 			if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
 				error("Input file doesn't contain field LAB_L");
 			if (icg->t[0].ftype[Xi] != r_t)
-				error("Field LAB_L is wrong type");
+				error("Field LAB_L is wrong type - expect float");
 			if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
 				error("Input file doesn't contain field LAB_A");
 			if (icg->t[0].ftype[Yi] != r_t)
-				error("Field LAB_A is wrong type");
+				error("Field LAB_A is wrong type - expect float");
 			if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
 				error("Input file doesn't contain field LAB_B");
 			if (icg->t[0].ftype[Zi] != r_t)
-				error("Field LAB_B is wrong type");
+				error("Field LAB_B is wrong type - expect float");
 
 		} else { 		/* Expect XYZ */
 			if (verb)
@@ -318,15 +318,15 @@ int main(int argc, char *argv[])
 			if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
 				error("Input file doesn't contain field XYZ_X");
 			if (icg->t[0].ftype[Xi] != r_t)
-				error("Field XYZ_X is wrong type");
+				error("Field XYZ_X is wrong type - expect float");
 			if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
 				error("Input file doesn't contain field XYZ_Y");
 			if (icg->t[0].ftype[Yi] != r_t)
-				error("Field XYZ_Y is wrong type");
+				error("Field XYZ_Y is wrong type - expect float");
 			if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
 				error("Input file doesn't contain field XYZ_Z");
 			if (icg->t[0].ftype[Zi] != r_t)
-				error("Field XYZ_Z is wrong type");
+				error("Field XYZ_Z is wrong type - expect float");
 		}
 
 		/* If we need the spectral information, find the fields */
@@ -354,6 +354,9 @@ int main(int argc, char *argv[])
 	
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
+
+				if (icg->t[0].ftype[spi[j]] != r_t)
+					error("Field %s is wrong type - expect float",buf);
 			}
 
 			/* Record spectral parameters */

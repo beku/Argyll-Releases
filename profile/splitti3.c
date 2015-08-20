@@ -110,28 +110,28 @@ int main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?') {
 				usage();
 
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v') {
 				verb = 1;
 
-			} else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
-				fa = nfa;
+			} else if (argv[fa][1] == 'n') {
 				if (na == NULL) usage();
+				fa = nfa;
 				numb = atoi(na);
 				if (numb < 0) usage();
 
-			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
-				fa = nfa;
+			} else if (argv[fa][1] == 'p') {
 				if (na == NULL) usage();
+				fa = nfa;
 				prop = atoi(na);
 				if (prop < 0) usage();
 				prop = prop / 100.0;
 
-			} else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
+			} else if (argv[fa][1] == 'w') {
 				dow = 1;
 
-			} else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
-				fa = nfa;
+			} else if (argv[fa][1] == 'r') {
 				if (na == NULL) usage();
+				fa = nfa;
 				seed = atoi(na);
 				doseed = 1;
 			}

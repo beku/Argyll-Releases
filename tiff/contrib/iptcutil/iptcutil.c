@@ -1,11 +1,10 @@
-/* $Id: iptcutil.c,v 1.4.2.2 2010-06-08 18:50:41 bfriesen Exp $ */
+/* $Id: iptcutil.c,v 1.9 2014-12-26 16:10:08 bfriesen Exp $ */
 
 #include "tif_config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <memory.h>
 #include <ctype.h>
 
 #ifdef HAVE_STRINGS_H
@@ -294,7 +293,10 @@ int formatIPTC(FILE *ifile, FILE *ofile)
     {
       c = str[tagindx] = getc(ifile);
       if (c == EOF)
-        return -1;
+      {
+          free(str);
+          return -1;
+      }
     }
     str[ taglen ] = 0;
 
@@ -332,12 +334,12 @@ char *super_fgets(char *b, int *blen, FILE *file)
     c=fgetc(file);
     if (c == EOF || c == '\n')
       break;
-    if (((int)q - (int)b + 1 ) >= (int) len)
+    if (((long)q - (long)b + 1 ) >= (long) len)
       {
-        int
+        long
           tlen;
 
-        tlen=(int)q-(int)b;
+        tlen=(long)q-(long)b;
         len<<=1;
         b=(char *) realloc((char *) b,(len+2));
         if ((char *) b == (char *) NULL)
@@ -352,7 +354,7 @@ char *super_fgets(char *b, int *blen, FILE *file)
       int
         tlen;
 
-      tlen=(int)q - (int)b;
+      tlen=(long)q - (long)b;
       if (tlen == 0)
         return (char *) NULL;
       b[tlen] = '\0';
@@ -365,11 +367,11 @@ char *super_fgets(char *b, int *blen, FILE *file)
 
 int main(int argc, char *argv[])
 {            
-  unsigned int
-    length;
+  /* unsigned int */
+  /*   length; */
 
-  unsigned char
-    *buffer;
+  /*unsigned char
+   *buffer;*/
 
   int
     i,
@@ -385,13 +387,13 @@ int main(int argc, char *argv[])
 
   if( argc < 2 )
     {
-      printf("%s\n", usage);
+      puts(usage);
 	    return 1;
     }
 
   mode = 0;
-  length = -1;
-  buffer = (unsigned char *)NULL;
+  /* length = -1; */
+  /* buffer = (unsigned char *)NULL; */
 
   for (i=1; i<argc; i++)
   {
@@ -444,7 +446,7 @@ int main(int argc, char *argv[])
       }
     else
       {
-        printf("%s\n", usage);
+        puts(usage);
 	      return 1;
       }
   }

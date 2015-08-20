@@ -36,7 +36,7 @@
  * port is.
  */
 
-#include "config.h"
+#include "axTLS_config.h"
 
 #ifdef CONFIG_OPENSSL_COMPATIBLE
 #include <stdlib.h>

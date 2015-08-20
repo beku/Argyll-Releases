@@ -28,7 +28,7 @@
 #undef DIAGN				/* Allow diagonal connectivity of groups */
 #define AA_LINES			/* Plot diagnostics using anti-aliased lines */
 
-#define MATCHCC 0.3			/* Match correlation threshold - reject any match under this */
+#define MATCHCC 0.25		/* Match correlation threshold - reject any match under this */
 							/* (Might want to be able to override this in command line) */
 
 #define ALT_ROT_TH 0.7		/* Correlation threshold of alternate rotations to be greater than this */

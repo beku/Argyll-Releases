@@ -750,7 +750,7 @@ i1d3_read_external_eeprom(
 
 
 /* Take a raw measurement using a given integration time. */
-/* The measureent is the count of (both) edges from the L2V */
+/* The measurent is the count of (both) edges from the L2V */
 /* over the integration time */
 static inst_code
 i1d3_freq_measure(
@@ -790,7 +790,7 @@ i1d3_freq_measure(
 /* Take a raw measurement that returns the number of clocks */
 /* between and initial edge and edgec[] subsequent edges of the L2F. */
 /* The edge count must be between 1 and 65535 inclusive. */ 
-/* Both edges are counted. It's advisable to use and even edgec[], */
+/* Both edges are counted. It's advisable to use an even edgec[], */
 /* because the L2F output may not be symetric. */
 /* If there are no edges within 10 seconds, return a count of 0 */
 static inst_code
@@ -894,7 +894,7 @@ i1d3_set_LEDs(
 	timestamp them.
 	Interpolate values up to .05 msec regular samples.
 	Do an auto-correlation on the samples.
-	Pick the longest peak between 10 andf 40Hz as the best sample period,
+	Pick the longest peak between 10 and 40Hz as the best sample period,
 	and halve this to use as the quantization value (ie. make
 	it lie between 20 and 80 Hz).
 
@@ -1740,7 +1740,7 @@ i1d3_take_emis_measurement(
 					double mint;
 
 					/* Blend down from target of 200 to minimum target of 1 edge over 8 sec. */
-					/* (Allow margine away from max integration time of 10 secs) */
+					/* (Allow margine away from max integration time of 6 secs) */
 					mint = p->inttime/6.0;
 					bl = (nedgec - mint)/(200.0 - mint);
 					if (bl < 0.0)
@@ -1753,8 +1753,8 @@ i1d3_take_emis_measurement(
 
 					tintt[i] = tedges/(edgec[i] * p->clk_freq/rmeas[i]);
 
-					if (tintt[i] > 6.0)		/* Maximum possible is 10 seconds */
-						tintt[i] = 6.0;
+					if (tintt[i] > 6.0)		/* Maximum possible is 6 seconds */
+						tintt[i] = 6.0;		/* to ensure it completes within the 20 timeout */
 
 					if (p->refperiod > 0.0) {		/* If we have a refresh period */
 						int n;
@@ -2945,7 +2945,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 		p->mininttime = 2.0 * p->dinttime;
 
-		if (*calc != inst_calc_emis_80pc) {
+		if ((*calc & inst_calc_cond_mask) != inst_calc_emis_80pc) {
 			*calc = inst_calc_emis_80pc;
 			return inst_cal_setup;
 		}
@@ -4009,7 +4009,7 @@ extern i1d3 *new_i1d3(icoms *icom, instType itype) {
 	p->del               = i1d3_del;
 
 	p->icom = icom;
-	p->itype = icom->itype;
+	p->itype = itype;
 
 	amutex_init(p->lock);
 	icmSetUnity3x3(p->ccmat);

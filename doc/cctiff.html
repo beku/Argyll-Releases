@@ -3,7 +3,7 @@
   <head>
     <title>cctiff</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -22,6 +22,7 @@
           style="font-style: italic;">profile.icm</span> | [-d dir]
         calibration.cal ...} <span style="font-style: italic;">infile.tif
 
+
           outfile.tif</span></span></small><small><span
         style="font-family: monospace;"></span><br style="font-family:
         monospace;">
@@ -33,11 +34,13 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;
 
+
         &nbsp;&nbsp; Verbose</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#c">-c</a><span
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;
+
 
         &nbsp;&nbsp; Combine linearisation curves into one transform</span><br
         style="font-family: monospace;">
@@ -46,6 +49,7 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;
 
+
         &nbsp;&nbsp; Use slow precise floating point conversion, rather
         than fast integer routines.</span><br style="font-family:
         monospace;">
@@ -53,6 +57,7 @@
         style="font-family: monospace;" href="#k">-k</a><span
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;
+
 
         &nbsp;&nbsp; Check fast result against precise, and report
         differences.<br>
@@ -71,8 +76,10 @@
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose
         output encoding from 1..n<br>
         &nbsp;<a href="#f">-f [T|J]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
         Set output format to Tiff or Jpeg (Default is same as input)<br>
         &nbsp;<a href="#q">-q quality</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
         Set JPEG quality 1..100 (Default 80)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#a">-a</a><span
@@ -84,11 +91,15 @@
           href="#I">-I</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Ignore
 
+
         any file or profile colorspace mismatches<br>
         &nbsp;<a href="#D">-D</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't
 
+
         append or set the output TIFF description<br>
+        &nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Output uncompressed TIFF (default LZW)<br>
         <br>
       </span></small><small><span style="font-family: monospace;"></span><span
         style="font-family: monospace;"><br>
@@ -100,11 +111,13 @@ Don't
         TIFF or JPEG file.<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
       </span></small><small><span style="font-family: monospace;">This
         may be an ICC file or TIFF or JPEG file with embedded profile.</span></small><br>
     <small><span style="font-family: monospace;"><br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Then
+
 
         for each profile in the linked sequence:<br style="font-family:
           monospace;">
@@ -122,6 +135,7 @@ Then
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;
 
+
         &nbsp;&nbsp;&nbsp; s = saturation, a = absolute colorimetric<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;
       </span><a style="font-family: monospace;" href="#o">-o order<span
@@ -131,6 +145,7 @@ Then
         &gt; matrix &gt; monochrome)<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 r
+
 
         = reverse (priority: monochrome &gt; matrix &gt; lut)</span></small><small><span
         style="font-family: monospace;"></span><br style="font-family:
@@ -143,9 +158,11 @@ r
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 (May
 
+
         be embedded profile in TIFF or JPEG file)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 or
+
 
         each calibration file in sequence:<br style="font-family:
           monospace;">
@@ -168,6 +185,7 @@ or
             style="font-family: monospace;"></span></i></a><span
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
         A calibration file.</span></small><br>
     <small><span style="font-family: monospace;"></span><span
         style="font-family: monospace;"></span><span style="font-family:
@@ -182,9 +200,8 @@ or
         style="font-family: monospace;"> &nbsp; &nbsp; &nbsp;
         &nbsp;&nbsp; A </span><a style="font-family: monospace;"
         href="File_Formats.html#TIFF">TIFF</a><span style="font-family:
-        monospace;">
-        or <a href="File_Formats.html#JPEG">JPEG</a> Raster file that
-        will be the input raster to be transformed.</span><br
+        monospace;"> or <a href="File_Formats.html#JPEG">JPEG</a>
+        Raster file that will be the input raster to be transformed.</span><br
         style="font-family: monospace;">
       &nbsp;<span style="font-family: monospace;"></span><a
         style="font-family: monospace;" href="#p4"><i>outfile.tif</i></a><span
@@ -282,6 +299,10 @@ or
     <br>
     <a name="D"></a>The <span style="font-weight: bold;">-D</span> flag
     stops the description tag being set or appended to by cctiff.<br>
+    <br>
+    <a name="N"></a>By default any TIFF output file will be LZW
+    compressed, but the <span style="font-weight: bold;">-N</span> flag
+    will cause any TIFF file to be saved uncompressed.<br>
     <br>
     <small><a name="e"></a></small><small>The <span style="font-weight:
         bold;">-e profile.[icm | tiff | jpg]</span> option allows an ICC

@@ -968,6 +968,8 @@ static LRESULT CALLBACK MainWndProc(
 		case WM_CHAR:
 			debugf(("It's a char message, wParam = 0x%x\n",wParam));
 			switch(wParam) {
+				case '\r':	
+				case '\n':	
 				case ' ':	/* Space */
 					debugf(("It's a SPACE, so signal it\n"));
 					plot_signal = 1;

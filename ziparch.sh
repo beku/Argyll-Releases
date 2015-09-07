@@ -52,7 +52,8 @@ do
 		cd _zipdir
 		zip -9 -m ../argyll.zip `cat ../_ziplist`
 		cd ..
-		if ! expr ${i} : '\b\.\b' > /dev/null ; then
+		#if ! expr ${i} : '\b\.\b' > /dev/null ; then
+		if ! expr ${i} : '\.' > /dev/null ; then
 			rm -r _zipdir/${i}
 		fi
 	fi
@@ -87,7 +88,8 @@ do
 		cd _zipdir
 		zip -9 -m ../argyll.zip `cat ../_ziplist`
 		cd ..
-		if ! expr ${i} : '\b\.\b' > /dev/null ; then
+		#if ! expr ${i} : '\b\.\b' > /dev/null ; then
+		if ! expr ${i} : '\.' > /dev/null ; then
 			rm -r _zipdir/${i}
 		fi
 	fi

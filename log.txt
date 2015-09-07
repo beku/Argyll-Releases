@@ -2,6 +2,19 @@
 Argyll CMS change log
 =====================
 
+Version 1.8.2
+-------------
+
+* Fixed endless loop bug in alternate calibration selectors code.
+
+Version 1.8.1 (4th September 2015)
+-------------
+
+* Fixed bug in "spec2cie -n" wrong field indexes were being used.
+
+* Fixed colorimeter calibration selectors to add in alternate
+  selectors if the letters are free.
+
 Version 1.8.0 (20th August 2015)
 -------------
 
@@ -18,6 +31,9 @@ Version 1.8.0 (20th August 2015)
 
 * Added support for the SwatchMate Cube reflective colorimeter with
   improved accuracy.
+
+* Added workaround for JETI specbos having been calibrated by a 3rd party,
+  and its calibrated range being out of sync with its claimed range. 
 
 * Fixed stack space problem in OS X UI programs by expanding
   main thread proxy to have 8MB instead of the default 512K.

@@ -3197,7 +3197,7 @@ static xspect CIE1995_TCS[] = {
 			0.44, 0.44, 0.45, 0.45, 0.45
 		}
 	},
-	/* TCS15  1 YR 6/4  Asian skin */
+	/* TCS15  1 YR 6/4  Asian skin - JIS standard */
 	{
 		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
 		1.0,				/* Scale factor */

@@ -514,8 +514,10 @@ main(int argc, char *argv[])
 
 	{
 		int sidx;				/* Sample ID index */
-		int ti, ii, Xi, Yi, Zi, Li, ai, bi;
+		int ti, ii;
+		int Xi, Yi, Zi, Li, ai, bi;		/* CGATS indexes for each field */
 		int spi[XSPECT_MAX_BANDS];		/* CGATS indexes for each wavelength */
+		int oXi, oYi, oZi, oLi, oai, obi;	/* CGATS indexes for each ouput field */
 		xsp2cie *sp2cie;				/* Spectral conversion object */
 		xspect sp;
 		double XYZ[3];
@@ -572,13 +574,17 @@ main(int argc, char *argv[])
 
 		/* copy fields to output file (except spectral if nospec) */
 		for (i = 0; i < icg->t[0].nfields; i++) {
-			/* See if this is a input spectral field */
-			for (j = 0; nospec && j < sp.spec_n; j++) {
-				if (spi[j] == i)
-					break;			/* Yes it is */
+
+			if (nospec) {
+				for (j = 0; nospec && j < sp.spec_n; j++) {
+					if (spi[j] == i) {
+						break;			/* Yes it is */
+					}
+				}
+				if (j < sp.spec_n)
+					continue;			/* Skip it */
 			}
-			if (nospec == 0 || j >= sp.spec_n)
-				ocg->add_field (ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
+			ocg->add_field (ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
 		}
 
 		/* create field for XYZ and Lab if not present */
@@ -606,6 +612,13 @@ main(int argc, char *argv[])
 		if ((bi = icg->find_field(icg, 0, "LAB_B")) < 0)
 			if ((bi = ocg->add_field(ocg, 0, "LAB_B", r_t)) < 0)
 					error ("Cannot add field to table");
+
+		oXi = Xi;
+		oYi = Yi;
+		oZi = Zi;
+		oLi = Li;
+		oai = ai;
+		obi = bi;
 
 		/* allocate elements */
 
@@ -746,25 +759,40 @@ main(int argc, char *argv[])
 			xspect corr_sp;
 
 			/* copy all input colums to output (except spectral if nospec) */
-
 			for (jj = j = 0; j < icg->t[0].nfields; j++) {
-				for (k = 0; nospec && k < sp.spec_n; k++) {
-					if (spi[k] == j)
-						break;
-				}
-				if (nospec == 0 || k >= sp.spec_n) {
-					switch (icg->t[0].ftype[j]) {
-						case r_t:
-							elems[jj].d = *((double *) icg->t[0].fdata[i][j]);
+
+				if (nospec) {
+					/* See if this is a spectral field */
+					for (k = 0; nospec && k < sp.spec_n; k++) {
+						if (spi[k] == j)
 							break;
-						case i_t:
-							elems[jj].i = *((int *) icg->t[0].fdata[i][j]);
-							break;
-						default:
-							elems[jj].c = (char *) icg->t[0].fdata[i][j];
 					}
-					jj++;
+
+					/* It is a spectral field */
+					if (k < sp.spec_n) {
+						continue;			/* Skip it */
+					}
 				}
+
+				/* Correct the other fields location in output */
+				if (j == Xi) oXi = jj;
+				if (j == Yi) oYi = jj;
+				if (j == Zi) oZi = jj;
+				if (j == Li) oLi = jj;
+				if (j == ai) oai = jj;
+				if (j == bi) obi = jj;
+
+				switch (icg->t[0].ftype[j]) {
+					case r_t:
+						elems[jj].d = *((double *) icg->t[0].fdata[i][j]);
+						break;
+					case i_t:
+						elems[jj].i = *((int *) icg->t[0].fdata[i][j]);
+						break;
+					default:
+						elems[jj].c = (char *) icg->t[0].fdata[i][j];
+				}
+				jj++;
 			}
 
 			/* Read the spectral values for this patch */
@@ -781,63 +809,16 @@ main(int argc, char *argv[])
 				/* Write the corrected spectral values for this patch */
 				if (nospec == 0) {
 					for (j = 0; j < sp.spec_n; j++) {
-						elems[spi[j]].d = corr_sp.spec[j];
+						elems[spi[j]].d = sp.spec[j] = corr_sp.spec[j];
 					}
 				}
-#ifdef ALLOW_PLOT
-				if (doplot) {
-					int ii;
-					double xx[XRES];
-					double y1[XRES];
-					double y2[XRES];
-					double lab[3];
-
-					icmXYZ2Lab(&icmD50, lab, XYZ);
-					printf("Patch %d, XYZ = %f %f %f, Lab = %f %f %f\n",i,
-					XYZ[0], XYZ[1], XYZ[2], lab[0], lab[1], lab[2]);
-
-					/* Plot spectrum out */
-					for (ii = 0; ii < XRES; ii++) {
-						double ww;
-				
-						ww = (sp.spec_wl_long - sp.spec_wl_short)
-						   * ((double)ii/(XRES-1.0)) + sp.spec_wl_short;
-					
-						xx[ii] = ww;
-						y1[ii] = value_xspect(&sp, ww);
-						y2[ii] = 100.0 * value_xspect(&corr_sp, ww);
-					}
-					do_plot(xx,y1,y2,NULL,ii);
-				}
-#endif
 			}
+
+			/* No FWA comp */
 			else {
 				/* Convert it to CIE space */
 				sp2cie->convert (sp2cie, XYZ, &sp);
-#ifdef ALLOW_PLOT
-				if (doplot) {
-					int ii;
-					double xx[XRES];
-					double y1[XRES];
-					double lab[3];
-		
-					icmXYZ2Lab(&icmD50, lab, XYZ);
-					printf("Patch %d, XYZ = %f %f %f, Lab = %f %f %f\n",i,
-					XYZ[0], XYZ[1], XYZ[2], lab[0], lab[1], lab[2]);
-		
-					/* Plot spectrum out */
-					for (ii = 0; ii < XRES; ii++) {
-						double ww;
-				
-						ww = (sp.spec_wl_long - sp.spec_wl_short)
-						   * ((double)ii/(XRES-1.0)) + sp.spec_wl_short;
-					
-						xx[ii] = ww;
-						y1[ii] = value_xspect(&sp, ww);
-					}
-					do_plot(xx,y1,NULL,NULL,ii);
-				}
-#endif
+
 			}
 
 			/* Could use sp2cie->get_cie_il() to get CIE white point */
@@ -846,13 +827,35 @@ main(int argc, char *argv[])
 			/* This won't work for emmisive though, since get_cie_il() will return 'E' */
 			icmXYZ2Lab(&icmD50, Lab, XYZ);
 
-			elems[Xi].d = XYZ[0] * 100.0;
-			elems[Yi].d = XYZ[1] * 100.0;
-			elems[Zi].d = XYZ[2] * 100.0;
+#ifdef ALLOW_PLOT
+			if (doplot) {
+				int ii;
+				double xx[XRES];
+				double y1[XRES];
+	
+				printf("Patch %d, XYZ = %f %f %f, Lab = %f %f %f\n",i,
+				XYZ[0], XYZ[1], XYZ[2], Lab[0], Lab[1], Lab[2]);
+	
+				/* Plot spectrum out */
+				for (ii = 0; ii < XRES; ii++) {
+					double ww;
+			
+					ww = (sp.spec_wl_long - sp.spec_wl_short)
+					   * ((double)ii/(XRES-1.0)) + sp.spec_wl_short;
+				
+					xx[ii] = ww;
+					y1[ii] = value_xspect(&sp, ww);
+				}
+				do_plot(xx,y1,NULL,NULL,ii);
+			}
+#endif
+			elems[oXi].d = XYZ[0] * 100.0;
+			elems[oYi].d = XYZ[1] * 100.0;
+			elems[oZi].d = XYZ[2] * 100.0;
 
-			elems[Li].d = Lab[0];
-			elems[ai].d = Lab[1];
-			elems[bi].d = Lab[2];
+			elems[oLi].d = Lab[0];
+			elems[oai].d = Lab[1];
+			elems[obi].d = Lab[2];
 
 			ocg->add_setarr(ocg, 0, elems);
 		}
@@ -866,7 +869,7 @@ main(int argc, char *argv[])
 		ocg->del (ocg);				/* Clean up */
 		icg->del (icg);				/* Clean up */
 
-			free (elems);
+		free (elems);
 	}
 
 	return 0;

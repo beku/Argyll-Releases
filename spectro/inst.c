@@ -875,9 +875,11 @@ int doccmx						/* Add matching installed ccmx files */
 		usels[i] = ((char)-1);
 	k = 0;		/* Next selector index */
 
+	/* First create a list of calibrations and their desired selectors: */
+
 	/* Add entries from the static list and their primary selectors */
 	/* (We're currently assuming that calibrations that the instrument */
-	/*  returns are not custom) */
+	/*  returns are not custom.) */
 	/* Count the number in the static list. */
 	for (i = 0; !(sdtlist[i].flags & inst_dtflags_end); i++) {
 
@@ -966,25 +968,52 @@ int doccmx						/* Add matching installed ccmx files */
 		}
 	}
 
+	/* Copy candidate selectors to private isel[] list */
+	for (i = 0; i < nlist; i++) {
+		strcpy(list[i].isel, list[i].sel);
+		list[i].sel[0] = '\000';
+	}
+
+	/* Then allocate a slector for each calibration: */
+
 	/* Set selectors from primary for cbid or custom first */
 	for (i = 0; i < nlist; i++) {
 		if (list[i].cbid > 0
 		 || (list[i].flags & inst_dtflags_custom) != 0) {
-			disptechs_set_sel(0, i, list[i].sel, usels, &k, asels);
+			disptechs_set_sel(0, i, list[i].sel, list[i].isel, usels, &k, asels);
 		}
 	}
 
 	/* Set selectors from primary for rest */
 	for (i = 0; i < nlist; i++)
-		disptechs_set_sel(0, i, list[i].sel, usels, &k, asels);
+		disptechs_set_sel(0, i, list[i].sel, list[i].isel, usels, &k, asels);
 
-	/* Set remaining selectors from secondaries */
+	/* Set remaining selectors from primaries or secondaries */
 	for (i = 0; i < nlist; i++)
-		disptechs_set_sel(1, i, list[i].sel, usels, &k, asels);
+		disptechs_set_sel(1, i, list[i].sel, list[i].isel, usels, &k, asels);
 
-	/* Set remaining from fallback (or give up and set to null) */
+	/* Set remaining from fallback */
 	for (i = 0; i < nlist; i++) {
-		fail = disptechs_set_sel(3, i, list[i].sel, usels, &k, asels);
+		disptechs_set_sel(2, i, list[i].sel, list[i].isel, usels, &k, asels);
+		if (list[i].sel[0] == '\000')
+			fail = 1;
+	}
+
+	/* Any calibrations that failed to find a character will be left as a nul string */
+
+	/* Add alternate selectors if they are free. */
+	for (;;) {
+		int more = 0;
+		for (i = 0; i < nlist; i++) {
+			/* Add unused secondaries */
+			disptechs_set_sel(3, i, list[i].sel, list[i].isel, usels, &k, asels);
+
+			if (list[i].isel[0] != '\000') {		/* Still more secondaries available */
+				more = 1;
+			}
+		}
+		if (!more)
+			break;
 	}
 
 	if (pndtlist != NULL)

@@ -46,6 +46,10 @@
 
 		Should xlutfix.c be revived (also adding ICM_CLUT_SET_APXLS support), 
 		to improve "bumpy black" problem ?
+
+		Would be nice to be able to specify a specific patch
+		as the white one rather than using heuristic to identify it,
+		since some pathalogical cases don't work.
  */
 
 /*

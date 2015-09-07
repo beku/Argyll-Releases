@@ -56,7 +56,7 @@
 
 /* We deliberately duplicate the selection characters, */
 /* because it's not usual to offer the whole list, just */
-/* a sub-set, which may not clash. */
+/* a sub-set which may not clash. */
 /* disptechs_set_sel() should be used to present */
 /* unique selectors. */
 static disptech_info disptech_info_array[] = {
@@ -387,52 +387,72 @@ disptech_info *disptech_get_strid(char *strid) {
 	so we need to do three passes through all the selections.
 */
 
-/* Set the selection characters. */
-/* Return NZ if we have not set all selectors */
-/* If a selector is set, its index will be set in usels[], */
-/* and any remaining selection characters deleted. */
-/* If flag == 0, set from just first suggested selector */
-/* If flag == 1, set from just suggested selector */
+/* Append the selection characters. */
+/* If a selector is set, its index will be set in usels[]. */
+/* Remove any used selectors from isel[]. */
+/* If flag == 0, set from just first suggested selector. */
+/* If flag == 1, set from just suggested selectors. */
 /* If flag == 2, set from suggested and fallback selectors */
-/* If flag == 3, set from suggested and fallback selectors, and set unset to nul */
-int disptechs_set_sel(
+/* If flag == 3, append from suggested selectors */
+void disptechs_set_sel(
 	int flag,			/* See above */
 	int ix,				/* Index of entry being set */
-	char *sel,			/* Pointer to string list of suggested selectors, */
-						/* return a single unique selector in string. */
+	char *osel,			/* Append unique selectors to this string. */
+	char *isel,			/* Pointer to string list of suggested selectors, */
 	char *usels,		/* char[256] initially -1, to track used selector entry index */
 	int *k,				/* Index of next available selector in asels */
 	char *asels			/* String list of fallback selectors to choose from, in order. */
 ) {
-	char *d, *s, i;
+	char *iisel = isel, i;
 
-//a1logd(g_log, 1,"disptechs_set_sel: flag %d, ix %d, sel '%s', k %d\n",flag, ix,sel,*k);
+//a1logd(g_log, 1,"disptechs_set_sel: flag %d, ix %d, osel '%s', isel '%s', k %d\n",flag, ix,osel,isel,*k);
 
-	/* See if this has already been allocated */
-	if (usels[*sel] == ix) {
-//a1logd(g_log, 1," set OK\n");
-		return 0;				/* Nothing to do */
+	if (flag != 3) {
+		/* See if we already have a selecor character */
+		if (osel[0] != '\000') {
+//a1logd(g_log, 1," already set OK\n");
+			return;
+		}
+	} else {
+		if (isel[0] == '\000') {
+//a1logd(g_log, 1," nothing to set from\n");
+			return;				/* Nothing to set from */
+		}
+
+		/* Get ready to append */
+		osel += strlen(osel);
 	}
 
-	/* Set from the suggested selectors */ 
-	for (i = 0, s = sel; *s != '\000'; s++, i++) {
+	/* Set or add from the first unsed suggested selectors */ 
+	for (i = 0; *isel != '\000'; isel++, i++) {
 		if (flag == 0 && i > 0) {
 //a1logd(g_log, 1," run out of primaries\n");
 			break;					/* Looked at primary */
 		}
-		if (usels[*s] == ((char)-1)) {		/* If this selector is not currently used */
-//a1logd(g_log, 1," set to '%c' at %d\n", *s, i);
-			sel[0] = *s;			/* Use it */
-			sel[1] = '\000';
-			usels[*s] = ix;
-			return 0;
+		if (usels[*isel] == ((char)-1)) {		/* If this selector is not currently used */
+//a1logd(g_log, 1," added to '%c' from %d\n", *isel, i);
+			osel[0] = *isel;			/* Use it */
+			osel[1] = '\000';
+			usels[osel[0]] = ix;
+
+			/* Remove all used/discarded from isel, in case we are called again. */
+			for (isel++; ;isel++, iisel++) {
+				*iisel = *isel; 
+				if (*isel == '\000')
+					break;
+			}
+			return;
 		}
-//a1logd(g_log, 1," sel '%c' at %d is used by ix %d\n", *s, i, usels[*s]);
+//a1logd(g_log, 1," sel '%c' at %d is used by ix %d\n", *isel, i, usels[*isel]);
 	}
 
-	if (flag <= 2) {
-//a1logd(g_log, 1," returning unset\n");
-		return 1;
+	/* If we get here, we haven't managed to add anything from the remaining */
+	/* selectors, so mark the candidate list as empty: */
+	iisel[0] = '\000';
+
+	if (flag != 2) {
+//a1logd(g_log, 1," returning without add\n");
+		return;
 	}
 
 	/* Get the next unused char in fallback list */
@@ -442,22 +462,16 @@ int disptechs_set_sel(
 	}
 	if (asels[*k] != '\000') { 
 //a1logd(g_log, 1," set int to fallback '%c' at %d\n", asels[*k], *k);
-		sel[0] = asels[*k]; 
-		sel[1] = '\000';
-		usels[sel[0]] = ix;
+		osel[0] = asels[*k]; 
+		osel[1] = '\000';
+		usels[osel[0]] = ix;
 		(*k)++;
-		return 0;
+		return;
 	}
 
-	/* Set any unset to nul */
-	if (flag >= 3) {
-//a1logd(g_log, 1," clearing\n");
-		sel[0] = '\000';
-	}
-
-//a1logd(g_log, 1," failed\n");
-	/* If we got here, we failed */
-	return 1;
+//a1logd(g_log, 1," returning after fallback without add\n");
+	/* If we got here, we failed to add a selector */
+	return;
 }
 
 /* Return the display tech list with unique lsel lectors */
@@ -474,18 +488,19 @@ disptech_info *disptech_get_list() {
 
 	/* Add entries from the static list and their primary selectors */
 	for (i = 0; list[i].dtech != disptech_end; i++) {
-//a1logd(1,"tech[%d] '%s' sels = '%s'\n",i,list[i].desc,list[i].sel);
-		strcpy(list[i].lsel, list[i].sel);
-		disptechs_set_sel(0, i, list[i].lsel, usels, &k, asels);
+//a1logd(g_log,1,"tech[%d] '%s' sels = '%s'\n",i,list[i].desc,list[i].sel);
+		strcpy(list[i].isel, list[i].sel);
+		list[i].lsel[0] = '\000';
+		disptechs_set_sel(0, i, list[i].lsel, list[i].isel, usels, &k, asels);
 	}
 
 	/* Set selectors from secondary */
 	for (i = 0; list[i].dtech != disptech_end; i++)
-		disptechs_set_sel(1, i, list[i].lsel, usels, &k, asels);
+		disptechs_set_sel(1, i, list[i].lsel, list[i].isel, usels, &k, asels);
 
 	/* Set remainder from fallback */
 	for (i = 0; list[i].dtech != disptech_end; i++)
-		disptechs_set_sel(3, i, list[i].lsel, usels, &k, asels);
+		disptechs_set_sel(2, i, list[i].lsel, list[i].isel, usels, &k, asels);
 
 	return list;
 }

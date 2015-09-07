@@ -390,6 +390,7 @@ typedef struct _inst_disptypesel {
 
   /* Private: */
 	int ix;					/* Internal index,  */
+	char isel[INST_DTYPE_SEL_LEN];	/* String of potential selector characters */
 
 	// Stuff for ccss & ccmx
 	char *path;				/* Path to ccss or ccmx. NULL if not valid */

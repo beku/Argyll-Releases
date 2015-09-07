@@ -32,6 +32,9 @@
  *      normalized back to zero by scaling the matrix before storing
  *      the result in the ICC profile.
  *
+ *		Would be nice to be able to specify a specific patch
+ *		as the white one rather than using heuristic to identify it,
+ *		since some pathalogical cases don't work.
  */
 
 

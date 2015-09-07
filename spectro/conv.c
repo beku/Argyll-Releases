@@ -130,11 +130,11 @@ int next_con_char(void) {
 	return c;
 }
 
-/* Horrible hack to poll stdin when we're not interactive */
+/* Horrible hack to poll stdin when we're not interactive. */
 /* This has the drawback that the char and returm must be */
 /* written in one operation for the character to be recognised - */
 /* trying to do this manually typically doesn't work unless you are */
-/* very fast an lucky. */
+/* very fast and lucky. */
 static int th_read_char(void *pp) {
 	char *rp = (char *)pp;
 	HANDLE stdinh;
@@ -166,6 +166,7 @@ int poll_con_char(void) {
 		/* any of MSWin's async file read functions, because we */
 		/* have no way of ensuring that the STD_INPUT_HANDLE has been */
 		/* opened with FILE_FLAG_OVERLAPPED. Used a thread instead... */
+		/* ReOpenFile() would fix this, but it's not available in WinXP, only Visa+ :-( */
 		if ((getch_thread = new_athread(th_read_char, &c)) != NULL) {
 			HANDLE stdinh;
 

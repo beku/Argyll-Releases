@@ -79,7 +79,7 @@ static inst_code i1pro_interp_code(i1pro *p, i1pro_code ec);
 
 /* Establish communications with a I1DISP */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return I1PRO_COMS_FAIL on failure to establish communications */
 static inst_code
 i1pro_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	i1pro *p = (i1pro *) pp;
@@ -806,6 +806,7 @@ i1pro_del(inst *pp) {
 	del_i1proimp(p);
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
+	p->vdel(pp);
 	free(p);
 }
 

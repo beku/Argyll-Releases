@@ -107,8 +107,8 @@ void bt1886_setnop(bt1886_info *p) {
 	p->outsc = 1.0;
 	p->outo = 0.0;
 	p->outL = 0.0;
+	p->tab[0] = 0.0;
 	p->tab[1] = 0.0;
-	p->tab[2] = 0.0;
 }
 
 /* Setup the bt1886_info for the given target black point, proportion of */

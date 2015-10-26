@@ -43,6 +43,7 @@
 #include "sa_config.h"
 #include "numsup.h"
 #endif /* !SALONEINSTLIB */
+#include "plot.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "conv.h"
@@ -151,9 +152,6 @@ double rspec_raw2nm(rspec_inf *inf, double rix) {
 
 	if (inf->nwlcal == 0)
 		error("rspec_raw2nm: nwlcal == 0");
-
-// ~~~~9999	 test fudge
-//	rix += 15;
 
 	/* Compute polinomial */
 	for (wl = inf->wlcal[inf->nwlcal-1], k = inf->nwlcal-2; k >= 0; k--)

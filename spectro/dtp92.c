@@ -169,7 +169,7 @@ dtp92_command(dtp92 *p, char *in, char *out, int bsize, double to) {
 
 /* Establish communications with a DTP92 */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return DTP92_COMS_FAIL on failure to establish communications */
 static inst_code
 dtp92_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	dtp92 *p = (dtp92 *) pp;
@@ -1023,6 +1023,7 @@ dtp92_del(inst *pp) {
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
 	inst_del_disptype_list(p->dtlist, p->ndtlist);
+	p->vdel(pp);
 	free(p);
 }
 

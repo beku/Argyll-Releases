@@ -567,7 +567,7 @@ char **pnames		/* List of process names to try and kill before opening */
 
 /*  -------------------------------------------------------------- */
 
-/* Our universal USB transfer function */
+/* Our universal USB transfer function, used for rd/wr. */
 /* It appears that we may return a timeout with valid characters. */
 static int icoms_usb_transaction(
 	icoms *p,

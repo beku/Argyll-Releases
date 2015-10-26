@@ -180,7 +180,7 @@ double to) {		/* Timout in seconts */
 
 /* Establish communications with a DTP51 */
 /* Use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return DTP51_COMS_FAIL on failure to establish communications */
 static inst_code
 dtp51_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	dtp51 *p = (dtp51 *)pp;
@@ -787,6 +787,7 @@ dtp51_del(inst *pp) {
 	dtp51 *p = (dtp51 *)pp;
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
+	p->vdel(pp);
 	free(p);
 }
 

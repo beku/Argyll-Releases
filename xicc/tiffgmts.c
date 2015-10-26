@@ -58,7 +58,7 @@ void usage(void) {
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
 //  fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
-	fprintf(stderr," -p oride      l = Lab_PCS (default), j = %s Appearance Jab\n",icxcam_description(cam_default),icxcam_description(cam_default));
+	fprintf(stderr," -p oride      l = Lab_PCS (default), j = %s Appearance Jab\n",icxcam_description(cam_default));
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
 	fprintf(stderr," -c viewcond   set appearance mode and viewing conditions for %s,\n",icxcam_description(cam_default));
@@ -77,7 +77,7 @@ void usage(void) {
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
-	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 2)\n");
 	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
 	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
 	fprintf(stderr," -V L,a,b       Overide normal vector direction for span\n");

@@ -13,7 +13,8 @@ Samples = it8.cht ColorChecker.cht ColorChecker.cie ColorCheckerDC.cht ColorChec
           ColorCheckerPassport.cht ColorCheckerPassport.cie
           QPcard_201.cht QPcard_201.cie QPcard_202.cht QPcard_202.cie CMP_DT_003.cht
           CMP_Digital_Target-4.cht CMP_Digital_Target-4.ti2 CMP_Digital_Target-4.cie
-          LaserSoftDCPro.cht SpyderChecker.cht SpyderChecker.cie ;
+          LaserSoftDCPro.cht SpyderChecker.cht SpyderChecker.cie
+          SpyderChecker24.cht SpyderChecker24.cie ;
 
 #Install
 InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;

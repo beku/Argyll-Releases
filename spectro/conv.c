@@ -68,6 +68,7 @@
 //#include <stdbool.h>
 #include <sys/sysctl.h>
 #include <sys/param.h>
+#include <Carbon/Carbon.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/serial/IOSerialKeys.h>
@@ -263,12 +264,14 @@ static int beep_msec;
 /* Delayed beep handler */
 static int delayed_beep(void *pp) {
 	msec_sleep(beep_delay);
+	a1logd(g_log,8, "msec_beep activate\n");
 	Beep(beep_freq, beep_msec);
 	return 0;
 }
 
 /* Activate the system beeper */
 void msec_beep(int delay, int freq, int msec) {
+	a1logd(g_log,8, "msec_beep %d msec\n",msec);
 	if (delay > 0) {
 		if (beep_thread != NULL)
 			beep_thread->del(beep_thread);
@@ -278,6 +281,7 @@ void msec_beep(int delay, int freq, int msec) {
 		if ((beep_thread = new_athread(delayed_beep, NULL)) == NULL)
 			a1logw(g_log, "msec_beep: Delayed beep failed to create thread\n");
 	} else {
+		a1logd(g_log,8, "msec_beep activate\n");
 		Beep(freq, msec);
 	}
 }
@@ -549,6 +553,8 @@ void empty_con_chars(void) {
 }
 
 /* Sleep for the given number of msec */
+/* (Note that OS X 10.9+ App Nap can wreck this, unless */
+/*  it is turned off.) */
 void msec_sleep(unsigned int msec) {
 #ifdef NEVER
 	if (msec > 1000) {
@@ -779,6 +785,7 @@ static int beep_msec;
 /* Delayed beep handler */
 static int delayed_beep(void *pp) {
 	msec_sleep(beep_delay);
+	a1logd(g_log,8, "msec_beep activate\n");
 #ifdef __APPLE__
 # if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
 	AudioServicesPlayAlertSound(kUserPreferredAlert);
@@ -794,6 +801,7 @@ static int delayed_beep(void *pp) {
 
 /* Activate the system beeper */
 void msec_beep(int delay, int freq, int msec) {
+	a1logd(g_log,8, "msec_beep %d msec\n",msec);
 	if (delay > 0) {
 		if (beep_thread != NULL)
 			beep_thread->del(beep_thread);
@@ -803,6 +811,7 @@ void msec_beep(int delay, int freq, int msec) {
 		if ((beep_thread = new_athread(delayed_beep, NULL)) == NULL)
 			a1logw(g_log, "msec_beep: Delayed beep failed to create thread\n");
 	} else {
+		a1logd(g_log,8, "msec_beep activate\n");
 #ifdef __APPLE__
 # if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
 			AudioServicesPlayAlertSound(kUserPreferredAlert);

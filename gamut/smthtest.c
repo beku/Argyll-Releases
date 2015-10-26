@@ -47,37 +47,44 @@ gammapweights weights[] = {
 		{				/* Cusp alignment control */
 			{
 				0.1,	/* Cusp luminance alignment weighting 0 = none, 1 = full */
-				0.1,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
-				0.2		/* Cusp hue alignment weighting       0 = none, 1 = full */
+				0.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
+				0.3		/* Cusp hue alignment weighting       0 = none, 1 = full */
 			},
+			2.0,		/* Alignment twist power, 0 = linear, 1 = curve, 2+ late curve */
 			1.00		/* Chroma expansion 1 = none */
 		},
-		{			/* Radial weighting */
+		{			/* Radial weighting (currently broken - need to fix) */
 			0.0,	/* Radial error overall weight, 0 + */
 			0.5,	/* Radial hue dominance vs l+c, 0 - 1 */
 			0.5		/* Radial l dominance vs, c, 0 - 1 */
 		},
 		{			/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
-			0.5,	/* Hue dominance vs l+c, 0 - 1 */
+			0.8,	/* Hue dominance vs l+c, 0 - 1 */
 
-			0.9,	/* Light l dominance vs, c, 0 - 1 */
-			0.9,	/* Medium l dominance vs, c, 0 - 1 */
-			0.9,	/* Dark l dominance vs, c, 0 - 1 */
+			0.8,	/* White l dominance vs, c, 0 - 1 */
+			0.5,	/* Grey l dominance vs, c, 0 - 1 */
+			0.93,	/* Black l dominance vs, c, 0 - 1 */
 
-			0.5,	/* l/c dominance breakpoint, 0 - 1 */
-			0.0,	/* l dominance exageration, 0+ */
-			0.0		/* c dominance exageration, 0+ */
+			0.4,	/* White l blend start radius, 0 - 1, at white = 0 */
+			0.7,	/* Black l blend power, linear = 1.0, enhance < 1.0 */
+
+			1.5,	/* L error extra power with size, none = 1.0 */
+			10.0	/* L error extra xover threshold in DE */
 		},
 		{			/* Relative vector  smoothing */
-			30.0, 20.0	/* Relative Smoothing radius L* H* */
+			20.0, 30.0,	/* Relative Smoothing radius L* H* */
+			0.9			/* Degree of smoothing */
 		},
 		{		/* Weighting of excessive compression error, which is */
 				/* the src->dst vector length over the available dst depth. */
 				/* The depth is half the distance to the intersection of the */
 				/* vector to the other side of the gamut. (doesn't get triggered much ?) */
-			100.0,		/* Compression depth weight */
-			100.0		/* Expansion depth weight */
+			5.0,	/* Compression depth weight */
+			5.0		/* Expansion depth weight */
+		},
+		{
+			0.0			/* Fine tuning expansion weight, 0 - 1 */
 		}
 	}
 };
@@ -210,7 +217,7 @@ main(int argc, char *argv[]) {
 
 	/* Create the near point mapping */
 	nsm = near_smooth(verb, &nnsm, gin, gin, gout, 0, 0, NULL, xweights,
-	           0.1, 0.1, 1, 1, 2.0, 17, 10.0, il, ih, ol, oh);
+	           0.1, 0.1, 1, 1, 2.0, 19, 2.0, 1.20, 5, il, ih, ol, oh);
 	if (nsm == NULL)
 		error("Creating smoothed near points failed");
 

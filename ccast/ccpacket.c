@@ -231,7 +231,7 @@ static ccpacket_err connect_ccpacket_imp(
 	}
 
 	/* Connect */
-	if (rv = (connect(p->sock, (struct sockaddr *)&server, sizeof(server))) != 0) {
+	if ((rv = (connect(p->sock, (struct sockaddr *)&server, sizeof(server)))) != 0) {
 		DBG((g_log,0, "TCP connect IP '%s' port %d failed with %d, errno %d\n",p->dip, p->dport,rv,ERRNO))
 		return ccpacket_connect;
 	}

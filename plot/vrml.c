@@ -877,7 +877,7 @@ double cc[3]	/* Surface color, cc == NULL or cc[0] < 0.0 */
 			fprintf(s->fp,"                    ></Material>\n");
 		/* Hack to workaround bugs in x3dom trasparency */
 		if (s->fmt == fmt_x3dom && trans > 0.0)	
-			fprintf(s->fp,"          <DepthMode readOnly='true'></depthMode>\n", trans);
+			fprintf(s->fp,"          <DepthMode readOnly='true'></depthMode>\n");
 		fprintf(s->fp,"        </Appearance>\n");
 		fprintf(s->fp,"      </Shape>\n");
 	}

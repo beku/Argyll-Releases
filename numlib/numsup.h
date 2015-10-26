@@ -350,6 +350,24 @@ size_t nsize
 
 /* =========================================================== */
 
+#if defined(__APPLE__)
+
+/* Tell App Nap that this is user initiated */
+void osx_userinitiated_start();
+
+/* Done with user initiated */
+void osx_userinitiated_end();
+
+/* Tell App Nap that this is latency critical */
+void osx_latencycritical_start();
+
+/* Done with latency critical */
+void osx_latencycritical_end();
+
+#endif	/* __APPLE__ */
+
+/* =========================================================== */
+
 /* Numerical recipes vector/matrix support functions */
 /* Note that the index arguments are the inclusive low and high values */
 
@@ -504,6 +522,7 @@ void write_INR64_le(ORD8 *p, INR64 d);
 #ifndef isNan
 #define isNan(x) ((x) != (x))
 #define isFinite(x) ((x) == 0.0 || (x) * 1.0000001 != (x))
+#define isNFinite(x) ((x) != 0.0 && (x) * 1.0000001 == (x))
 #endif
 
 

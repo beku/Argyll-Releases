@@ -19,7 +19,9 @@
     This can be used for visualizing and comparing the gamut of an image
     to the colorspace it is in, or a colorspace it might get transformed
     into, and can also be used to create an image source gamut for use
-    with <a href="collink.html"> collink</a>.<br>
+    with <a href="collink.html"> collink</a>, something that can be of
+    particular importance if your images are encoded in a large gamut
+    space such as L*a*b*, ProPhoto, scRGB etc.<br>
     <br>
     <span style="font-weight: bold;">NOTE</span> that if you are
     creating an image gamut suitable for use with the <a
@@ -33,13 +35,14 @@
       href="Scenarios.html#LP3">Image dependent gamut mapping using
       device links</a> for an example workflow.<br>
     <br>
-    See <a href="file:///D:/src/argyll/doc/3Df.htmlormat">3D Viewing
+    See <a href="3dformat.html">3D Viewing
       Format</a> for switching to VRML or X3D output format.<br>
     <h3>Usage Summary</h3>
     <small><span style="font-family: monospace;">tiffgamut [-v level]
         [profile.icm | embedded.tif/jpg] infile1.tif/jpg
         [infile2.tif/jpg ...]</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -54,6 +57,7 @@ emit
 
 
 
+
         X3DOM .x3d.html file as well as CGATS .gam file</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -62,10 +66,12 @@ Don't
 
 
 
+
         add X3DOM axes or white/black point</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Add
+
 
 
 
@@ -83,6 +89,7 @@ s
 
 
 
+
         = saturation, a = absolute (default), d = profile default</span></small><small><span
         style="font-family: monospace;"></span></small><br
       style="font-family: monospace;">
@@ -93,6 +100,7 @@ s
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 r
+
 
 
 
@@ -115,6 +123,7 @@ either
 
 
 
+
         an enumerated choice, or a parameter:value change</span><span
         style="font-family: monospace;"></span><br style="font-family:
         monospace;">
@@ -128,9 +137,11 @@ either
 
 
 
+
         pe - Print evaluation environment (CIE 116-1995)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
+
 
 
 
@@ -143,6 +154,7 @@ either
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
 
 
@@ -173,10 +185,12 @@ s:surround&nbsp;&nbsp;
 
 
 
+
         n = auto, a = average, m = dim, d = dark,</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
 
 
@@ -189,10 +203,12 @@ w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
+
         Adapted white point as XYZ (default media white)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 
@@ -205,10 +221,12 @@ a:adaptation
 
 
 
+
         Adaptation luminance in cd.m^2 (default 50.0)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 b:background
+
 
 
 
@@ -224,16 +242,18 @@ f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
+
             Flare light % of image luminance (default 1)<br>
           </span></small>&nbsp;</span><span style="font-family:
         monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         g:glare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Glare light % of ambient
-        (default 1)</span><br style="font-family: monospace;">
+        (default 5)</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp;
         &nbsp;&nbsp; g:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Glare color
         as XYZ (default media white)</span><br style="font-family:
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
 

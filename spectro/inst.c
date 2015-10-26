@@ -581,6 +581,18 @@ static inst_config config_enum(inst *p, int ec) {
 }
 
 /* ---------------------------------------------- */
+
+/* Delete things set/done by new_inst() */
+static inst_code virtual_del(inst *p) {
+
+#if defined(__APPLE__)
+	osx_latencycritical_end();
+#endif
+
+	return inst_ok;
+}
+
+
 /* Virtual constructor. */
 /* Return NULL for unknown instrument, */
 /* or serial instrument if nocoms == 0. */
@@ -702,6 +714,8 @@ void *cntx			/* Context for callback */
 		return NULL;
 	}
 
+	p->vdel = virtual_del;
+
 	/* Add default methods if constructor did not supply them */
 	if (p->init_coms == NULL)
 		p->init_coms = init_coms;
@@ -784,6 +798,10 @@ void *cntx			/* Context for callback */
 
 	/* Set the provided user interaction callback */
 	p->set_uicallback(p, uicallback, cntx);
+
+#if defined(__APPLE__)
+	osx_latencycritical_start();
+#endif
 
 	return p;
 }

@@ -956,7 +956,7 @@ int main(int argc, char *argv[]) {
 	if (illum == icxIT_none)
 		illum = icxIT_D50;
 	
-	if (observ = icxOT_none)
+	if (observ == icxOT_none)
 		observ = icxOT_CIE_1931_2;
 
 	/* See if CIE is actually available - some sources of .TI3 don't provide it */

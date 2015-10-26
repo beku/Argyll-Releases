@@ -642,12 +642,13 @@ spyd2_GetReading_ll(
 	int value;
 	int index;
 	int flag;
-	int nords, retr;
+	int retr;
 	unsigned char buf1[8];		/* send bytes */
 	unsigned char buf2[9 * 8];	/* return bytes read */
 	int rvals[3][8];			/* Raw values */
 	int _maxtcnt = 0;			/* Maximum transition count */
 	int _mintcnt = 0x7fffffff;	/* Minumum transition count */
+	double maxfreq = 0.0;		/* Maximum sensor frequency found */
 	int i, j, k;
 
 	a1logd(p->log, 3, "spyd2_GetReading_ll: clocks = %d, minfc = %d, maxfc = %d\n",*clocks,*minfclks,*maxfclks);
@@ -691,7 +692,7 @@ spyd2_GetReading_ll(
 	}
 
 	/* The Spyder comms seems especially flakey... */
-	for (retr = 0, nords = 1; ; retr++, nords++) {
+	for (retr = 0; ; retr++) {
 
 //int start = msec_time();
 
@@ -888,13 +889,14 @@ spyd2_GetReading_ll(
 			} else {			/* We discard 0'th L2F transion to give transitions */
 								/* over the time period. */
 				if (sensv != NULL)
-					sensv[k] = ((double)transcnt - 1.0) * (double)CLKRATE
-					         / ((double)nords * (double)intclks);
+					sensv[k] = ((double)transcnt - 1.0) * (double)CLKRATE / (double)intclks;
 				if (transcnt > _maxtcnt)
 					_maxtcnt = transcnt;
 				if (transcnt < _mintcnt)
 					_mintcnt = transcnt;
 			}
+			if (sensv != NULL && sensv[k] > maxfreq)
+				maxfreq = sensv[k];
 			if (p->log->debug >= 4 && sensv != NULL)
 				a1logd(p->log, 4, "%d: initial senv %f from transcnt %d and intclls %d\n",
 				                                              k,sensv[k],transcnt,intclks);
@@ -967,6 +969,8 @@ spyd2_GetReading_ll(
 				if (transcnt < _mintcnt)
 					_mintcnt = transcnt;
 			}
+			if (sensv != NULL && (8.125 * sensv[k]) > maxfreq)
+				maxfreq = 8.125 * sensv[k];
 			if (p->log->debug >= 4 && sensv != NULL)
 				a1logd(p->log, 4, "%d: initial senv %f from transcnt %d and intclls %d\n",
 				                                             k,sensv[k],transcnt,intclks);
@@ -977,6 +981,16 @@ spyd2_GetReading_ll(
 		*maxtcnt = _maxtcnt;
 	if (mintcnt != NULL)
 		*mintcnt = _mintcnt;
+
+	if (p->log->debug >= 4 && sensv != NULL)
+		a1logd(p->log, 4, "Maximum sensor frequency = %f\n",maxfreq);
+
+	/* Problem is that the HW starts loosing count above a certain */
+	/* frequency, so we depend on one less bright sensor acting as a canary, */
+	/* so we can't make the threshold too low. */
+	if (maxfreq > 500000.0) {
+		return spyd2_interp_code((inst *)p, SPYD2_TOOBRIGHT);
+	}
 
 	return rv;
 }
@@ -2843,7 +2857,7 @@ spyd4_load_cal(spyd2 *p) {
 
 /* Establish communications with a SPYD2 */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return SPYD2_COMS_FAIL on failure to establish communications */
 static inst_code
 spyd2_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	spyd2 *p = (spyd2 *) pp;
@@ -2866,7 +2880,7 @@ spyd2_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	/* (and Spyder 2 hangs if a reset ep is done on MSWin.) */
 	/* The spyder 2 doesn't work well with the winusb driver either, */
 	/* it needs icomuf_resetep_before_read to work at all, and */
-	/* gets retries anyway. So we use the libusb0 driver for it. */
+	/* gets retries anyway. So we use the libusb-win32 driver for it. */
 #if defined(NT)
 	if (p->itype == instSpyder3) {
 		usbflags |= icomuf_resetep_before_read;		/* The spyder USB is buggy ? */
@@ -3391,6 +3405,8 @@ spyd2_interp_error(inst *pp, int ec) {
 			return "Display device selection out of range";
 
 		/* User error */
+		case SPYD2_TOOBRIGHT:
+			return "Too bright to read accuractly";
 		case SPYD2_NO_REFRESH_DET:
 			return "Unable to detect & measure refresh rate";
 
@@ -3445,6 +3461,7 @@ spyd2_interp_code(inst *pp, int ec) {
 		case SPYD2_DISP_SEL_RANGE:
 			return inst_wrong_setup | ec;
 
+		case SPYD2_TOOBRIGHT:
 		case SPYD2_NO_REFRESH_DET:
 			return inst_misread | ec;
 
@@ -3461,6 +3478,7 @@ spyd2_del(inst *pp) {
 	inst_del_disptype_list(p->dtlist, p->ndtlist);
 	if (p->samples != NULL)
 		free(p->samples);
+	p->vdel(pp);
 	free(p);
 }
 

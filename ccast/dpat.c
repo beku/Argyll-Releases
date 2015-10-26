@@ -440,7 +440,7 @@ double get_ccast_dith(double ipat[DISIZE][DISIZE][3], double val[3]) {
 	if (vv) {
 		printf("There are %d unique surrounders:\n",nsur);
 		for (n = 0; n < nsur; n++) {
-			printf("sur %f %f %f\n",ressur[n][0], ressur[n][1], ressur[n][2], ressur[n][3]);
+			printf("sur %f %f %f\n",ressur[n][0], ressur[n][1], ressur[n][2]);
 		}
 	}
 #endif

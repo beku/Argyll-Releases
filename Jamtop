@@ -60,7 +60,7 @@ if $(USE_LIBUSB) = true {
 }
 
 # For testing CCast
-DEFINES += CCTEST_PATTERN ;
+#DEFINES += CCTEST_PATTERN ;
 
 # Information for compiling and linking GUI programs
 
@@ -170,6 +170,7 @@ rule CheckForLibrary {
 # See if we have a system TIFF, JPEG, PNG or ZLIB library.
 # Note this generates: $(TIFFLIB) $(TIFFINC) $(JPEGLIB) $(JPEGINC) $(PNGLIB)
 # $(PNGINC) $(ZLIBLIB) $(ZINC)
+# !!!!! Add to makepackagebin.sh -sBUILTIN_XXX=true !!!!!
 CheckForLibrary "TIFF" ;
 CheckForLibrary "JPEG" ;
 CheckForLibrary "PNG" ;

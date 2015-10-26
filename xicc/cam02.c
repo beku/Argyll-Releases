@@ -9,7 +9,7 @@
  * Conference, with the addition of the Viewing Flare
  * model described on page 487 of "Digital Color Management",
  * by Edward Giorgianni and Thomas Madden, and the
- * Helmholtz-Kohlraush effect, using the equation from
+ * Helmholtz-Kohlrausch effect, using the equation from
  * the Bradford-Hunt 96C model as detailed in Mark Fairchild's
  * book "Color Appearance Models". 
  * The Slight modification to the Hunt-Pointer-Estevez matrix
@@ -40,7 +40,9 @@
 
 /*
 	TTBD: Should convert to using Timo Kunkel and Erik Reinhard's simplified
-	and improved version of CIECAM02 (ie. "CIECAM02-KR").
+	and improved version of CIECAM02
+	[ "A Neurophysiology-Inspired Steady-State Color Appearance Model",
+	  ie. "CIECAM02-KR" ? ]
 
 	The rgbp compression has it's problems in terms of perceptual
 	uniformity. A color with one component near zero might shift
@@ -105,7 +107,7 @@
 	XYZ space, the J value used to multiply Chroma, is limited
 	to be equivalent to not less than A == 0.1.
 
-	The Helmholtz-Kohlraush effect is crafted to have resonable
+	The Helmholtz-Kohlrausch effect is crafted to have resonable
 	effects over the range of J from 0 to 100, and have more
 	moderate effects outside this range. 
 
@@ -136,7 +138,11 @@
 #undef DISABLE_HPE			/* Debug - disable just Hunt-Pointer_Estevez matrix */
 #undef DISABLE_NONLIN		/* Debug - wire rgbp to rgba */
 #undef DISABLE_TTD			/* Debug - disable ttd vector 'tilt' */
-#undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlraush */
+#undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlrausch */
+
+							/* We reduce the HK effect from the Hunt equation, in the */
+							/* light of real wold experiments. */
+#define HHKR_MUL 0.25		/* [0.25] - Helmholtz-Kohlrausch strength multiplier */
 
 #ifdef ENABLE_COMPR
 # define BC_WHMINY 0.2		/* [0.2] Compression direction minimum Y value */
@@ -169,7 +175,7 @@
 #define DDULIMIT 0.34		/* [0.34] ab component k3:k1 ratio limit (must be < 1.0) */
 #define SSMINcJ 0.005		/* [0.005] ab scale cJ minimum value */
 #define JLIMIT 0.005		/* [0.005] J encoding cutover point straight line (0 - 1.0 range) */
-#define HKLIMIT 0.7			/* [0.7] Maximum Helmholtz-Kohlraush lift */
+#define HKLIMIT 0.7			/* [0.7] Maximum Helmholtz-Kohlrausch lift out of 1.0 */
 
 #ifdef TRACKMINMAX
 double minss = 1e60;
@@ -282,7 +288,7 @@ double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) *
 double Yg,		/* Flare as a fraction of the adapting/surround (Y range 0.0 .. 1.0) */
 double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 				/* If <= 0 will Wxyz will be used. */
-int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int hk			/* Flag, NZ to use Helmholtz-Kohlrausch effect */
 ) {
 	double tt, t1, t2;
 	double tm[3][3];
@@ -940,9 +946,10 @@ double XYZ[3]
 
 	JJ = J;
 #ifndef DISABLE_HHKR
- 	/* Helmholtz-Kohlraush effect */
+ 	/* Helmholtz-Kohlrausch effect */
 	if (s->hk && J < 1.0) {
-		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+//		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+		double kk = HHKR_MUL * C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
 		if (kk > 1e-6) 	/* Limit kk to a reasonable range */
 			kk = 1.0/(s->hklimit + 1.0/kk);
 		JJ = J + (1.0 - (J > 0.0 ? J : 0.0)) * kk;
@@ -1035,9 +1042,10 @@ double Jab[3]
 
 	J = JJ;
 #ifndef DISABLE_HHKR
- 	/* Undo Helmholtz-Kohlraush effect */
+ 	/* Undo Helmholtz-Kohlrausch effect */
 	if (s->hk && J < 1.0) {
-		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+//		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+		double kk = HHKR_MUL * C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
 		if (kk > 1e-6) 	/* Limit kk to a reasonable range */
 			kk = 1.0/(s->hklimit + 1.0/kk);
 		J = (JJ - kk)/(1.0 - kk);

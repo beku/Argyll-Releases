@@ -707,7 +707,7 @@ int main(int argc, char *argv[])
 			}
 	
 			/* Set default */
-			if (l_observ = icxOT_none)
+			if (l_observ == icxOT_none)
 				l_observ = icxOT_CIE_1931_2;
 
 			if ((sp2cie = new_xsp2cie(l_illum, l_illum == icxIT_none ? NULL : &cust_illum,

@@ -401,7 +401,7 @@ inst_code inst_handle_calibrate(
 				printf("\n");
 				/* If optional calib. and user wants to skip it */
 				/* Loop back to calibrate() with inst_calc_optional_flag still set */
-				if ((calc & inst_calc_optional_flag) != 0 && ch == 's' || ch == 'S') {
+				if ((calc & inst_calc_optional_flag) != 0 && (ch == 's' || ch == 'S')) {
 					printf("Skipped\n");
 					goto oloop;
 				}

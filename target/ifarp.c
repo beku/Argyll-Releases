@@ -310,6 +310,7 @@ ifarp_del(ifarp *s) {
 
 /* Constructor */
 ifarp *new_ifarp(
+int verb,				/* Verbosity */
 int di,					/* Dimensionality of device space */
 double ilimit,			/* Ink limit (sum of device coords max) */
 int inp,				/* Number of points to generate */
@@ -320,7 +321,6 @@ void *od				/* context for Perceptual function */
 ) {
 	ifarp *s;
 	int e, i;
-	int verb = 1;
 
 #ifdef DEBUG
 	printf("new_ifarp called with di %d, inp %d, fxno = %d\n",di,inp,fxno);
@@ -855,7 +855,7 @@ char *argv[];
 		error ("Creation of xcolorant lu object failed");
 
 	/* Create the required points */
-	s = new_ifarp(di, 1.5, npoints, NULL, 0, sa_percept, (void *)NULL);
+	s = new_ifarp(1, di, 1.5, npoints, NULL, 0, sa_percept, (void *)NULL);
 
 #ifdef DEBUG
 	/* Dump perceptual map */

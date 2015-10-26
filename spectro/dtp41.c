@@ -145,7 +145,7 @@ dtp41_command(dtp41 *p, char *in, char *out, int bsize, double to) {
 
 /* Establish communications with a DTP41 */
 /* Use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return DTP41_COMS_FAIL on failure to establish communications */
 static inst_code
 dtp41_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	dtp41 *p = (dtp41 *)pp;
@@ -1085,7 +1085,8 @@ dtp41_del(inst *pp) {
 	dtp41 *p = (dtp41 *)pp;
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
-	free (p);
+	p->vdel(pp);
+	free(p);
 }
 
 /* Interogate the device to discover its capabilities */

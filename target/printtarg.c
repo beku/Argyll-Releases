@@ -2912,8 +2912,8 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -b              Force B&W spacers\n");
 	fprintf(stderr," -n              Force no spacers\n");
 	fprintf(stderr," -f              Create PostScript DeviceN Color fallback\n");
-	fprintf(stderr," -w g|r|s|n      White colorspace encoding DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
-	fprintf(stderr," -k g|c|s|n      Black colorspace encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
+	fprintf(stderr," -w g|r|s|n      White colorspace encoding: DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
+	fprintf(stderr," -k g|c|s|n      Black colorspace encoding: DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
 	fprintf(stderr," -o k|r|n        CMY colorspace encoding DeviceCMYK (def), inverted DeviceRGB or DeviceN\n");            
 	fprintf(stderr," -e              Output EPS compatible file\n");
 	fprintf(stderr," -t [res]        Output 8 bit TIFF raster file, optional res DPI (default 100)\n");
@@ -3645,12 +3645,16 @@ char *argv[];
 		}
 	}
 
-	if (verb) {
-		if (pap != NULL)
+	if (pap != NULL) {
+		sprintf(buf, "%.1fx%.1f",pap->w, pap->h);
+		if (verb)
 			printf("Paper chosen is %s	[%.1f x %.1f mm]\n", pap->name, pap->w, pap->h);
-		else
+	} else {
+		sprintf(buf, "%.1fx%.1f",cwidth, cheight);
+		if (verb)
 			printf("Paper chosen is custom %.1f x %.1f mm\n", cwidth, cheight);
 	}
+	ocg->add_kword(ocg, 0, "PAPER_SIZE", buf, NULL);
 
 	if (rstart == -1) {
 		rstart = clk % npat;

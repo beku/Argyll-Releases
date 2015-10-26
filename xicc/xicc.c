@@ -1704,7 +1704,7 @@ double *wp			/* Provide white point if xicc is NULL */
 
 	Glare is assumed to be from the ambient light reflecting from the display
 	and also striking the observer directly, and is (typically) defaulted
-	to 1% of ambient here.
+	to 1% of ambient here. (too low ? Typical displays are 4-10%)
 	
 	*/
 
@@ -1719,7 +1719,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 250.0;			/* Average viewing conditions ratio */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 2
@@ -1733,7 +1733,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 2000.0/3.1415;	/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 0
@@ -1747,7 +1747,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 500.0/3.1415;	/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 1
@@ -1761,7 +1761,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 150.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 4
@@ -1775,7 +1775,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 150.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 3
@@ -1789,7 +1789,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 120.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 5
@@ -1803,7 +1803,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 100.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 6
@@ -1817,7 +1817,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 80.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 7
@@ -1831,7 +1831,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Lv = 80.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 8
@@ -1845,7 +1845,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->Yb = 0.2;					/* Grey world */
 			vc->Lv = 1000.0/3.1415;			/* White of the image field */ 
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else if (no == 9
@@ -1884,7 +1884,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->La = 53.0;			/* Dim, adapted to slide ? */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.0;			/* 0% flare */
-			vc->Yg = 0.01;			/* 1% glare */
+			vc->Yg = 0.01 * XICC_DEFAULT_GLARE;	/* 5% glare */
 		}
 	}
 	else {
@@ -2023,6 +2023,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf  = 0.0;
 		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2055,6 +2056,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf  = 0.0;
 		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2080,6 +2082,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf  = 0.0;
 		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2107,6 +2110,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf  = 0.0;
 		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2133,6 +2137,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf  = 0.0;		/* No knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2158,9 +2163,10 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamcknf  = 0.9;		/* 0.9 High Sigma knee in gamut compress */
+		gmi->gamcknf  = 1.0;		/* Full Sigma knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2184,18 +2190,49 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamcknf  = 0.9;		/* 0.9 High Sigma knee in gamut compress */
+		gmi->gamcknf  = 1.0;		/* Full Sigma knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
 	else if (no == 7
+	 || (as != NULL && stricmp(as,"lp") == 0)) {
+
+		/* Align neutral axes and perceptually map white and black points, */ 
+		/* perceptually compress out of gamut and map appearance space Jab to Jab, */  
+		/* and heavily weight preserving the luminance over saturation. */ 
+		/* No neutral axis sigma enhancement. */
+		no = 7;
+		gmi->as = "lp";
+		gmi->desc = "lp - Luminance Preserving Perceptual";
+		gmi->icci = icPerceptual;
+		gmi->usecas  = perccas;		/* Appearance space */
+//		gmi->usecas  = 0;			/* Lab space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 0.3;			/* Low Sigma knee in grey compress/expand */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
+		gmi->gamcpf  = 1.0;			/* Full gamut compression */
+		gmi->gamexf  = 0.0;			/* No gamut expansion */
+		gmi->gamcknf  = 1.3;		/* [1.3] High Sigma knee in gamut compress */
+		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
+		gmi->gampwf  = 0.0;			/* No Perceptual weighting factor */
+		gmi->gamlpwf = 1.0;			/* Full Linear Preserving Perceptual wghtg. factor */
+		gmi->gamswf  = 0.0;			/* No Saturation weighting factor */
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 8
 	 || (as != NULL && stricmp(as,"ms") == 0)) {
 
 		/* Align neutral axes and perceptually map white and black points, */ 
 		/* perceptually compress and expand to match gamuts and map Jab to Jab. */  
-		no = 7;
+		no = 8;
 		gmi->as = "ms";
 		gmi->desc = "ms - Saturation";
 		gmi->icci = icSaturation;
@@ -2210,18 +2247,19 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion  */
-		gmi->gamcknf = 1.0;			/* High Sigma knee in gamut compress/expand */
-		gmi->gamxknf = 0.4;			/* Moderate Sigma knee in gamut compress/expand */
+		gmi->gamcknf = 1.1;			/* Sigma knee in gamut compress */
+		gmi->gamxknf = 0.4;			/* Moderate Sigma knee in gamut expand */
 		gmi->gampwf  = 0.2;			/* Slight perceptual surface weighting factor */
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.8;			/* Most saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
-	else if (no == 8
+	else if (no == 9
 	 || no == icxSaturationGMIntent
 	 || (as != NULL && stricmp(as,"s") == 0)) {
 
 		/* Same as "ms" but enhance saturation */
-		no = 8;
+		no = 9;
 		gmi->as = "s";
 		gmi->desc = " s - Enhanced Saturation [ICC Saturation]";
 		gmi->icci = icSaturation;
@@ -2236,17 +2274,18 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion */
-		gmi->gamcknf = 1.0;			/* High sigma knee in gamut compress */
+		gmi->gamcknf = 1.1;			/* High sigma knee in gamut compress */
 		gmi->gamxknf = 0.5;			/* Moderate sigma knee in gamut expand */
 		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
 		gmi->satenh  = 0.9;			/* Medium saturation enhancement */
 	}
-	else if (no == 9
+	else if (no == 10
 	 || (as != NULL && stricmp(as,"al") == 0)) {
 
 		/* Map absolute L*a*b* to L*a*b* and clip out of gamut */
-		no = 9;
+		no = 10;
 		gmi->as = "al";
 		gmi->desc = "al - Absolute Colorimetric (Lab)";
 		gmi->icci = icAbsoluteColorimetric;
@@ -2264,15 +2303,16 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf = 0.0;
 		gmi->gamxknf = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
-	else if (no == 10
+	else if (no == 11
 	 || (as != NULL && stricmp(as,"rl") == 0)) {
 
 		/* Align neutral axes and linearly map white point, then */
 		/* map L*a*b* to L*a*b* and clip out of gamut */
-		no = 10;
+		no = 11;
 		gmi->as = "rl";
 		gmi->desc = "rl - White Point Matched Colorimetric (Lab)";
 		gmi->icci = icRelativeColorimetric;
@@ -2290,6 +2330,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamcknf = 0.0;
 		gmi->gamxknf = 0.0;
 		gmi->gampwf  = 0.0;
+		gmi->gamlpwf = 0.0;			/* No Linear Preserving Perceptual surface wghtg. factor */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
@@ -2344,6 +2385,7 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 		printf("  Gamut compression knee factor %f\n", gmi->gamcknf);
 		printf("  Gamut expansion   knee factor %f\n", gmi->gamxknf);
 		printf("  Gamut Perceptual mapping weighting factor %f\n", gmi->gampwf);
+		printf("  Gamut Lightness Preserving Perceptual mapping weighting %f\n", gmi->gamlpwf);
 		printf("  Gamut Saturation mapping weighting factor %f\n", gmi->gamswf);
 		printf("  Saturation enhancement factor %f\n", gmi->satenh);
 	}

@@ -59,9 +59,10 @@ struct _ifarp {
 }; typedef struct _ifarp ifarp;
 
 /* Constructor */
-extern ifarp *new_ifarp(int di, double ilimit, int npoints,
+extern ifarp *new_ifarp(int verb, int di, double ilimit, int npoints,
 	fxpos *fxlist, int fxno, 
-	void (*percept)(void *od, double *out, double *in), void *od);
+	void (*percept)(void *od, double *out, double *in), void *od
+);
 
 #define IFARP_H
 #endif /* IFARP_H */

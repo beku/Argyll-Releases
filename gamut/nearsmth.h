@@ -126,10 +126,14 @@ typedef struct {
 	struct {
 		double rdl;			/* Direction smoothing radius L* dir. (delta E radius at src point)*/
 		double rdh;			/* Direction smoothing radius H* (delta E radius at src point)*/
+
+		double dsm;			/* Degree of smoothing (non-linear response) */
 	} r;
 
-	/* depth weighting */
-	/* Weighing to give to minimizing depth ratio by mapping to/from adequate dest/src depth */
+	/* Depth room weighting. */
+	/* Weighing to give to minimizing depth ratio by mapping to/from adequate dest/src depth. */
+	/* The idea is to compromize luminance and/or hue to allow room for */
+	/* preserving saturation distinction under heavy compression. */
 	struct {
 		double co;			/* Overall compression weighting */
 		double xo;			/* Overall expansion weighting */
@@ -166,6 +170,7 @@ typedef struct {
 struct _nearsmth {
 
   /* Public: */
+	int    uflag;		/* Use flag, 0 = normal, 1 = grid surface point */
 	int    gflag;		/* Gamut direction flag. 0 = not determinable, 1 = comp., 2 = exp. */
 	int    vflag;		/* Vector direction flag. 0 = not determinable, 1 = comp., 2 = exp. */
 						/* sv2, dv2, sd3 etc. are valid if vflag != 0 */
@@ -178,12 +183,13 @@ struct _nearsmth {
 	double dv[3];		/* Output destination value */
 	double dr;			/* Output destination value radius from center */
 	double div[3];		/* gam[cx]pf moderated dv[] value */
+	double w1;			/* guide point weight */
 
 	/* Gamut sub-surface mapping guide point (knee shape controlled by gamcknf & gamxknf) */
 	double sv2[3];		/* Sub-surface source value */
 	double dv2[3];		/* Sub-surface knee'd adjusted destination value */
 	double div2[3];		/* gam[cx]pf moderated dv2[] value */
-	double w2;			/* Sub-surface weight (fixed in nearsmth) */
+	double w2;			/* Sub-surface weight (set in nearsmth) */
 
 	double sd3[3];		/* Deep sub-surface source & destination value */
 	double w3;			/* Deep sub-surface weight */
@@ -201,39 +207,43 @@ struct _nearsmth {
 	double _sr;			/* Original source radius */
 	double naxbf;		/* Blend factor that goes to 0.0 at white & black points. */
 	double aodv[3];		/* Absolute error optimized destination value */
-	double nrdv[3];		/* No relative weight optimized destination value */
+	double nrdv[3];		/* No relative smoothed destination value */
 	double anv[3];		/* Average neighborhood target point (relative target) */
 
 	double tdst[3];		/* Target destination on gamut */
+	int    nott;		/* NZ if not a point that needs to land on gamut */
 	double evect[3];	/* Accumulated extension vector direction */
 	double clen;		/* Current correction length needed */
 	double coff[3];		/* Correction offset */
 	double rext;
 
 	double temp[3];		/* General temporary */
-	gamut *sgam;		/* Source gamut sci_gam = intersection of src and img gamut gamut */
-	gamut *dgam;		/* Destination gamut di_gam */
+	gamut *sgam;		/* Source gamut src_gam = intersection of src and img gamut gamut */
+	gamut *dgam;		/* Intersected destination gamut dst_gam */
+	gamut *dcgam;		/* Destination Colorspace gamut dc_gam */
 
 	int nnd, _nnd;		/* No & size of direction neighbour list */
 	neighb *nd;			/* Allocated list of neighbours */
+	double nscale[3];	/* Neighborhood scale change from sv to dv */
 
 	double dcratio;		/* Depth compression ratio */ 
 	double dxratio;		/* Depth expansion ratio */ 
 
-	int mapres;			/* Target grid res for 3D RSPL */
-
 	int debug;
-	double dbgv[4];		/* Error components va, vr, vl, vd on last itteration */
+	double dbgv[3];		/* Error components va, vr, vd on last itteration */
 
 }; typedef struct _nearsmth nearsmth;
 
 
 /* Return the upper bound on the number of points that will be generated */
 int near_smooth_np(
+	gamut **pp_gam,		/* Return gamut that was used for points */
 	gamut *sc_gam,		/* Source colorspace gamut */
 	gamut *s_gam,		/* Source image gamut (== sc_gam if none) */
 	gamut *d_gam,		/* Destination colorspace gamut */
-	double xvra			/* Extra vertex ratio */
+	double xvra,		/* Extra vertex ratio */
+	int gmult,			/* Guide point multiplier, typically 4 */
+	int surfgres	   	/* surface grid point resolution, 0 for none */
 );
 
 /* Return a list of points. Call free_nearsmth() after use */
@@ -253,11 +263,13 @@ nearsmth *near_smooth(
 	int    usecomp,		/* Flag indicating whether smoothed compressed value will be used */
 	int    useexp,		/* Flag indicating whether smoothed expanded value will be used */
 	double xvra,		/* Extra vertex ratio */
-	int    mapres,		/* Target grid res for 3D RSPL */
+	int    mapres,		/* Target grid res for 3D RSPL, (allowing for gexp) */
 	double mapsmooth,	/* Target smoothing for 3D RSPL */
-	datai map_il,		/* Preliminary rspl input range */
+	double gexp,		/* Total grid expansion ratio, none = 1.0 */
+	int   surfgres,		/* Surface grid point resolution, 0 for none */
+	datai map_il,		/* Return input range */
 	datai map_ih,
-	datao map_ol,		/* Preliminary rspl output range */
+	datao map_ol,		/* Return output range */
 	datao map_oh 
 );
 
@@ -267,11 +279,19 @@ void free_nearsmth(nearsmth *smp, int npp);
 /* Expand the compact form of weights into the explicit form. */
 int expand_weights(gammapweights out[14], gammapweights *in);
 	
-/* Blend a two expanded groups of individual weights into one */
+/* Blend two expanded groups of individual weights into one */
 void near_xwblend(
 gammapweights *dst,
 gammapweights *src1, double wgt1,
 gammapweights *src2, double wgt2
+);
+
+/* Blend three expanded groups of individual weights into one */
+void near_xwblend3(
+gammapweights *dst,
+gammapweights *src1, double wgt1,
+gammapweights *src2, double wgt2,
+gammapweights *src3, double wgt3
 );
 
 /* Tweak weights acording to extra cmy cusp flags or rel override */

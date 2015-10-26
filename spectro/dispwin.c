@@ -3624,6 +3624,9 @@ static void create_my_win(NSRect rect, osx_cntx_t *cx) {
 	[cx->view setCntx:(void *)cx];
 	[cx->window setContentView: cx->view];
 
+	/* Moves the window to the front of the screen list within its level, */
+	/* and show the window (i.e. make it "key") */
+	/* Trigger crash on OS X 10.11 El Capitan ? */
 	[cx->window makeKeyAndOrderFront: nil];
 
 	/* Use a null color transform to ensure device values */
@@ -6451,7 +6454,7 @@ main(int argc, char *argv[]) {
 				/* Try darkening it */
 				for (j = 0; j < 3; j++) {
 					for (i = 0; i < dw->r->nent; i++) {
-						dw->r->v[j][i] = pow(dw->or->v[j][i], 2.0);
+						dw->r->v[j][i] = pow(dw->or->v[j][i], 1.6);
 					}
 				}
 				printf("Darkening screen\n");
@@ -6464,7 +6467,7 @@ main(int argc, char *argv[]) {
 				/* Try lightening it */
 				for (j = 0; j < 3; j++) {
 					for (i = 0; i < dw->r->nent; i++) {
-						dw->r->v[j][i] = pow(dw->or->v[j][i], 0.5);
+						dw->r->v[j][i] = pow(dw->or->v[j][i], 0.625);
 					}
 				}
 				printf("Lightening screen\n");

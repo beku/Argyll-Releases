@@ -17,6 +17,8 @@ Headers = numlib.h libui.h ;
 #InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
 #InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
+HDRS = ../h ;
+
 # Numeric library
 Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c ludecomp.c svd.c zbrent.c rand.c sobol.c aatree.c ;
 
@@ -33,3 +35,5 @@ if $(OS) = MACOSX {
 
 # UI setup library
 Library libui.lib : ui.c ;
+
+

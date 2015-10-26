@@ -16,6 +16,50 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.8.2 -&gt; V1.8.3] 26th October 2015</h1>
+    <ul>
+      <li>Added SpyderCheckr24 scaning .cht and .cie files.</li>
+      <li>Fixed USB problem with i1pro (Rev B &amp; D ?), where
+        communications would occasionally break down on fast systems.<br>
+      </li>
+      <li>Added another fixed display intergration time to i1pro
+        non-adaptive emission mode to cope with higher brightness
+        displays.</li>
+      <li>Added workaround for i1d3 Rev. B status code 0x83 on very low
+        light measurement</li>
+      <li>Fixed minor bug in i1d3.c that truncated serial number string.
+        (Thanks to Mikael Sterner).</li>
+      <li>Fixed bug in Klein K10 driver - adaptive measurement wasn't
+        properly using all the extra measurements.</li>
+      <li>Improved Klein K10 driver to be more robust when lights off
+        command returns bogus error codes, or causes a cascade of bogus
+        measurement errors.<br>
+      </li>
+      <li>Added workaround for OS X 10.9+ "App Nap" problem.</li>
+      <li>Added maximum sensor frequency check for Spyder &amp; i1d3
+        drivers, so that erronious readings due to excessive brightness
+        can't be missed.</li>
+      <li>Changed chartread so that it doesn't warn of a possible wrong
+        strip being read, nor allows bi-directional strip reading, if
+        "printtarg -r" was used. A warning will be issued if "printtarg
+        -r" was used, and "chartread -B" wasn't used.<br>
+      </li>
+      <li>Fixed collink for eeColor Full range RGB to use output curve
+        ("second" 1D curves) to compensate for cLUT being wired for 1.0
+        output from 1.0 input.<br>
+      </li>
+      <li>Added "lp" gamut mapping intent :- Luminance Preserving
+        Perceptual, for Photographers concerned with maintaining tonal
+        variations.</li>
+      <li>Fixed bugs in image specific gamut mapping that were degrading
+        the accuracy of the result.</li>
+      <li>Re-wrote gamut smoothing code, and re-tuned it to behave
+        similarly to the V1.8.2 release.</li>
+      <li>Changed default viewing condition glare to 5%, to smooth out
+        shadow tone curve.</li>
+      <li>Reduced the level of Helmholtz-Kohlrausch effect in CIECAM02
+        implementation in the light of visual experiments.</li>
+    </ul>
     <h1>[V1.8.1 -&gt; V1.8.2] 7th September 2015</h1>
     <ul>
       <li>Fixed endless loop bug in alternate calibration selectors
@@ -986,6 +1030,7 @@
 
 
 
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -1000,6 +1045,7 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
 
 
 

@@ -17,6 +17,7 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
+#include <ctype.h>
 #if defined (NT)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -24,7 +25,13 @@
 #ifdef UNIX
 #include <unistd.h>
 #include <sys/param.h>
+#include <sys/utsname.h>
 #include <pthread.h>
+#endif
+#ifndef SALONEINSTLIB
+#include "aconfig.h"
+#else
+#include "sa_config.h"
 #endif
 
 #define NUMSUP_C
@@ -220,22 +227,138 @@ void check_if_not_interactive() {
 /* It's values can be overridden to redirect these messages.      */
 /******************************************************************/
 
+static void va_loge(a1log *p, char *fmt, ...);
+
 #ifdef NT
+
+/* Get a string describing the MWin operating system */
+
+typedef struct {
+    DWORD dwOSVersionInfoSize;
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+    DWORD dwBuildNumber;
+    DWORD dwPlatformId;
+    WCHAR  szCSDVersion[128];
+    WORD   wServicePackMajor;
+    WORD   wServicePackMinor;
+    WORD   wSuiteMask;
+    BYTE  wProductType;
+    BYTE  wReserved;
+} osversioninfoexw;
+
+#define VER_NT_DOMAIN_CONTROLLER 0x0000002
+#define VER_NT_SERVER 0x0000003
+#define VER_NT_WORKSTATION 0x0000001 
+
+static char *get_sys_info() {
+	static char sysinfo[100] = { "Unknown" };
+	LONG (WINAPI *pfnRtlGetVersion)(osversioninfoexw*);
+
+	*(FARPROC *)&pfnRtlGetVersion
+	 = GetProcAddress(GetModuleHandle("ntdll.dll"), "RtlGetVersion");
+	if (pfnRtlGetVersion != NULL) {
+	    osversioninfoexw ver = { 0 };
+	    ver.dwOSVersionInfoSize = sizeof(ver);
+
+	    if (pfnRtlGetVersion(&ver) == 0) {
+			if (ver.dwMajorVersion > 6 || (ver.dwMajorVersion == 6 && ver.dwMinorVersion > 3)) {
+				if (ver.wProductType == VER_NT_WORKSTATION)
+					sprintf(sysinfo,"Windows V%d.%d SP %d",
+						ver.dwMajorVersion,ver.dwMinorVersion,
+						ver.wServicePackMajor);
+				else
+					sprintf(sysinfo,"Windows Server 2016 V%d.%d SP %d",
+						ver.dwMajorVersion,ver.dwMinorVersion,
+						ver.wServicePackMajor);
+				
+			} else if (ver.dwMajorVersion == 6 && ver.dwMinorVersion == 3) {
+				if (ver.wProductType == VER_NT_WORKSTATION)
+					sprintf(sysinfo,"Windows V8.1 SP %d",
+						ver.wServicePackMajor);
+				else
+					sprintf(sysinfo,"Windows Server 2012 R2 SP %d",
+						ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 6 && ver.dwMinorVersion == 2) {
+				if (ver.wProductType == VER_NT_WORKSTATION)
+					sprintf(sysinfo,"Windows V8 SP %d",
+						ver.wServicePackMajor);
+				else
+					sprintf(sysinfo,"Windows Server SP %d",
+						ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 6 && ver.dwMinorVersion == 1) {
+				if (ver.wProductType == VER_NT_WORKSTATION)
+					sprintf(sysinfo,"Windows V7 SP %d",
+						ver.wServicePackMajor);
+				else
+					sprintf(sysinfo,"Windows Server 2008 R2 SP %d",
+						ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 6 && ver.dwMinorVersion == 0) {
+				if (ver.wProductType == VER_NT_WORKSTATION)
+					sprintf(sysinfo,"Windows Vista SP %d",
+						ver.wServicePackMajor);
+				else
+					sprintf(sysinfo,"Windows Server 2008 SP %d",
+						ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 5 && ver.dwMinorVersion == 2) {
+				// Actually could be Server 2003, Home Server, Server 2003 R2
+				sprintf(sysinfo,"Windows XP Pro64 SP %d",
+					ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 5 && ver.dwMinorVersion == 1) {
+				sprintf(sysinfo,"Windows XP SP %d",
+						ver.wServicePackMajor);
+
+			} else if (ver.dwMajorVersion == 5 && ver.dwMinorVersion == 0) {
+				sprintf(sysinfo,"Windows XP SP %d",
+						ver.wServicePackMajor);
+
+			} else {
+				sprintf(sysinfo,"Windows Maj %d Min %d SP %d",
+					ver.dwMajorVersion,ver.dwMinorVersion,
+					ver.wServicePackMajor);
+			}
+		}
+	}
+	return sysinfo;
+}
+
+
 # define A1LOG_LOCK(log)									\
 	if (g_log_init == 0) {									\
 	    InitializeCriticalSection(&log->lock);				\
+		EnterCriticalSection(&log->lock);					\
 		g_log_init = 1;										\
-	}														\
-	EnterCriticalSection(&log->lock)
+		va_loge(log, "Argyll 'V%s' Build '%s' System '%s'\n",ARGYLL_VERSION_STR,ARGYLL_BUILD_STR, get_sys_info());	\
+	} else {												\
+		EnterCriticalSection(&log->lock);					\
+	}
 # define A1LOG_UNLOCK(log) LeaveCriticalSection(&log->lock)
 #endif
 #ifdef UNIX
+
+static char *get_sys_info() {
+	static char sysinfo[200] = { "Unknown" };
+	struct utsname ver;
+
+	if (uname(&ver) == 0)
+		sprintf(sysinfo,"%s %s %s %s",ver.sysname, ver.version, ver.release, ver.machine);
+	return sysinfo;
+}
+
 # define A1LOG_LOCK(log)									\
 	if (g_log_init == 0) {									\
 	    pthread_mutex_init(&log->lock, NULL);				\
+		pthread_mutex_lock(&log->lock);						\
 		g_log_init = 1;										\
-	}														\
-	pthread_mutex_lock(&log->lock)
+		va_loge(log, "Argyll 'V%s' Build '%s' System '%s'\n",ARGYLL_VERSION_STR,ARGYLL_BUILD_STR, get_sys_info());	\
+	} else {												\
+		pthread_mutex_lock(&log->lock);						\
+	}
 # define A1LOG_UNLOCK(log) pthread_mutex_unlock(&log->lock)
 #endif
 
@@ -256,6 +379,14 @@ static void a1_default_de_log(void *cntx, a1log *p, char *fmt, va_list args) {
 #define a1_default_d_log a1_default_de_log
 #define a1_default_e_log a1_default_de_log
 
+
+/* Call log->loge() with variags */
+static void va_loge(a1log *p, char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	p->loge(p->cntx, p, fmt, args);
+	va_end(args);
+}
 
 /* Global log */
 a1log default_log = {
@@ -596,6 +727,177 @@ size_t nsize
 
 	return ptr;
 }
+
+/******************************************************************/
+/* OS X App Nap fixes                                             */
+/******************************************************************/
+
+#if defined(__APPLE__)
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+# include <objc/runtime.h>
+# include <objc/message.h>
+#else
+# include <objc/objc-runtime.h>
+#endif
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
+# include <objc/objc-auto.h>
+#endif
+
+/*
+	OS X 10.9+ App Nap problems bug:
+
+	<http://stackoverflow.com/questions/22784886/what-can-make-nanosleep-drift-with-exactly-10-sec-on-mac-os-x-10-9>
+
+	NSProcessInfo variables:
+
+	<https://developer.apple.com/library/prerelease/ios/documentation/Cocoa/Reference/Foundation/Classes/NSProcessInfo_Class/#//apple_ref/c/tdef/NSActivityOptions>
+
+	 typedef enum : uint64_t { NSActivityIdleDisplaySleepDisabled = (1ULL << 40),
+		NSActivityIdleSystemSleepDisabled = (1ULL << 20),
+		NSActivitySuddenTerminationDisabled = (1ULL << 14),
+		NSActivityAutomaticTerminationDisabled = (1ULL << 15),
+		NSActivityUserInitiated = (0x00FFFFFFULL | NSActivityIdleSystemSleepDisabled ),
+		NSActivityUserInitiatedAllowingIdleSystemSleep =
+		           (NSActivityUserInitiated & ~NSActivityIdleSystemSleepDisabled ),
+		NSActivityBackground = 0x000000FFULL,
+		NSActivityLatencyCritical = 0xFF00000000ULL,
+	} NSActivityOptions; 
+
+	See <http://stackoverflow.com/questions/19847293/disable-app-nap-in-macos-10-9-mavericks-application>:
+
+	@property (strong) id activity;
+
+	if ([[NSProcessInfo processInfo] respondsToSelector:@selector(beginActivityWithOptions:reason:)]) {
+    self.activity = [[NSProcessInfo processInfo] beginActivityWithOptions:0x00FFFFFF reason:@"receiving OSC messages"];
+}
+
+	<http://stackoverflow.com/questions/19671197/disabling-app-nap-with-beginactivitywithoptions>
+
+	NSProcessInfo = interface(NSObject)['{B96935F6-3809-4A49-AD4F-CBBAB0F2C961}']
+	function beginActivityWithOptions(options: NSActivityOptions; reason: NSString): NSObject; cdecl;
+
+	<http://stackoverflow.com/questions/22164571/weird-behaviour-of-dispatch-after>
+
+*/
+
+static int osx_userinitiated_cnt = 0;
+static id osx_userinitiated_activity = nil;
+
+/* Tell App Nap that this is user initiated */
+void osx_userinitiated_start() {
+	Class pic;		/* Process info class */
+	SEL pis;		/* Process info selector */
+	SEL bawo;		/* Begin Activity With Options selector */
+	id pi;		/* Process info */
+	id str;
+
+	if (osx_userinitiated_cnt++ != 0)
+		return;
+
+	a1logd(g_log, 7, "OS X - User Initiated Activity start\n");
+	
+	/* We have to be conservative to avoid triggering an exception when run on older OS X */
+	if ((pic = (Class)objc_getClass("NSProcessInfo")) == nil) {
+		return;
+	}
+
+	if (class_getClassMethod(pic, (pis = sel_getUid("processInfo"))) == NULL) { 
+		return;
+	}
+
+	if (class_getInstanceMethod(pic, (bawo = sel_getUid("beginActivityWithOptions:reason:"))) == NULL) {
+		a1logd(g_log, 7, "OS X - beginActivityWithOptions not supported\n");
+		return;
+	}
+
+	/* Get the process instance */
+	if ((pi = objc_msgSend((id)pic, pis)) == nil) {
+		return;
+	}
+
+	/* Create a reason string */
+	str = objc_msgSend(objc_getClass("NSString"), sel_getUid("alloc"));
+	str = objc_msgSend(str, sel_getUid("initWithUTF8String:"), "ArgyllCMS");
+			
+	/* Start activity that tells App Nap to mind its own business. */
+	/* NSActivityUserInitiatedAllowingIdleSystemSleep */
+	osx_userinitiated_activity = objc_msgSend(pi, bawo, 0x00FFFFFFULL, str);
+}
+
+/* Done with user initiated */
+void osx_userinitiated_end() {
+	if (osx_userinitiated_cnt > 0) {
+		osx_userinitiated_cnt--;
+		if (osx_userinitiated_cnt == 0 && osx_userinitiated_activity != nil) {
+			a1logd(g_log, 7, "OS X - User Initiated Activity end");
+			objc_msgSend(
+			             objc_msgSend(objc_getClass("NSProcessInfo"), sel_getUid("processInfo")), 
+			             sel_getUid("endActivity:"), osx_userinitiated_activity);
+			osx_userinitiated_activity = nil;
+		}
+	}
+}
+
+static int osx_latencycritical_cnt = 0;
+static id osx_latencycritical_activity = nil;
+
+/* Tell App Nap that this is latency critical */
+void osx_latencycritical_start() {
+	Class pic;		/* Process info class */
+	SEL pis;		/* Process info selector */
+	SEL bawo;		/* Begin Activity With Options selector */
+	id pi;		/* Process info */
+	id str;
+
+	if (osx_latencycritical_cnt++ != 0)
+		return;
+
+	a1logd(g_log, 7, "OS X - Latency Critical Activity start\n");
+	
+	/* We have to be conservative to avoid triggering an exception when run on older OS X */
+	if ((pic = (Class)objc_getClass("NSProcessInfo")) == nil) {
+		return;
+	}
+
+	if (class_getClassMethod(pic, (pis = sel_getUid("processInfo"))) == NULL) { 
+		return;
+	}
+
+	if (class_getInstanceMethod(pic, (bawo = sel_getUid("beginActivityWithOptions:reason:"))) == NULL) {
+		a1logd(g_log, 7, "OS X - beginActivityWithOptions not supported\n");
+		return;
+	}
+
+	/* Get the process instance */
+	if ((pi = objc_msgSend((id)pic, pis)) == nil) {
+		return;
+	}
+
+	/* Create a reason string */
+	str = objc_msgSend(objc_getClass("NSString"), sel_getUid("alloc"));
+	str = objc_msgSend(str, sel_getUid("initWithUTF8String:"), "Measuring Color");
+			
+	/* Start activity that tells App Nap to mind its own business. */
+	/* NSActivityUserInitiatedAllowingIdleSystemSleep | NSActivityLatencyCritical */
+	osx_latencycritical_activity = objc_msgSend(pi, bawo, 0x00FFFFFFULL | 0xFF00000000ULL, str);
+}
+
+/* Done with latency critical */
+void osx_latencycritical_end() {
+	if (osx_latencycritical_cnt > 0) {
+		osx_latencycritical_cnt--;
+		if (osx_latencycritical_cnt == 0 && osx_latencycritical_activity != nil) {
+			a1logd(g_log, 7, "OS X - Latency Critical Activity end");
+			objc_msgSend(
+			             objc_msgSend(objc_getClass("NSProcessInfo"), sel_getUid("processInfo")), 
+			             sel_getUid("endActivity:"), osx_latencycritical_activity);
+			osx_latencycritical_activity = nil;
+		}
+	}
+}
+
+#endif	/* __APPLE__ */
 
 /******************************************************************/
 /* Numerical Recipes Vector/Matrix Support functions              */

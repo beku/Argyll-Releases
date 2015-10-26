@@ -131,7 +131,7 @@ static void check_calcount(ss *p, int atstart) {
 
 /* Establish communications with a Spectrolino/Spectroscan */
 /* Use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return SS_COMS_FAIL on failure to establish communications */
 static inst_code
 ss_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	ss *p = (ss *)pp;
@@ -2037,6 +2037,7 @@ ss_del(inst *pp) {
 
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
+	p->vdel(pp);
 	free (p);
 }
 

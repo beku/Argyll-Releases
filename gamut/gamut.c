@@ -56,7 +56,7 @@
 #define TRIANG_TOL 1e-10	/* [1e-10] Triangulation tollerance */
 
 #define NORM_LOG_POW 0.25	/* [0.25] Normal, colorspace lopow value */
-#define RAST_LOG_POW 0.05	/* [0.05] Raster lopow value */
+#define RAST_LOG_POW 0.10	/* [0.10] Raster lopow value (is 0.05 too extreme ??) */
 
 #undef TEST_CONVEX_HULL		/* Use pure convex hull, not log hull */
 
@@ -156,6 +156,7 @@ static int getssvert(gamut *s, double *rad, double pos[3], double norm[3], int i
 static void startnexttri(gamut *s);
 static int getnexttri(gamut *s, int v[3]);
 static double volume(gamut *s);
+static int write_to_vrml(gamut *s, vrml *wrl, double trans, int docusps);	
 static int write_trans_vrml(gamut *s, char *filename, int doaxes, int docusps,
 	void (*transform)(void *cntx, double out[3], double in[3]), void *cntx);
 static int write_vrml(gamut *s, char *filename, int doaxes, int docusps);
@@ -174,8 +175,9 @@ static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, d
 static int compute_vector_isectns(gamut *s, double *p1, double *p2, gispnt *lp, int ll); 
 static double log_scale(gamut *s, double ss);
 static int intersect(gamut *s, gamut *s1, gamut *s2);
-static int compdstgamut(gamut *s, gamut *img, gamut *src, gamut *dst, int docomp, int doexp,
-              gamut *nedst, void (*cvect)(void *cntx, double *vec, double *pos), void *cntx);
+static int nexpintersect(gamut *s, gamut *s1, gamut *s2);
+static int expdstbysrcmdst(gamut *s, gamut *s1, gamut *s2, gamut *s3,
+                           void (*cvect)(void *cntx, double *p2, double *p1), void *cntx);
 static int vect_intersect(gamut *s, double *rvp, double *ip, double *p1, double *p2, gtri *t);
 static void compgawb(gamut *s);
 
@@ -656,7 +658,8 @@ int isRast				/* Flag indicating Raster rather than colorspace */
 	s->getvert     = getvert;
 	s->volume      = volume;
 	s->intersect   = intersect;
-	s->compdstgamut = compdstgamut;
+	s->nexpintersect   = nexpintersect;
+	s->expdstbysrcmdst = expdstbysrcmdst;
 	s->radial      = radial;
 	s->nradial     = nradial;
 	s->nearest     = nearest;
@@ -667,6 +670,7 @@ int isRast				/* Flag indicating Raster rather than colorspace */
 	s->getwb       = getwb;
 	s->setcusps    = setcusps;
 	s->getcusps    = getcusps;
+	s->write_to_vrml  = write_to_vrml;
 	s->write_vrml  = write_vrml;
 	s->write_trans_vrml = write_trans_vrml;
 	s->write_gam   = write_gam;
@@ -1062,43 +1066,12 @@ double pp[3]		/* rectangular coordinate of point */
 }
 
 /* ------------------------------------ */
-/* Initialise this gamut with the intersection of the */
-/* the two given gamuts. Return NZ on error. */
-/* Return 1 if gamuts are not compatible */
-/* (We assume that the this gamut is currently empty) */
-static int intersect(gamut *s, gamut *sa, gamut *sb) {
+
+/* intersect implementation */
+/* Assumes s has been initialised. */
+static void intersect_imp(gamut *s, gamut *sa, gamut *sb) {
 	int i, j, k;
 	gamut *s1, *s2;
-
-	if (sa->compatible(sa, sb) == 0)
-		return 1;
-
-	if IS_LIST_EMPTY(sa->tris)
-		triangulate(sa);
-	if IS_LIST_EMPTY(sb->tris)
-		triangulate(sb);
-
-	s->isJab = sa->isJab;
-
-	if (sa->isRast || sb->isRast)
-		s->isRast = 1;
-
-	for (j = 0; j < 3; j++)
-		s->cent[j] = sa->cent[j];
-
-	/* Clear some flags */
-	s->cswbset = 0;
-	s->cswbset = 0;
-	s->dcuspixs = 0;
-
-	/* If either is a raster gamut, make it a raster gamut */
-	if (s->isRast)
-		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
-	else
-		s->logpow = NORM_LOG_POW;	
-
-	/* Don't filter the points (gives a more accurate result ?) */
-	s->nofilter = 1;
 
 	/* Add each source gamuts verticies that lie within */
 	/* the other gamut */
@@ -1119,6 +1092,7 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 				continue;
 	
 			pl = s2->nradial(s2, NULL, s1->verts[i]->p);
+
 			if (pl <= (1.0 + 1e-9)) {
 				expand_gamut(s, s1->verts[i]->p);
 				s1->verts[i]->f &= ~GVERT_ISOS;		/* s1 vert is not outside s2 */
@@ -1161,6 +1135,142 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 
 		} END_FOR_ALL_ITEMS(tp1);
 	}
+}
+
+/* Initialise this gamut with the intersection of the */
+/* the two given gamuts. Return NZ on error. */
+/* Return 1 if gamuts are not compatible */
+/* (We assume that the this gamut is currently empty) */
+static int intersect(gamut *s, gamut *sa, gamut *sb) {
+	gamut *ss;
+	int j;
+
+	if (sa->compatible(sa, sb) == 0)
+		return 1;
+
+	if IS_LIST_EMPTY(sa->tris)
+		triangulate(sa);
+	if IS_LIST_EMPTY(sb->tris)
+		triangulate(sb);
+
+	s->sres = sa->sres > sb->sres ? sa->sres : sb->sres;
+
+	s->isJab = sa->isJab;
+
+	/* Clear some flags */
+	s->cswbset = 0;
+	s->cswbset = 0;
+	s->dcuspixs = 0;
+
+	/* If either is a raster gamut, make it a raster gamut */
+	if (sa->isRast || sb->isRast)
+		s->isRast = 1;
+
+	if (s->isRast) {
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+		s->no2pass = 1;				/* Only do one pass */
+	} else {
+		s->logpow = NORM_LOG_POW;	/* Convex hull compression power */
+		s->no2pass = 0;				/* Do two passes */
+	}
+
+	for (j = 0; j < 3; j++)
+		s->cent[j] = sa->cent[j];
+
+	/* Grab white & black from whichever source has it */
+	if (sb->cswbset)
+		ss = sb;
+	else if (sb->cswbset)
+		ss = sa;
+
+	if (ss->cswbset) {
+		for (j = 0; j < 3; j++) {
+			s->cs_wp[j] = ss->cs_wp[j];
+			s->cs_bp[j] = ss->cs_bp[j];
+			s->cs_kp[j] = ss->cs_kp[j];
+		}
+		s->cswbset = ss->cswbset;
+	}
+
+	/* Don't filter the points (gives a more accurate result ?) */
+	s->nofilter = 1;
+
+	intersect_imp(s, sa, sb);
+
+	if (sa->gawbset) {
+		compgawb(s);
+	}
+
+	s->nofilter = 0;
+
+	return 0;
+}
+
+/* ------------------------------------ */
+
+/* Initialise this gamut with neutral axis points from sa, */
+/* and then intersected with sb. */
+/* Return NZ on error. */
+/* Expand sb with neutral points, and then intersect */
+/* with sa.  */
+
+/* Return 1 if gamuts are not compatible */
+/* (We assume that the this gamut is currently empty) */
+static int nexpintersect(gamut *s, gamut *sa, gamut *sb) {
+	int i, j, k;
+	gamut *s1, *s2;
+
+	if (sa->compatible(sa, sb) == 0)
+		return 1;
+
+	if IS_LIST_EMPTY(sa->tris)
+		triangulate(sa);
+	if IS_LIST_EMPTY(sb->tris)
+		triangulate(sb);
+
+	s->sres = sa->sres > sb->sres ? sa->sres : sb->sres;
+
+	s->isJab = sa->isJab;
+
+	/* If either is a raster gamut, make it a raster gamut */
+	if (sa->isRast || sb->isRast)
+		s->isRast = 1;
+
+	if (s->isRast) {
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+		s->no2pass = 1;				/* Only do one pass */
+	} else {
+		s->logpow = NORM_LOG_POW;	/* Convex hull compression power */
+		s->no2pass = 0;				/* Do two passes */
+	}
+
+	for (j = 0; j < 3; j++)
+		s->cent[j] = sa->cent[j];
+
+	/* Clear some flags */
+	s->cswbset = 0;
+	s->cswbset = 0;
+	s->dcuspixs = 0;
+
+	/* Don't filter the points (gives a more accurate result ?) */
+	s->nofilter = 1;
+
+	/* Number of points to generate */
+	k = 10;
+	if (sa->nv <= 10)
+		k = 5;
+
+	/* Generate points from black to white */
+	for (i = 0; i < k; i++) {
+		double pp[3];
+		double bf = i/(k-1.0);
+
+		icmBlend3(pp, sa->cs_bp, sa->cs_wp, bf);
+		expand_gamut(s, pp);
+	}
+
+	/* let intersect_imp to the hard work */
+	intersect_imp(s, sa, sb);
 
 	s->nofilter = 0;
 
@@ -1169,48 +1279,35 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 
 /* ------------------------------------ */
 /*
-   Initialise this gamut with a destination mapping gamut.
-   s1 is the image gamut (a possible sub-set of the src gamut)
-   s2 is the source gamut
-   s3 is the destination gamut
- 
-   if docomp:
- 	this gamut will be set to the smaller of the img & dst gamuts 
-   else
- 	this gamut will be the img gamut
- 
-   if doexp
- 	this gamut will be expanded by the amount dst is outside the src gamut.
+   Initialise this gamut with the image/destination gamut
+   expanded by the amount that dest colorspace is outside
+   the source colorspace gamut.
  
    The vector direction of "inwards" is that returned by the
-   callback function if it is supplied, or radially inwards
-   if it is not.
+   callback function as p1 -> p2 if it is supplied, or radially
+   inwards if it is not. p2 is a "center" point to compute depth to.
 
    Return 1 if gamuts are not compatible.
-   (We assume that the this gamut is currently empty)
+   (We assume that the _this_ gamut is currently empty)
 
   */
 #define MXNIS 40		/* Maximum raw intersections handled */
 
-static int compdstgamut(
-gamut *s,		/* This */
-gamut *s1,		/* Image gamut, assumed to be a subset of source gamut */
+static int expdstbysrcmdst(
+gamut *s,		/* Gamut to be expanded */
+gamut *s1,		/* (Image) destination gamut to be expanded */
 gamut *s2,		/* The source space gamut */
 gamut *s3,		/* The destination space gamut */
-int docomp,		/* Flag, nz if compression is enabled */
-int doexp,		/* Flag, nz if expansion is enabled. */
-gamut *nedst,	/* Optional - if doexp, then expand nedst with non-expanded dst gamut */
 void (*cvect)(void *cntx, double *p2, double *p1),	/* Compression direction callback */
-void *cntx		/* Returns p2 which is in desired direction from given p1 */
+void *cntx		/* which returns p2 which is in desired direction from given p1 */
 ) {
-#ifdef STATS
-	int tedges, edgestested, testhits;
-#endif
 	int i, j, k;
 	gamut *ss[3];
-	gispnt lp1[MXNIS], lp2[MXNIS], lp3[MXNIS];	/* Intersection lists */
 	int ll1, ll2, ll3;		/* Returned list length */
+	gispnt lp1[MXNIS], lp2[MXNIS], lp3[MXNIS];	/* Lists of intersections */
 	int ii, jj, kk;			/* List indexes */
+
+//printf("\n~1 expdstbysrcmdst() called\n");
 
 	if (s1->compatible(s1, s2) == 0
 	 || s1->compatible(s2, s3) == 0)
@@ -1226,6 +1323,14 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 	s->isJab = s1->isJab;
 	s->isRast = s1->isRast;
 
+	if (s->isRast) {
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+		s->no2pass = 1;				/* Only do one pass */
+	} else {
+		s->logpow = NORM_LOG_POW;	/* Convex hull compression power */
+		s->no2pass = 0;				/* Do two passes */
+	}
+
 	for (j = 0; j < 3; j++)
 		s->cent[j] = s1->cent[j];
 
@@ -1234,12 +1339,6 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 	s->cswbset = 0;
 	s->dcuspixs = 0;
 
-	/* If s1 is a raster gamut, make output a raster gamut */
-	if (s->isRast) 
-		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
-	else
-		s->logpow = NORM_LOG_POW;	
-
 	/* Don't filter the points (gives a more accurate result ?) */
 	s->nofilter = 1;
 
@@ -1247,26 +1346,12 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 	ss[1] = s2;
 	ss[2] = s3;
 
-//printf("~1 compdstgamut docomp %d, doexp %d\n",docomp,doexp);
-	/* Reset the above/below flags */
-	/* 1 = img above dst */
-	/* 2 = img below dst */
-	/* 4 = src above dst */
-	/* 8 = src below dst */
-	for (k = 0; k < 3; k++) {	/* For img, src & dst */
-		for (i = 0; i < ss[k]->nv; i++) {
-			if (!(ss[k]->verts[i]->f & GVERT_TRI))
-				continue;
-	
-			ss[k]->verts[i]->as = 0;
-		}
-	}
-
-	/* Use all the triangle vertices from the three gamuts */
+	/* Use all the triangle vertices from the two/three gamuts */
 	/* as candidate points, because any of them might */
 	/* determine a surface feature. */
-	for (k = 0; k < 3; k++) {	/* For img, src & dst */
+	for (k = 0; k < 3; k++) {
 
+		/* For each vertex */
 		for (i = 0; i < ss[k]->nv; i++) {
 			double pp[3], ppv, p2[3];
 			double rr, r4;
@@ -1276,22 +1361,39 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 	
 			icmCpy3(pp, ss[k]->verts[i]->p);		/* Point in question */
 
+			if (k == 0) {				/* Seed with all points from gamut */ 
+				expand_gamut(s, pp);	/* to ensure result can't be less. */
+			}
+
 //printf("\n~1 k %d, point %d: %f %f %f\n", k,i,pp[0],pp[1],pp[2]);
+
+			/* Get the mapping vector */
 			if (cvect != NULL)
-				cvect(cntx, p2, pp);				/* Get mapping direction */
+				cvect(cntx, p2, pp);				/* Get mapping direction to center */
 			else
-				icmCpy3(p2, ss[k]->cent);			/* Radial vector */
-			icmNormalize33(p2, p2, pp, 1.0);
+				icmCpy3(p2, ss[k]->cent);			/* Radial vector to center */
+			icmNormalize33(pp, pp, p2, 1.0);		/* Make p2->pp length 1.0 */
 
-			/* Locate the intersecting segments for each gamut */
-			ll1 = ll2 = ll3 = 0;
-			ll1 = s1->vector_isectns(s1, pp, p2, lp1, MXNIS);	/* Image gamut */
-			if (doexp) 	/* For dst - src expansion */
-				ll2 = s2->vector_isectns(s2, pp, p2, lp2, MXNIS);	/* Src gamut */
-			if (docomp || doexp) 	/* For img ^ dst or dst - src */
-				ll3 = s3->vector_isectns(s3, pp, p2, lp3, MXNIS);	/* Dst gamut */
+//printf("~1 k %d, center %d: %f %f %f\n", k,i,p2[0],p2[1],p2[2]);
 
-//printf("~1 ll1 %d, ll2 %d, ll3 %d\n",ll1,ll2,ll3);
+			/* Locate the intersecting segments for each gamut. */
+			/* The returned parameter value will be >= 1.0 at and beyond the center point */
+			/* and < 1.0 on the pp side. */
+			/* We need intersections for all three for this to be a potential expansion point. */
+			if ((ll1 = s1->vector_isectns(s1, pp, p2, lp1, MXNIS)) == 0) {	/* Dest gamut */
+//printf("~1 no dst intersection\n");
+				continue;
+			}
+			if ((ll2 = s2->vector_isectns(s2, pp, p2, lp2, MXNIS)) == 0) {	/* Src space */
+//printf("~1 no sc intersection\n");
+				continue;
+			}
+			
+			if ((ll3 = s3->vector_isectns(s3, pp, p2, lp3, MXNIS)) == 0) {	/* Dst space */
+//printf("~1 no dc intersection\n");
+				continue;
+			}
+
 #ifdef NEVER
 	printf("img segments:\n");
 	for (ii = 0; ii < ll1; ii++)
@@ -1303,264 +1405,120 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 	for (ii = 0; ii < ll3; ii++)
 		printf("Isect %d: pv %f, dir %d, edge %d, tri %d\n",ii,lp3[ii].pv,lp3[ii].dir,lp3[ii].edge,lp3[ii].tri->n);
 #endif
-			/* Now go through each image segment */
-			for (ii = 0; ii < ll1; ii += 2) {
 
-				icmCpy3(pp, lp1[ii].ip);
-				ppv = lp1[ii].pv;
+			/* We're only interested in the most outside intersection of each surface */
+			/* on the side of the point in question. (we're ignoring and complex */
+			/* topology) */
+			if (lp1[0].pv > (1.0 - 1e-8)) {
+//printf("~1 dst point is on other side\n");
+				continue;
+			}
+			if (lp2[0].pv > (1.0 - 1e-8)) {
+//printf("~1 sc point is on other side\n");
+				continue;
+			}
+			if (lp3[0].pv > (1.0 - 1e-8)) {
+//printf("~1 sc point is on other side\n");
+				continue;
+			}
+			
+			/* Make sure that sc is inside dc, */
+			/* and sc is on or above dst */
+			if (lp2[0].pv > (lp3[0].pv - 1e-8)
+			 && lp2[0].pv <= (lp1[0].pv + 1e-8)) {
+				double ex[3], sf;
 
-//printf("~1 img pnt at %f\n",lp1[ii].pv);
-				if (docomp) {
+				/* Expand point by up to dst - src */
+				icmSub3(ex, lp3[0].ip, lp2[0].ip);
 
-					/* Locate a dst segment around or below img point */
-					for (kk = 0; kk < ll3; kk += 2) {
-						if ((lp1[kk+1].pv + 1e-8) >= ppv)
-							break;
-					}
-	
-					if (kk >= ll3) {	/* No dst segments or none below */
-						ss[k]->verts[i]->as |= 1;	/* img above dst */
-//printf("~1 img pnt is outside dst\n");
-						continue;
-					} else {
-//printf("~1 ing %f - %f, dst %f - %f\n", lp1[ii].pv,lp1[ii+1].pv,lp3[kk].pv,lp3[kk+1].pv);
-						/* Use the dst point if it is smaller */
-						if (ppv < lp3[kk].pv) {
-							icmCpy3(pp, lp3[kk].ip);
-							ppv = lp3[kk].pv;
-//printf("~1 dst is smaller %f\n",ppv);
-							ss[k]->verts[i]->as |= 1;	/* img above dst */
-						} else {
-//printf("~1 ing is smaller %f\n",ppv);
-							ss[k]->verts[i]->as |= 2;	/* img below dst */
-						}
-					}
-				}
+				/* Make expansion proportional to how far dst */
+				/* is to sc */
+				sf = (1.0 - lp1[0].pv)/(1.0 - lp2[0].pv);
+				icmScale3(ex, ex, sf);
+				icmAdd3(pp, lp1[0].ip, ex);
 
-				if (nedst != NULL)
-					expand_gamut(nedst, pp);
-
-				while (doexp) {
-					/* Locate a src segment that ing point lies in. */
-					for (jj = 0; jj < ll2; jj += 2) {
-						if (lp1[ii].pv >= (lp2[jj].pv - 1e-8)
-						 && lp1[ii].pv <= (lp2[jj+1].pv + 1e-8))
-							break;
-					}
-					if (jj >= ll2) {
-						ss[k]->verts[i]->as |= 4;	/* src above dst ?? */
-						break;		/* No overlapping segment */
-					}
-
-					/* Locate a dst segment that src point lies in */
-					for (kk = 0; kk < ll3; kk += 2) {
-						if (lp2[jj].pv >= (lp3[kk].pv - 1e-8)
-						 && lp2[jj].pv <= (lp3[kk+1].pv + 1e-8))
-							break;
-					}
-					if (kk >= ll2) {
-						ss[k]->verts[i]->as |= 4;	/* src above dst ?? */
-						break;		/* No overlapping segment */
-					}
-
-					/* if src is outside dst, do nothing */
-					if (lp3[kk].pv >= lp2[jj].pv) {	
-						ss[k]->verts[i]->as |= 4;	/* src above dst */
-						break;
-					}
-
-					/* Expand point by dst - src */
-					icmAdd3(pp, pp, lp3[kk].ip);
-					icmSub3(pp, pp, lp2[jj].ip);
-					ss[k]->verts[i]->as |= 8;	/* src below dst */
-//printf("~1 expanding point by %f - %f\nb",lp3[kk].pv,lp2[jj].pv);
-					break;
-				}
+//printf("~1 expanding point by sf %f = %f %f %f\nb",sf,ex[0],ex[1],ex[2]);
+//printf("~1 to %f %f %f\nb",pp[0],pp[1],pp[2]);
 				expand_gamut(s, pp);
+			} else {
+//printf("~1 lp2 %f <= lp3 %f || lp2 %f > lp2 %f\n",lp2[0].pv,lp3[0].pv - 1e-8, lp2[0].pv, lp1[0].pv + 1e-8);
+//printf("~1 dc is inside sc or sc is inside dst\n");
 			}
 		}
 	}
 
-#ifdef STATS
-	tedges = edgestested = testhits = 0;
-#endif
+	/* Generate points along the intersection of sc and dc, map them */
+	/* to the image/dest gamut, and add them as well. This is to properly define */
+	/* the edges of the expansion zone. */
 
-	/* Add any intersection points between img/dst, and src/dst */
-	for (k = 0; k < 4; k++) {
-		int mask;
-		gamut *sa, *sb;
-		gtri *tpa, *tpb;		/* Triangle pointers */
+	/* For sc on dc and then dc on sc */
+	for (k = 0; k < 2; k++) {
+		gamut *ss1, *ss2;
+		gtri *tp1, *tp2;		/* Triangle pointers */
 
 		if (k == 0) {
-			if (!docomp)
-				continue;
-			mask = 3;
-			sa = s1;		/* img */
-			sb = s3;		/* dst */
-		} else if (k == 1) {
-			if (!docomp)
-				continue;
-			mask = 3;
-			sa = s3;		/* dst */
-			sb = s1;		/* img */
-		} else if (k == 2) {
-			if (!doexp)
-				continue;
-			mask = 12;
-			sa = s2;		/* src */
-			sb = s3;		/* dst */
-		} else if (k == 3) {
-			if (!doexp)
-				continue;
-			mask = 12;
-			sa = s3;		/* dst */
-			sb = s2;		/* src */
+			ss1 = s2;
+			ss2 = s3;
+		} else {
+			ss1 = s3;
+			ss2 = s2;
 		}
 
-		/* Now find the edges that intersect the other gamut */
-		tpa = sa->tris;
-		FOR_ALL_ITEMS(gtri, tpa) {
+		/* Find the edges that intersect the other gamut */
+		tp1 = ss1->tris;
+		FOR_ALL_ITEMS(gtri, tp1) {		/* For all ss1 triangles */
 
-			for (j = 0; j < 3; j++) {	/* For each edge */ 
-#ifdef STATS
-				tedges++;
-#endif
-				/* If edge disposition flags aren't the same */
-				if ((tpa->e[j]->v[0]->as ^ tpa->e[j]->v[1]->as) & mask
-				 || (tpa->e[j]->v[0]->as & mask) == 3 || (tpa->e[j]->v[0]->as & mask) == 12
-				 || (tpa->e[j]->v[1]->as & mask) == 3 || (tpa->e[j]->v[1]->as & mask) == 12) {
-#ifdef STATS
-					edgestested++;
-#endif
-					/* Exhaustive search of other triangles */
-					tpb = sb->tris;
-					FOR_ALL_ITEMS(gtri, tpb) {
+			for (j = 0; j < 3; j++) {	/* For all edges in ss1 triangle */
+				/* If edge passes through the other gamut */
+				if ((tp1->e[j]->v[0]->f ^ tp1->e[j]->v[1]->f) & GVERT_ISOS) {
+
+					/* Exhaustive search of other triangles in ss2, */
+					/* to find the one that the edge intersects with. */
+					tp2 = ss2->tris;
+					FOR_ALL_ITEMS(gtri, tp2) {
 						double pv;
 						double pp[3];
 
 						/* Do a min/max intersection elimination test */
 						for (i = 0; i < 3; i++) {
-							if (tpb->mix[1][i] < tpa->mix[0][i]
-							 || tpb->mix[0][i] > tpa->mix[1][i])
+							if (tp2->mix[1][i] < tp1->mix[0][i]
+							 || tp2->mix[0][i] > tp1->mix[1][i])
 								break;			/* min/max don't overlap */
 						}
 						if (i < 3)
 							continue;			/* Skip this triangle, it can't intersect */
 
-						if (vect_intersect(sa, &pv, pp, tpa->e[j]->v[0]->p, tpa->e[j]->v[1]->p, tpb)
+						if (vect_intersect(ss1, &pv, pp, tp1->e[j]->v[0]->p, tp1->e[j]->v[1]->p, tp2)
 						 && pv >= (0.0 - 1e-10) && pv <= (1.0 + 1e-10)) {
-							/* Process intersection point pp the same as the first loop */
-							double ppv, p2[3];
-							double rr, r4;
-#ifdef STATS
-							testhits++;
-#endif
-//printf("\n~1 tri isxn point %f %f %f\n", pp[0],pp[1],pp[2]);
+							double p2[3];
+
+							/* Got intersection point pp. */
+
+							/* Get the mapping vector */
 							if (cvect != NULL)
-								cvect(cntx, p2, pp);				/* Get mapping direction */
+								cvect(cntx, p2, pp);		/* Get mapping direction to center */
 							else
-								icmCpy3(p2, sa->cent);			/* Radial vector */
-							icmNormalize33(p2, p2, pp, 1.0);
+								icmCpy3(p2, ss[k]->cent);			/* Radial vector to center */
+							icmNormalize33(pp, pp, p2, 1.0);		/* Make p2->pp length 1.0 */
 
-							/* Locate the intersecting segments for each gamut */
-							ll1 = ll2 = ll3 = 0;
-							ll1 = s1->vector_isectns(s1, pp, p2, lp1, MXNIS);	/* Image gamut */
-							if (doexp) 	/* For dst - src expansion */
-								ll2 = s2->vector_isectns(s2, pp, p2, lp2, MXNIS);	/* Src gamut */
-							if (docomp || doexp) 	/* For img ^ dst or dst - src */
-								ll3 = s3->vector_isectns(s3, pp, p2, lp3, MXNIS);	/* Dst gamut */
-
-//printf("~1 ll1 %d, ll2 %d, ll3 %d\n",ll1,ll2,ll3);
-#ifdef NEVER
-	printf("img segments:\n");
-	for (ii = 0; ii < ll1; ii++)
-		printf("Isect %d: pv %f, dir %d, edge %d, tri %d\n",ii,lp1[ii].pv,lp1[ii].dir,lp1[ii].edge,lp1[ii].tri->n);
-	printf("src segments:\n");
-	for (ii = 0; ii < ll2; ii++)
-		printf("Isect %d: pv %f, dir %d, edge %d, tri %d\n",ii,lp2[ii].pv,lp2[ii].dir,lp2[ii].edge,lp2[ii].tri->n);
-	printf("dst segments:\n");
-	for (ii = 0; ii < ll3; ii++)
-		printf("Isect %d: pv %f, dir %d, edge %d, tri %d\n",ii,lp3[ii].pv,lp3[ii].dir,lp3[ii].edge,lp3[ii].tri->n);
-#endif
-							/* Now go through each image segment */
-							for (ii = 0; ii < ll1; ii += 2) {
-
-								icmCpy3(pp, lp1[ii].ip);
-								ppv = lp1[ii].pv;
-
-//printf("~1 img pnt at %f\n",lp1[ii].pv);
-								if (docomp) {
-
-									/* Locate a dst segment around or below img point */
-									for (kk = 0; kk < ll3; kk += 2) {
-										if ((lp1[kk+1].pv + 1e-8) >= ppv)
-											break;
-									}
-					
-									if (kk >= ll3) {	/* No dst segments or none below */
-//printf("~1 img pnt is outside dst\n");
-										continue;
-									} else {
-//printf("~1 ing %f - %f, dst %f - %f\n", lp1[ii].pv,lp1[ii+1].pv,lp3[kk].pv,lp3[kk+1].pv);
-										/* Use the dst point if it is smaller */
-										if (ppv < lp3[kk].pv) {
-											icmCpy3(pp, lp3[kk].ip);
-											ppv = lp3[kk].pv;
-//printf("~1 dst is smaller %f\n",ppv);
-										} else {
-//printf("~1 ing is smaller %f\n",ppv);
-										}
-									}
-								}
-		
-								if (nedst != NULL)
-									expand_gamut(nedst, pp);
-
-								while (doexp) {
-									/* Locate a src segment that ing point lies in */
-									for (jj = 0; jj < ll2; jj += 2) {
-										if (lp1[ii].pv >= (lp2[jj].pv - 1e-8)
-										 && lp1[ii].pv <= (lp2[jj+1].pv + 1e-8))
-											break;
-									}
-									if (jj >= ll2) {
-										break;		/* No overlapping segment */
-									}
-
-									/* Locate a dst segment that src point lies in */
-									for (kk = 0; kk < ll3; kk += 2) {
-										if (lp2[jj].pv >= (lp3[kk].pv - 1e-8)
-										 && lp2[jj].pv <= (lp3[kk+1].pv + 1e-8))
-											break;
-									}
-									if (kk >= ll2) {
-										break;		/* No overlapping segment */
-									}
-
-									/* if src is outside dst, do nothing */
-									if (lp3[kk].pv >= lp2[jj].pv) {	
-										break;
-									}
-
-									/* Expand point by dst - src */
-									icmAdd3(pp, pp, lp3[kk].ip);
-									icmSub3(pp, pp, lp2[jj].ip);
-//printf("~1 expanding point by %f - %f\nb",lp3[kk].pv,lp2[jj].pv);
-									break;
-								}
-								expand_gamut(s, pp);
+							/* Locate the intersecting segments for the img/dest gamut. */
+							/* The returned parameter value will be >= 1.0 at and beyond */
+							/* the center point and < 1.0 on the pp side. */
+							/* We're only going to bother with the most outside point */
+							if ((ll1 = s1->vector_isectns(s1, pp, p2, lp1, MXNIS)) == 0
+							 || lp1[0].pv > (1.0 - 1e-8)) {
+								continue;
 							}
+			
+							expand_gamut(s, pp);
 						}
-					} END_FOR_ALL_ITEMS(tpb);
+					} END_FOR_ALL_ITEMS(tp2);
 				}
 			}
 
-		} END_FOR_ALL_ITEMS(tpa);
+		} END_FOR_ALL_ITEMS(tp1);
 	}
 
-#ifdef STATS
-	printf("Total edges %d, edges tested %d, edge hits %d\n", tedges, edgestested, testhits);
-#endif
 	s->nofilter = 0;
 
 	return 0;
@@ -3949,7 +3907,7 @@ double *nin		/* Normalised center relative point */
 
 	if (fabs(denom) < 1e-9) {
 		/* Hmm. The ray is paralell to the triangle ? */
-		error("radial_point: failed to intersect radial triangle\n");
+		error("radial_point: failed to intersect radial triangle, num %e, denom %e\n",num,denom);
 	}
 	rv = num/denom;
 
@@ -5624,7 +5582,7 @@ int     ll 		/* Size of list. */
 		return 0;		/* Too few to be useful */
 	}
 
-	/* Now we need to turn th raw intersections into sanitized segment pairs. */
+	/* Now we need to turn the raw intersections into sanitized segment pairs. */
 
 	/* Sort the intersections by parameter value */
 #define 	HEAP_COMPARE(A,B) (A.pv < B.pv)
@@ -5801,7 +5759,67 @@ int     ll 		/* Size of list. */
 #endif /* INTERSECT_DEBUG */
 
 /* ===================================================== */
-/* Write to a VRML/X3d file */
+
+/* Append gamut to an open VRML/X3d file */
+/* Return non-zero on error */
+static int write_to_vrml(
+	gamut *s,
+	vrml *wrl,
+	double trans,	/* Transparency of gamut */
+	int docusps		/* Add cusps to vrml */
+) {
+	int i;
+	gtri *tp;		/* Triangle pointer */
+
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+		
+	if (docusps && s->cu_inited != 0) {
+		double ccolors[6][3] = {
+			{ 1.0, 0.1, 0.1 },		/* Red */
+			{ 1.0, 1.0, 0.1 },		/* Yellow */
+			{ 0.1, 1.0, 0.1 },		/* Green */
+			{ 0.1, 1.0, 1.0 },		/* Cyan */
+			{ 0.1, 0.1, 1.0 },		/* Blue */
+			{ 1.0, 0.1, 1.0 }		/* Magenta */
+		};
+
+		for (i = 0; i < 6; i++)
+			wrl->add_marker(wrl, s->cusps[i], ccolors[i], 2.0);
+	}
+
+	wrl->start_line_set(wrl, 0);
+
+	/* Spit out the vertex values, in order. */
+	for (i = 0; i < s->nv; i++) {
+		double out[3];
+
+		if (!(s->verts[i]->f & GVERT_TRI))
+			continue;
+
+		/* Show normal gamut surface */
+		out[0] = s->verts[i]->p[0];
+		out[1] = s->verts[i]->p[1];
+		out[2] = s->verts[i]->p[2];
+		wrl->add_vertex(wrl, 0, out);
+	}
+
+	/* Add the surface triangles */
+	tp = s->tris; 
+	FOR_ALL_ITEMS(gtri, tp) {
+		int ix[3];
+		ix[0] = tp->v[0]->tn;
+		ix[1] = tp->v[1]->tn;
+		ix[2] = tp->v[2]->tn;
+		wrl->add_triangle(wrl, 0, ix); 
+	} END_FOR_ALL_ITEMS(tp);
+
+	wrl->make_triangles_vc(wrl, 0, trans);
+
+	return 0;
+}
+
+/* Write gamut to a VRML/X3d file */
 /* Return non-zero on error */
 static int write_vrml(
 gamut *s,
@@ -5812,7 +5830,7 @@ int docusps			/* Non-zero if cusp points are to be marked */
 	return write_trans_vrml(s, filename, doaxes, docusps, NULL, NULL);
 }
 
-/* Write to a VRML/X3d file */
+/* Write gamut to a VRML/X3d file */
 /* Return non-zero on error */
 static int write_trans_vrml(
 gamut *s,
@@ -5926,7 +5944,7 @@ void *cntx
 		ix[2] = tp->v[2]->tn;
 		wrl->add_triangle(wrl, 0, ix); 
 	} END_FOR_ALL_ITEMS(tp);
-#endif /* SHOW_BUCKETS */
+#endif /* !SHOW_BUCKETS */
 
 	{
 		double rgb[3];

@@ -118,7 +118,7 @@ int rwsize, 			/* Bytes to read or write */
 double tout				/* Timeout in seconds */
 ) {
 	int rv = 0;			/* Return value */
-	int c, rwbytes;		/* Data bytes read or written */
+	int rwbytes;		/* Data bytes read or written */
 	long top;			/* timeout in msec */
 
 	if (p->log->debug >= 8) {
@@ -412,7 +412,7 @@ double tout)
 
 	/* Until data is all written, we time out, or the user aborts */
 	for (top = ttop; top > 0 && len > 0;) {
-		int c, rv;
+		int rv;
 		a1logd(p->log, 8, "icoms_usb_ser_write: attempting to write %d bytes to usb top = %d\n",len,top);
 
 		rv = icoms_usb_transaction(p, NULL, &wbytes, type, (unsigned char)ep, (unsigned char *)wbuf, len, top);

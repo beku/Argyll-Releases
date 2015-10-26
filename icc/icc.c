@@ -13401,6 +13401,13 @@ void icmMul3(double out[3], double in1[3], double in2[3]) {
 	out[2] = in1[2] * in2[2];
 }
 
+/* Take absolute of a 3 vector */
+void icmAbs3(double out[3], double in[3]) {
+	out[0] = fabs(in[0]);
+	out[1] = fabs(in[1]);
+	out[2] = fabs(in[2]);
+}
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Set a 3x3 matrix to unity */
@@ -13837,6 +13844,11 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 	/* If the two input vectors are close to being parallel, */
 	/* then h will be close to zero. */
 	if (fabs(h) < 1e-12) {
+
+		/* Make sure scale is the correct sign */
+		if (s[0] * t[0] + s[1] * t[1] + s[2] * t[2] < 0.0)
+			tl = -tl;
+
 		m[0][0] = tl/sl;
 		m[0][1] = 0.0;
 		m[0][2] = 0.0;
@@ -13860,6 +13872,19 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 		m[2][1] = tl/sl * (h * v[1] * v[2] + v[0]);
 		m[2][2] = tl/sl * (e + h * v[2] * v[2]);
 	}
+
+#ifdef NEVER		/* Check result */
+	{
+		double tt[3];
+
+		icmMulBy3x3(tt, m, s);
+
+		if (icmLabDEsq(t, tt) > 1e-4) {
+			printf("icmRotMat error t, is %f %f %f\n",tt[0],tt[1],tt[2]);
+			printf("            should be %f %f %f\n",t[0],t[1],t[2]);
+		}
+	}
+#endif /* NEVER */
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -13908,9 +13933,9 @@ void icmMul3By3x4(double out[3], double mat[3][4], double in[3]) {
 /* "Real-Time Rendering". */
 /* s0 -> s1 is source vector, t0 -> t1 is target vector. */
 /* Usage of icmRotMat: */
-/*	t[0] == mat[0][0] * s[0] + mat[0][1] * s[1] + mat[0][2] * s[2] + mat[0][3]; */
-/*	t[1] == mat[1][0] * s[0] + mat[1][1] * s[1] + mat[1][2] * s[2] + mat[1][3]; */
-/*	t[2] == mat[2][0] * s[0] + mat[2][1] * s[1] + mat[2][2] * s[2] + mat[2][3]; */
+/*	t[0] = mat[0][0] * s[0] + mat[0][1] * s[1] + mat[0][2] * s[2] + mat[0][3]; */
+/*	t[1] = mat[1][0] * s[0] + mat[1][1] * s[1] + mat[1][2] * s[2] + mat[1][3]; */
+/*	t[2] = mat[2][0] * s[0] + mat[2][1] * s[1] + mat[2][2] * s[2] + mat[2][3]; */
 /* i.e. use icmMul3By3x4 */
 void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], double t0[3]) {
 	int i, j;
@@ -13939,6 +13964,26 @@ void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], doub
 				m[j][i] = 0.0;
 		}
 	}
+
+#ifdef NEVER		/* Check result */
+	{
+		double tt0[3], tt1[3];
+
+		icmMul3By3x4(tt0, m, s0);
+
+		if (icmLabDEsq(t0, tt0) > 1e-4) {
+			printf("icmVecRotMat error t0, is %f %f %f\n",tt0[0],tt0[1],tt0[2]);
+			printf("                should be %f %f %f\n",t0[0],t0[1],t0[2]);
+		}
+
+		icmMul3By3x4(tt1, m, s1);
+
+		if (icmLabDEsq(t1, tt1) > 1e-4) {
+			printf("icmVecRotMat error t1, is %f %f %f\n",tt1[0],tt1[1],tt1[2]);
+			printf("                should be %f %f %f\n",t1[0],t1[1],t1[2]);
+		}
+	}
+#endif /* NEVER */
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -15313,6 +15358,8 @@ int icmClipXYZ(double out[3], double in[3]) {
 
 /* --------------------------------------------------------------- */
 /* Some video specific functions */
+
+/* Should add ST.2048 log functions */
 
 /* Convert Lut table index/value to YPbPr */
 /* (Same as Lut_Lut2YPbPr() ) */ 

@@ -1737,7 +1737,7 @@ i1disp_compute_factors(
 
 /* Establish communications with a I1DISP */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return I1DISP_COMS_FAIL on failure to establish communications */
 static inst_code
 i1disp_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	i1disp *p = (i1disp *) pp;
@@ -2240,6 +2240,7 @@ i1disp_del(inst *pp) {
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
 	inst_del_disptype_list(p->dtlist, p->ndtlist);
+	p->vdel(pp);
 	free(p);
 }
 

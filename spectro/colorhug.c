@@ -825,6 +825,7 @@ colorhug_del(inst *pp) {
 		if (p->icom != NULL)
 			p->icom->del(p->icom);
 		inst_del_disptype_list(p->dtlist, p->ndtlist);
+		p->vdel(pp);
 		free(p);
 	}
 }

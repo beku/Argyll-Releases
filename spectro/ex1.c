@@ -147,6 +147,10 @@ static int ex1_set_boxcar(ex1 *p, int nobox);
 
 static int ex1_measure(ex1 *p, double *raw);
 
+static int ex1_save_calibration(ex1 *p);
+static int ex1_restore_calibration(ex1 *p);
+static int ex1_touch_calibration(ex1 *p);
+
 /* ----------------------------------------------------------------- */
 
 /* Establish communications with a ex1 */
@@ -1038,6 +1042,7 @@ ex1_del(inst *pp) {
 		if (p->conv != NULL)
 			p->conv->del(p->conv);
 
+		p->vdel(pp);
 		free(p);
 	}
 }
@@ -1234,7 +1239,7 @@ extern ex1 *new_ex1(icoms *icom, instType itype) {
 /* =============================================================================== */
 /* Calibration info save/restore */
 
-int ex1_save_calibration(ex1 *p) {
+static int ex1_save_calibration(ex1 *p) {
 	int ev = EX1_OK;
 	int i;
 	char fname[100];		/* Name */
@@ -1280,7 +1285,7 @@ int ex1_save_calibration(ex1 *p) {
 }
 
 /* Restore the all modes calibration from the local system */
-int ex1_restore_calibration(ex1 *p) {
+static int ex1_restore_calibration(ex1 *p) {
 	int ev = EX1_OK;
 	int i, j;
 	char fname[100];		/* Name */
@@ -1353,7 +1358,7 @@ int ex1_restore_calibration(ex1 *p) {
 	return ev;
 }
 
-int ex1_touch_calibration(ex1 *p) {
+static int ex1_touch_calibration(ex1 *p) {
 	int ev = EX1_OK;
 	char fname[100];		/* Name */
 	int rv;

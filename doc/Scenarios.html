@@ -182,6 +182,8 @@
 
 
 
+
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -204,6 +206,8 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
+
 
 
 
@@ -644,6 +648,8 @@
 
 
 
+
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -659,6 +665,8 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
+
 
 
 
@@ -816,8 +824,8 @@
       href="http://www.silverfast.com/show/it8/en.html">www.silverfast.com.</a><br>
     The Kodak Q-60 Color Input Target is also a typical example:<br>
     <br>
-    <img src="Q60.jpg" alt="Kodak Q60 chart image" height="141"
-      width="200"> <br>
+    <img src="Q60.jpg" alt="Kodak Q60 chart image" width="200"
+      height="141"> <br>
     <br>
     A very simple chart that is widely available is the Macbeth
     ColorChecker chart, although it contains only 24 patches and
@@ -884,10 +892,12 @@
 
 
 
+
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
-      height="122" width="200"> <img alt="ColorChecker SG" src="SG.jpg"
+      width="200" height="122"> <img alt="ColorChecker SG" src="SG.jpg"
       style="width: 174px; height: 122px;"><br>
     <br>
     The GretagMacbeth Eye-One Pro Scan Target 1.4 can also be used:<br>
@@ -896,6 +906,8 @@
       2px solid ; width: 200px; height: 140px;"><br>
     <br>
     Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+
+
 
 
 
@@ -967,9 +979,11 @@
     <img alt="CMP_DT_003" src="CMP_DT_003.jpg" style="width: 186px;
       height: 141px;">&nbsp; <img style="width: 203px; height: 140px;"
       alt="CMP_Digital_Target-4" src="CMP_Digital_Target-4.jpg"
-      height="140" width="203"><br>
+      width="203" height="140"><br>
     <br>
     and the <a href="http://www.silverfast.com/show/dc-targets/en.html">LaserSoft
+
+
 
 
 
@@ -1038,6 +1052,12 @@
     <img style=" width: 146px; height: 109px;" alt="Datacolor
       SpyderCheckr" src="SpyderChecker.jpg"><br>
     <br>
+    The Datacolor <a
+      href="http://spyder.datacolor.com/portfolio-view/spydercheckr-24/">SpyderCheckr24</a>:<br>
+    <br>
+    <img alt="SpyderCheckr24" src="SpyderChecker24.jpg" width="82"
+      height="122"><br>
+    <br>
     One of the QPcard's:<br>
     <a
       href="http://www.qpcard.com/en_b2c/color-reference-cards/qpcard201.html">QPcard
@@ -1092,8 +1112,12 @@
 
 
 
+
+
       201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
 href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
+
 
 
 
@@ -1282,6 +1306,8 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
         header</a>, and appending <a href="SG_footer.txt">this footer</a>,
       making sure there are no blank lines inserted in the process.
       There are reports that X-Rite have experimented with different ink
@@ -1345,6 +1371,16 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
         href="http://spyder.datacolor.com/images/photo_checkr_colordatainfo.jpg">values</a>
       on the Datacolor website. <br>
       <br>
+      For the Datacolor SpyderCheckr, the <span style="font-weight:
+        bold;">ref/SpyderChecker24.cht</span> file should be used, and a
+      reference <span style="font-weight: bold;">ref/SpyderChecker24.cie
+
+      </span>file made from measuring a sample chart is also available.
+      Alternately you could create your own reference file by
+      transcribing the <a
+        href="http://spyder.datacolor.com/images/photo_checkr_colordatainfo.jpg">values</a>
+      on the Datacolor website. <br>
+      <br>
       For the QPCard 201, the <span style="font-weight: bold;">ref/QPcard_201.cht</span>
       file should be used, and a reference <span style="font-weight:
         bold;">ref/QPcard_201.cie</span> file made from measuring a
@@ -1359,6 +1395,8 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
     For any other type of chart, a chart recognition template file will
     need to be created (this is beyond the scope of the current
     documentation, although see&nbsp; the <a href="cht_format.html">.cht_format
+
+
 
 
 
@@ -1869,6 +1907,8 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -2019,6 +2059,8 @@ then
 
 
 
+
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -2096,6 +2138,8 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
+
 
 
 
@@ -2618,6 +2662,8 @@ chart,
 
 
 
+
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -2685,8 +2731,12 @@ an
 
 
 
+
+
     image file.<br>
     &nbsp;&nbsp;&nbsp; <a href="applycal.html#p1">applycal</a>&nbsp;&nbsp;&nbsp;&nbsp;
+
+
 
 
 
@@ -2811,6 +2861,8 @@ a
 
 
 
+
+
     profile chart.<br>
     <br>
     <br>
@@ -2858,20 +2910,20 @@ a
     <br>
     To apply color management and calibration to a raster image:<br>
     <br>
-    &nbsp;&nbsp;&nbsp; <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a>
-    <a href="file:///D:/src/argyll/doc/cctiff.html#p1">Source.icm</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p1">PrinterA.icm</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p2">PrinterA_c.cal</a>
-    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">infile.tif</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p4">outfile.tif</a><br>
+    &nbsp;&nbsp;&nbsp; <a href="cctiff.html">cctiff</a>
+    <a href="cctiff.html#p1">Source.icm</a> <a
+      href="cctiff.html#p1">PrinterA.icm</a> <a
+      href="cctiff.html#p2">PrinterA_c.cal</a>
+    <a href="cctiff.html#p3">infile.tif</a> <a
+      href="cctiff.html#p4">outfile.tif</a><br>
     <br>
     or<br>
     <br>
-    &nbsp;&nbsp;&nbsp; <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a>
-    <a href="file:///D:/src/argyll/doc/cctiff.html#p1">Source.icm</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p1">PrinterA_c.icm</a>
-    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">infile.tif</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p4">outfile.tif</a><br>
+    &nbsp;&nbsp;&nbsp; <a href="cctiff.html">cctiff</a>
+    <a href="cctiff.html#p1">Source.icm</a> <a
+      href="cctiff.html#p1">PrinterA_c.icm</a>
+    <a href="cctiff.html#p3">infile.tif</a> <a
+      href="cctiff.html#p4">outfile.tif</a><br>
     <br>
     [ Note that cctiff will also process JPEG raster images. ]<br>
     <br>
@@ -3004,8 +3056,8 @@ a
     <h3><a name="LP3"></a>Image dependent gamut mapping using device
       links<br>
     </h3>
-    When images are stored in large gamut colorspaces (such as. L*a*b*
-    or ProPhoto, etc.), then using the colorspace gamut as the source
+    When images are stored in large gamut colorspaces (such as. L*a*b*,
+    ProPhoto, scRGB etc.), then using the colorspace gamut as the source
     gamut for gamut mapping is generally a bad idea, as it leads to
     overly compressed and dull images. The correct approach is to use a
     source gamut that represents the gamut of the images themselves.
@@ -3020,13 +3072,13 @@ a
       href="collink.html#Gp">image.gam</a> <a href="collink.html#si">-ip</a>
     <a href="collink.html#c">-cmt</a> <a href="collink.html#d">-dpp</a>
     <a href="collink.html#p1">ProPhoto.icm</a> <a
-      href="file:///D:/src/argyll/doc/collink.html#p2">RGBDestinationProfile.icm</a>
-    <a href="file:///D:/src/argyll/doc/collink.html#p3">Source2Destination.icm</a><br>
+      href="collink.html#p2">RGBDestinationProfile.icm</a>
+    <a href="collink.html#p3">Source2Destination.icm</a><br>
     <br>
-    <a href="file:///D:/src/argyll/doc/cctiff.html">cctiff</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p1">Source2Destination.icm</a>
-    <a href="file:///D:/src/argyll/doc/cctiff.html#p3">image.tif</a> <a
-      href="file:///D:/src/argyll/doc/cctiff.html#p4">printfile.tif</a><br>
+    <a href="cctiff.html">cctiff</a> <a
+      href="cctiff.html#p1">Source2Destination.icm</a>
+    <a href="cctiff.html#p3">image.tif</a> <a
+      href="cctiff.html#p4">printfile.tif</a><br>
     <br>
     The printfile.tif is then send to the printer without color
     management, (i.e. in the same way the printer characterization test
@@ -3045,6 +3097,11 @@ a
     more efficient for a group of related images, and ensures that
     colors are transformed in exactly the same way for all of the
     images.<br>
+    <br>
+    An alternative generating a gamut for a specific set of images, is
+    to use a general smaller gamut definition (i.e. the sRGB profile),
+    or a gamut that represents the typical range of colors you wish to
+    preserve.<br>
     <br>
     The arguments to collink should be appropriate for the output device
     type - see the collink examples in the above section.<br>
@@ -3154,6 +3211,8 @@ a
 
 
 
+
+
       madvr</b>" in dispcal, dispread and dispwin. Leave the MadTPG
     "VideoLUT" and "3dluts" buttons in their default&nbsp; (enabled)
     state, as the various tools will automatically take care of
@@ -3216,6 +3275,8 @@ a
 
 
 
+
+
         interactive adjustment mode can be used to set the white point.
         Note that while adjusting the neutral axis for neutrality may
         help, the Device Link will override the transfer curve
@@ -3238,6 +3299,8 @@ a
         taken, then the resulting calibration file should be provided to
         dispread as the <a href="dispcal.html#k">-k parameter</a> or <a
           href="dispcal.html#K">-K parameter</a>.&nbsp; See also below <b>Choice
+
+
 
 
 
@@ -3487,7 +3550,7 @@ a
       since it gives good results with a single parameter.<br>
     </p>
     <p>The addition of a second optional parameter <a
-        href="file:///D:/src/argyll/doc/collink.html#Ib">-I b:p.p:g.g</a>
+        href="collink.html#Ib">-I b:p.p:g.g</a>
       allows control over the degree of black point offset accounted for
       as an output offset, as opposed to input offset Once the effective
       gamma value has been chosen to suite the viewing conditions and
@@ -3743,9 +3806,13 @@ a
 
 
 
+
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-H
+
+
 
 
 
@@ -3802,9 +3869,13 @@ a
 
 
 
+
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -b -G -ir </tt><tt><tt>-a
+
+
 
 
 

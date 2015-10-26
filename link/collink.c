@@ -130,7 +130,7 @@
 
     External cLUTs that are implemented using integer logic
     (ie, in HW, such as the eeColor) may choose to cope
-    with this probem in a different way, i.e. by
+    with this problem in a different way, i.e. by
     scaling against a value above the largest valid
     device encoding. For instance, cLUTs of resolution
     65 would be normalised to 65 rather than the usual 64,
@@ -246,7 +246,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
 	fprintf(stderr,"         l:imagewhite  Image white in cd.m^2 if surround = auto (default 250)\n");
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
-	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default %d)\n",XICC_DEFAULT_GLARE);
 	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
 	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
 	fprintf(stderr," -t tlimit       set source total ink limit, 0 - 400%% (estimate by default)\n");
@@ -309,10 +309,12 @@ struct _profinfo {
 	icmLuAlgType alg;			/* Type of lookup algorithm */
 	icColorSpaceSignature csp;	/* Colorspace */
 	int chan;					/* Channels */
-	int nocurve;				/* NZ to not use device curve in per channel curve */
+	int nocurve;				/* NZ to not use ICC device curve and tvenc in per channel curve */
 	int lcurve;					/* 1 to apply a Y like to L* curve for XYZ Matrix profiles */
 								/* 2 to apply a Y to L* curve for XYZ space */
-	int tvenc;					/* 0 = full range RGB, 1 = RGB Video Level encoding, */
+								/* lcurve is applied irrespective of nocurve, and is */
+								/* incompatible with tvenc ? */
+	int tvenc;					/* 0 = Full range RGB, */
 								/* 1 = RGB Video Level encoding, */
 								/* 3 = Rec601 YCbCr encoding, */
 								/* 4 = Rec709 1150/60/2:1 YCbCr encoding */
@@ -326,8 +328,8 @@ struct _profinfo {
 	int bt1886;                 /* 1 to apply input gamma curve using effective gamma */
 								/* 2 to apply input gamma curve using technical gamma */
 	double outoprop;			/* Proportion of black output offset, 0.0 .. 1.0. 0.0 == BT.1886 */
-	double egamma;				/* effective gamma to ain for */
-	double tgamma;				/* technical gamma to ain for */
+	double egamma;				/* effective gamma to aim for */
+	double tgamma;				/* technical gamma to aim for */
 	bt1886_info bt;				/* BT.1886 adjustment info */
 	double rgb_bk[3];			/* Linear light input RGB black to bend to */		
 	double wp[3];				/* Lab/Jab white point for profile used by wphack & xyzscale */
@@ -348,6 +350,7 @@ struct _clink {
 	int dst_cmymap;	/* masks C = 1, M = 2, Y = 4 to force 100% cusp map */
 	int tdlut;		/* nz = 3DLut output, 1 = eeColor format, 2 = MadVR format */
 					/*                    3 = .cube format */
+	double coscale[3];		/* eeColor cLUT output de-scale/"second" 1D lut scale */
 
 	icColorSpaceSignature pcsor;	/* PCS to use between in & out profiles */
 
@@ -368,8 +371,8 @@ struct _clink {
 	xicc *abs_xicc;
 	icxLuBase *abs_luo;	/* NULL if none */
 
-	int addcal;		/* 1 = apply cal to 3dLut and set linear cal1 */ 
-					/* 2 = set cal1 to cal */ 
+	int addcal;		/* 1 = apply cal to 3dLut and set linear MadVR cal1 */ 
+					/* 2 = set MadVR cal1 to cal */ 
 	xcal *cal; 		/* Calibration to apply, NULL if none */
 
 					/* (We current assume that xyzscale can't be used with gmi) */
@@ -628,10 +631,8 @@ static void xvYCC_fwd_matrix(double *out, double *in) {
 }
 
 /* ======================================================= */
-/* cLUT Input value tweaks to make Video emcoded black land on */
-/* 65 res grid nodes. This should help 33 and 17 res cLUTs too*/
-
-/* This also makes the cLUT nodes line up with the eeColor cLUT nodes. */
+/* cLUT Input value tweaks to make Video encoded black land on */
+/* 65 res grid nodes, which should help 33 and 17 res cLUTs too*/
 
 static void VidRGB_to_cLUT65(double out[3], double in[3]) {
 	int i;
@@ -744,7 +745,7 @@ void devi_devip(void *cntx, double *out, double *in) {
 	for (i = 0; i < p->in.chan; i++)
 		out[i] = in[i];
 
-	if (!p->in.nocurve) {	/* Using profile per channel curves */
+	if (!p->in.nocurve) {	/* Using ICC profile per channel curves & tvenc */
 
 		/* Video decode */
 		if (p->in.tvenc == 1) {				/* Video 16-235 range */
@@ -753,7 +754,7 @@ void devi_devip(void *cntx, double *out, double *in) {
 			icmVidRGB_2_RGB(out, out);
 
 		} else if (p->in.tvenc >= 3) {		/* YCbCr */
-			error("Can't use input curves with YCbCr input encoding");
+			error("Can't use input curves with YCbCr or other input encoding");
 		}
 
 #ifdef DEBUG
@@ -800,25 +801,11 @@ void devi_devip(void *cntx, double *out, double *in) {
 #endif
 	}
 
-	/* eeColor cLUT is fake 65^3 - only 64^3 is usable. This affects */
-	/* full range and xvYCC RGB, so map inputs to cLUT to only use 64^3 */
-	if (p->tdlut == 1) {
-		if (p->in.tvenc == 0) {			/* Full range */
-			for (i = 0; i < p->in.chan; i++)
-				out[i] = out[i] * (p->clutres-2.0)/(p->clutres-1.0);
-
-		/* This isn't actually usable, because the eeColor does its own YCbCr conversion */
-		} else if (p->in.tvenc == 8 || p->in.tvenc == 9) {		/* xvYCC */
-			out[0] = out[0];
-			out[1] = (out[1] * (p->clutres-3.0) + 1.0)/(p->clutres-1.0);	/* Keep symetrical */
-			out[2] = (out[2] * (p->clutres-3.0) + 1.0)/(p->clutres-1.0);
-		}
-	}
-
-	/* For video encoding, adjust index value vert slightly, */
+	/* For video encoding, adjust index value very slightly, */
 	/* to align black with grid node. (We assume that the 3DLut HW */
 	/* is doing this when there are no input & output curves for 2DLuts) */
 	if (p->in.tvenc != 0
+	 && p->tdlut != 1			/* Not eeColor - it doesn't have an input curve */
 	 && (p->clutres == 65
 	  || p->clutres == 33
 	  || p->clutres == 17)) {
@@ -880,24 +867,10 @@ void devip_devop(void *cntx, double *out, double *in) {
 	for (i = 0; i < p->in.chan; i++)
 		win[i] = oin[i] = in[i];
 
-	/* eeColor cLUT is fake 65^3 - only 64^3 is usable. This affects */
-	/* full range and xvYCC RGB, so un-map inputs to cLUT to only use 64^3 */
-	if (p->tdlut == 1) {
-		if (p->in.tvenc == 0) {
-			for (i = 0; i < p->in.chan; i++)
-				win[i] = win[i] * (p->clutres-1.0)/(p->clutres-2.0);
-
-		/* This isn't actually usable, because the eeColor does its own YCbCr conversion */
-		} else if (p->in.tvenc == 8 || p->in.tvenc == 9) {		/* xvYCC */
-			win[0] = win[0];
-			win[1] = (win[1] * (p->clutres-1.0) - 1.0)/(p->clutres-3.0);
-			win[2] = (win[2] * (p->clutres-1.0) - 1.0)/(p->clutres-3.0);
-		}
-	}
-
 	/* For video encoding, adjust index value to align black with */
 	/* grid node */
 	if (p->in.tvenc != 0
+	 && p->tdlut != 1			/* Not eeColor - it doesn't have an input curve */
 	 && (p->clutres == 65
 	  || p->clutres == 33
 	  || p->clutres == 17)) {
@@ -920,7 +893,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 #endif
 	}
 
-	if (p->in.nocurve) {	/* Not using profile per channel curves */
+	if (p->in.nocurve) {	/* Not using profile per channel tvenc curves */
 		/* Video encoding decode and input clipping */
 		scale = 1.0;
 		if (p->in.tvenc == 1) {				/* Video 16-235 range */
@@ -1066,7 +1039,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 	}
 
-	if (p->in.lcurve) {	/* Apply L* to Y */
+	if (p->in.lcurve) {	/* Apply L* to Y to undo input curve */
 		l2y_curve(win, win, p->in.lcurve == 2);
 #ifdef DEBUG
 		DEBUGCND printf("win[] set to L* value %s\n",icmPdv(p->in.chan, win));
@@ -1406,6 +1379,9 @@ void devip_devop(void *cntx, double *out, double *in) {
 		} else if (rgbbktrig) {
 			out[0] = out[1] = out[2] = 0.0;
 		}
+#ifdef DEBUG
+		DEBUGCND printf("DevOut' after hack trigger %s\n\n",icmPdv(p->out.chan, out));
+#endif
 	} else {	/* Various hacks haven't triggered */
 
 		switch(p->out.alg) {
@@ -1479,27 +1455,20 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 		if (rv >= 2)
 			error("icc lookup failed: %d, %s",p->in.c->errc,p->in.c->err);
+#ifdef DEBUG
+		DEBUGCND printf("DevOut' after PCS->Dev %s\n\n",icmPdv(p->out.chan, out));
+#endif
 	}
 
 	if (p->cal != NULL && p->addcal == 1 && p->out.nocurve) {
-#ifdef DEBUG
-		DEBUGCND printf("DevOut' before cal curve %s\n\n",icmPdv(p->out.chan, out));
-#endif
 		p->cal->interp(p->cal, out, out);
-	}
-
-	if (p->out.lcurve) { 		/* Apply Y to L* */
 #ifdef DEBUG
-		DEBUGCND printf("DevOut' before y2l_curve %s\n\n",icmPdv(p->out.chan, out));
+		DEBUGCND printf("DevOut' after cal curve %s\n\n",icmPdv(p->out.chan, out));
 #endif
-		y2l_curve(out, out, p->out.lcurve == 2);
 	}
 
 	/* Video encode */
-	if (p->out.nocurve && p->out.tvenc) {
-#ifdef DEBUG
-	DEBUGCND printf("DevOut' before TVenc %s\n",icmPdv(p->out.chan, out));
-#endif
+	if (p->out.nocurve && p->out.tvenc != 0) {
 		for (i = 0; i < p->out.chan; i++) {
 			if (out[i] < 0.0)
 				out[i] = 0.0;
@@ -1540,7 +1509,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 #endif
 	}
 
-	if (clip && p->out.nocurve && p->out.tvenc) {
+	if (clip && p->out.nocurve && p->out.tvenc != 0) {
 
 		/* For RGB encoding, unscale +ve clip to preserve hue */
 		if (p->out.tvenc == 1) {				/* RGB Video 16-235 range */
@@ -1588,6 +1557,34 @@ void devip_devop(void *cntx, double *out, double *in) {
 				}
 			}
 		}
+#ifdef DEBUG
+		DEBUGCND printf("DevOut' after TVenc un-clip %s\n",icmPdv(p->out.chan, out));
+#endif
+	}
+
+	/* For eeColor and Full range RGB, make sure that the cLUT output maps to 1.0 */
+	/* The output curve will correct this, irrespective of out.nocurve */
+	if (p->tdlut == 1) {		/* eeColor encoded input */
+		/* ~~ it's not clear if this re-scaling would help with other */
+		/* encodings like xvYCC ? */ 
+		if (p->out.tvenc == 0) {			/* Full range RGB */
+			for (i = 0; i < 3; i++) {
+				out[i] /= p->coscale[i];
+				if (out[i] > 1.0)
+					out[i] = 1.0;
+			}
+#ifdef DEBUG
+			DEBUGCND printf("DevOut' after eeColor de-scale %s\n\n",icmPdv(p->out.chan, out));
+#endif
+		}
+	}
+
+	/* lcurve is incompatible with coscale and tvenc ?? */
+	if (p->out.lcurve) { 		/* Apply Y to L* to make output perceptual */
+#ifdef DEBUG
+		DEBUGCND printf("DevOut' before y2l_curve %s\n\n",icmPdv(p->out.chan, out));
+#endif
+		y2l_curve(out, out, p->out.lcurve == 2);
 	}
 
 #ifdef DEBUG
@@ -1630,7 +1627,20 @@ void devop_devo(void *cntx, double *out, double *in) {
 #endif
 	}
 
-	if (!p->out.nocurve) {		/* Using per channel output curves */
+	/* For eeColor and Full range RGB, unmap the cLUT output maps from 1.0 */
+	if (p->tdlut == 1) {		/* eeColor encoded input */
+		/* ~~ it's not clear if this re-scaling would help with other */
+		/* encodings like xvYCC ? */ 
+		if (p->out.tvenc == 0) {			/* Full range RGB */
+			for (i = 0; i < 3; i++)
+				out[i] *= p->coscale[i];
+#ifdef DEBUG
+			DEBUGCND printf("DevOut after eeColor re-scale %s\n\n",icmPdv(p->out.chan, out));
+#endif
+		}
+	}
+
+	if (!p->out.nocurve) {		/* Using ICC per channel output curves and tvenc */
 
 		/* Apply output curve */
 		switch(p->out.alg) {
@@ -1680,10 +1690,9 @@ void devop_devo(void *cntx, double *out, double *in) {
 		}
 #ifdef DEBUG
 		if (p->out.tvenc != 0) {
-		DEBUGCND printf("After Video encode %s\n",icmPdv(p->out.chan, out));
+			DEBUGCND printf("After Video encode %s\n",icmPdv(p->out.chan, out));
 		}
 #endif
-
 	}
 #ifdef DEBUG
 	DEBUGCND printf("DevOut'->DevOut ret %s\n",icmPdv(p->out.chan, out));
@@ -1826,8 +1835,8 @@ main(int argc, char *argv[]) {
 	int intentset = 0;			/* The user specified an intent */
 	int vcset = 0;				/* Viewing conditions were set by user */
 	int modeset = 0;			/* The gamut mapping mode was set by the user */
-	int addcal = 0;				/* 1 = Incorporate cal. curves in 3dLUT and set linear cal1 */
-								/* 2 = Set 3dLut cal1 to calibration curves */
+	int addcal = 0;				/* 1 = Incorporate cal. curves in 3dLUT and set linear MadVR cal1 */
+								/* 2 = Set 3dLut MadVR cal1 to calibration curves */
 	int rv = 0;
 	icxViewCond ivc, ovc;		/* Viewing Condition Overrides for in and out profiles */
 	int ivc_e = -1, ovc_e = -1;	/* Enumerated viewing condition */
@@ -3549,23 +3558,23 @@ main(int argc, char *argv[]) {
 			printf("Creating Gamut Mapping\n");
 
 		/* Gamut mapping will extend given grid res to encompas */
-		/* source gamut by a margin. */
+		/* source gamut by a margin. This allows for grid expansion beyond src gamut of 1.20 */
 		if (li.quality == 3) {			/* Ultra High */
   	 		sgres = 7.0;
   	 		dgres = 7.0;
-  	 		mapres = 41;
+  	 		mapres = 49;
 		} else if (li.quality == 2) {	/* High */
   	 		sgres = 8.0;
   	 		dgres = 8.0;
-  	 		mapres = 33;
+  	 		mapres = 39;
 		} else if (li.quality == 1) {	/* Medium */
   	 		sgres = 10.0;
   	 		dgres = 10.0;
-  	 		mapres = 25;
+  	 		mapres = 29;
 		} else {						/* Low quality */
   	 		sgres = 12.0;
   	 		dgres = 12.0;
-  	 		mapres = 17;
+  	 		mapres = 19;
 		}
 
 		/* Creat the source colorspace gamut surface */
@@ -3762,7 +3771,7 @@ main(int argc, char *argv[]) {
 
 		if (li.verb) {
 			printf("Gamma curve target out black rel XYZ = %f %f %f, Lab %f %f %f\n",
-			    bp[0],bp[1],bp[2], li.in.bt.outL, li.in.bt.tab[1], li.in.bt.tab[2]);
+			    bp[0],bp[1],bp[2], li.in.bt.outL, li.in.bt.tab[0], li.in.bt.tab[1]);
 			printf("Proportion of black output offset = %f%s\n", li.in.outoprop, 
 			                         li.in.outoprop == 0.0 ? " (BT.1886)" : "");
 			printf("Gamma Y input offset = %f\n", li.in.bt.ingo);
@@ -4326,6 +4335,33 @@ main(int argc, char *argv[]) {
 				}
 			}
 
+			/* The eeColor hard wires 1.0 input to 1.0 output in its cLUT, */
+			/* so de-scale the cLUT to match this, and re-scale in the */
+			/* output 1D lut */
+
+			li.coscale[0] = li.coscale[1] = li.coscale[2] = 1.0;	/* Default - do nothing */
+			if (li.tdlut == 1) {		/* eeColor encoded input */
+				double inout[3] = { 1.0, 1.0, 1.0 };
+
+				/* ~~ it's not clear if this re-scaling would help with other */
+				/* encodings like xvYCC ? */ 
+				if (li.out.tvenc == 0) {			/* Full range RGB */
+					int verb = li.verb;
+					li.verb = 0;
+					devip_devop((void *)&li, inout, inout);
+					li.verb = verb;
+					if (inout[0] < 0.1
+					 || inout[1] < 0.1
+					 || inout[2] < 0.1) {
+						error("Link output for white is unexpected! (%f %f %f)\n",inout[0],inout[1],inout[2]);
+					}
+					icmCpy3(li.coscale, inout);
+					if (li.verb)
+						printf("De-scaling/scaling eeColor output by %f %f %f\n",
+						       li.coscale[0], li.coscale[1], li.coscale[2]);
+				}
+			}
+
 
 			/* Link Lut = AToB0 */
 			if ((wo = (icmLut *)wr_icc->add_tag(
@@ -4422,7 +4458,6 @@ main(int argc, char *argv[]) {
 
 				if (li.map != NULL)
 					li.map->dbg = 0;
-
 			}
 #endif /* NEVER */
 
@@ -4751,7 +4786,8 @@ main(int argc, char *argv[]) {
 
 /* ===================================================================== */
 
-/* Tweak for eeColor input and output value encodings */
+/* Tweak for eeColor input and output value encodings, to compensate */
+/* for assumption that it maps the FP range 1.0 to 64 * 2^(bits -6). */
 
 static void VidRGB_to_eeColor(double out[3], double in[3]) {
 	int i;
@@ -4766,7 +4802,9 @@ static void eeColor_to_VidRGB(double out[3], double in[3]) {
 }
 
 
-/* Write a eeColor 1DLut input LUT files */
+/* Write a eeColor 1DLut "first/gamma" LUT files. */
+/* eeColor applies these after the cLUT and before its 3x3 matrix. */
+/* This can't help us, so create a unity lookup/ */
 /* Return nz on error */
 int write_eeColor1DinputLuts(clink *li, char *tdlut_name) {
 	char fname[MAXNAMEL+1+20], *xl;
@@ -4793,23 +4831,7 @@ int write_eeColor1DinputLuts(clink *li, char *tdlut_name) {
 		for (i = 0; i < 1024; i++) {
 			for (k = 0; k < 3; k++)
 				in[k] = i/(1024-1.0);
-
-			/*    Full range -> 64/65 scaled */
-			/* or Video -> cLUT65 index */
-			devi_devip((void *)li, out, in);
-
-			if (li->in.tvenc == 1) {				/* Video 16-235 range */
-				cLUT65_to_VidRGB(out, out);
-
-			/* eeColor doesn't actually do YCrCb explicitly, but put this here for completeness */
-			} else if (li->in.tvenc == 3 		/* Rec601 YCbCr */
-			        || li->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
-			        || li->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
-			        || li->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
-			        || li->in.tvenc == 7) {		/* Rec2020 Constant Luminance YCbCr encoding */
-				cLUT65_to_YCrCb(out, out);
-			}
-
+			icmCpy3(out,in);
 			fp->gprintf(fp,"%.6f\n",out[j]);
 		}
 
@@ -4850,13 +4872,14 @@ int write_eeColor3DLut(icc *icc, clink *li, char *fname) {
 		double oin[3], in[3], out[3];
 
 		/* Our assumption is that the eeColor maps the FP range 1.0
-		  to 64 * 2^(bits -6). This is sligghtly too much for
+		  to 64 * 2^(bits -6). This is slightly too much for
 		  full range (PC), but exactly lines the black point
-		  up on the 4th grid node for any video encodig bit depth,
+		  up on the 4th grid node for any video encoding bit depth,
 	 	  and results in input values being the same as output
-		  values for the null transform
+		  values for the null transform.
+		  (We haven't confirmed this assumtion by experiment.)
 		 */
-		/* There are two sets of RGB values. One is (suposedly)
+		/* There are two sets of cLUT RGB values. One is (suposedly)
 		 the "calibrated white point" and one "the native white point",
 		 but experiments don't give any indications that the first
 		 three entries are capable of affecting the result in any way
@@ -4864,7 +4887,7 @@ int write_eeColor3DLut(icc *icc, clink *li, char *fname) {
 		 */
 	
 		/* The eeColor wires the 65'th node to 1.0, and we can skip */
-		/* creating it */
+		/* creating it. We de-scale in clut() and re-scale in devop_devo() to compensate. */
 		if (gc[0] == 64 || gc[1] == 64 || gc[2] == 64)
 			goto next;
 
@@ -4894,7 +4917,7 @@ int write_eeColor3DLut(icc *icc, clink *li, char *fname) {
 			        || li->in.tvenc == 4   		/* Rec709 1150/60/2:1 YCbCr */
 			        || li->in.tvenc == 5   		/* Rec709 1250/50/2:1 YCbCr */
 			        || li->in.tvenc == 6   		/* Rec2020 Non-constant Luminance YCbCr encoding */
-			        || li->in.tvenc == 7) { 		/* Rec2020 Constant Luminance YCbCr encoding */
+			        || li->in.tvenc == 7) {		/* Rec2020 Constant Luminance YCbCr encoding */
 				YCrCb_to_cLUT65(in, in);
 			}
 		}
@@ -4923,7 +4946,7 @@ int write_eeColor3DLut(icc *icc, clink *li, char *fname) {
 	return 0;
 }
 
-/* Write a eeColor 1DLut output LUT files */
+/* Write a eeColor 1DLut "second/linearization" LUT files. */
 /* Return nz on error */
 int write_eeColor1DoutputLuts(clink *li, char *tdlut_name) {
 	char fname[MAXNAMEL+1+20], *xl;
@@ -4950,7 +4973,7 @@ int write_eeColor1DoutputLuts(clink *li, char *tdlut_name) {
 		for (i = 0; i < 8192; i++) {
 			for (k = 0; k < 3; k++)
 				in[k] = i/(8192-1.0);
-			devop_devo((void *)li, out, in);
+			devop_devo((void *)li, out, in);	/* Apply possible output re-scaling */
 			fp->gprintf(fp,"%.6f\n",out[j]);
 		}
 
@@ -5122,7 +5145,7 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 		}
 	}
 
-	/* Append a cal1 table to the 3dlut. */
+	/* Append a MadVR cal1 table to the 3dlut. */
 	/* This can be used to ensure that the Graphics Card VideoLuts */
 	/* are correctly setup to match what the 3dLut is expecting. */
 

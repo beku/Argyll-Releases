@@ -2,6 +2,59 @@
 Argyll CMS change log
 =====================
 
+Version 1.8.3
+-------------
+
+* Added SpyderCheckr24 scaning .cht and .cie files.
+
+* Fixed USB problem with i1pro (Rev B & D ?), where
+  communications would occasionally break down on
+  fast systems.
+
+* Added another fixed display intergration time to i1pro
+  non-adaptive emission mode to cope with higher brightness displays.
+
+* Added workaround for i1d3 Rev. B status code 0x83 on very low light measurement.
+
+* Fixed minor bug in i1d3.c that truncated serial number string.
+  (Thanks to Mikael Sterner).
+
+* Fixed bug in Klein K10 driver - adaptive measurement
+  wasn't properly using all the extra measurements.
+
+* Improved Klein K10 driver to be more robust when lights off
+  command returns bogus error codes, or causes a cascade of
+  bogus measurement errors.
+
+* Added workaround for OS X 10.9+ "App Nap" problem.
+
+* Added maximum sensor frequency check for Spyder & i1d3 drivers, so that
+  erronious readings due to excessive brightness can't be missed.
+
+* Changed chartread so that it doesn't warn of a possible wrong
+  strip being read, nor allows bi-directional strip reading,
+  if "printtarg -r" was used. A warning will be issued if
+  "printtarg -r" was used, and "chartread -B" wasn't used.
+
+* Fixed collink for eeColor Full range RGB to use
+  output curve ("second" 1D curves) to compensate for
+  cLUT being wired for 1.0 output from 1.0 input.
+
+* Added "lp" gamut mapping intent :- Luminance Preserving Perceptual,
+  for Photographers concerned with maintaining tonal variations.
+
+* Fixed bugs in image specific gamut mapping that were degrading
+  the accuracy of the result.
+
+* Re-wrote gamut smoothing code, and re-tuned it to behave similarly
+  to the V1.8.2 release.
+
+* Changed default viewing condition glare to 5%, to smooth out
+  shadow tone curve.
+
+* Reduced the level of Helmholtz-Kohlrausch effect in CIECAM02
+  implementation in the light of visual experiments.
+
 Version 1.8.2
 -------------
 

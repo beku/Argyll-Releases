@@ -96,7 +96,7 @@ void usage(void) {
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
 	fprintf(stderr,"         l:imagewhite  Image white in cd.m^2 if surround = auto (default 250)\n");
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
-	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default %d)\n",XICC_DEFAULT_GLARE);
 	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
 	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
 	fprintf(stderr," -O outputfile Override the default output filename.\n");

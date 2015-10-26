@@ -1754,6 +1754,9 @@ void icmMul3(double out[3], double in1[3], double in2[3]);
 
 #define ICMMUL3(o, i, j) ((o)[0] = (i)[0] * (j)[0], (o)[1] = (i)[1] * (j)[1], (o)[2] = (i)[2] * (j)[2])
 
+/* Take absolute of a 3 vector */
+void icmAbs3(double out[3], double in[3]);
+
 /* Compute the dot product of two 3 vectors */
 double icmDot3(double in1[3], double in2[3]);
 

@@ -36,6 +36,8 @@
 #define MAXGAMN 10				/* Maximum gamut point neighbors returned */
 #define NSLOTS 6				/* Number of maximum direction slots */
 
+struct _vrml *wrl;				/* Declared in vrml.h, which may be #included after this */
+
 /* ------------------------------------ */
 #define NODE_STRUCT							\
 	int tag;		/* Type of node, 1 = vertex, 2 = quad */	\
@@ -72,7 +74,7 @@ struct _gvert {
 	double sp[3];		/* Point mapped to surface of unit sphere, relative to center */
 	double ch[3];		/* Point mapped for convex hull testing, relative to center */
 
-	int as;				/* Assert checking flag, compdstgamut flag */
+	int as;				/* Assert checking flag, expdstbysrcmdst flag */
 }; typedef struct _gvert gvert;
 
 /* ------------------------------------ */
@@ -188,7 +190,7 @@ struct _gnn {
 struct _gispnt {
 	double ip[3];			/* Intersecion Point */
 	double pv;				/* Parameter value at intersection */
-	int dir;				/* Direction: 1 = into gamut, 0 = out or gamut */
+	int dir;				/* Direction: 1 = into gamut, 0 = out of gamut */
 	int edge;				/* Edge:      2 = no isect, 1 = on edge, 0 = not on edge */
 	gtri *tri;				/* Pointer to intersection triangle */
 }; typedef struct _gispnt gispnt; 
@@ -313,17 +315,14 @@ struct _gamut {
 								/* Initialise this gamut with the intersection of the */
 								/* the two given gamuts. */
 
-#ifdef NEVER	/* Deprecated */
-	int (*expandbydiff)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2, struct _gamut *s3, int docomp);
-								/* Initialise this gamut with a gamut which is s1 expanded */
-								/* (but never reduced) by the distance from s2 to s3. */
-								/* If docomp != 0, make gamut trace s3 if it's smaller than s1 */ 
-#endif
+	int (*nexpintersect)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2);
+								/* Return s1 expanded with neutral axis points */
+								/* and then intersected with s2. */
 
-	int (*compdstgamut)(struct _gamut *s, struct _gamut *img, struct _gamut *src,
-	                    struct _gamut *dst, int docomp, int doexpp, struct _gamut *nedst,
-	                    void (*cvect)(void *cntx, double *p2, double *p1), void *cntx);
-								/* Initialise this gamut with a destination mapping gamut. */
+	int (*expdstbysrcmdst)(struct _gamut *s,
+	                       struct _gamut *dst, struct _gamut *sc, struct _gamut *dc,
+                           void (*cvect)(void *cntx, double *p2, double *p1), void *cntx);
+								/* Expand dst by ((dc - sc) > 0) */
 
 	double (*radial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction. */
@@ -384,6 +383,8 @@ struct _gamut {
 																/* nz if no cusps available. */
 
 																/* Following return nz on error: */
+	int (*write_to_vrml)(struct _gamut *s, struct _vrml *wrl, double trans, int docusps);
+	                    /* Append gamut surface to vrml. See also vrml->make_gamut_surface() etc. */
 	int (*write_vrml)(struct _gamut *s, char *filename,
 	                              int doaxes, int docusps); /* Write to a VRML .wrl/.x3d file */
 	int (*write_gam)(struct _gamut *s, char *filename);		/* Write to a CGATS .gam file */

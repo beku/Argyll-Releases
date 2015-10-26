@@ -1529,7 +1529,12 @@ static int do_plot_imp(
 		    nanosleep(&ts, NULL);
 	    }
 	} else if (dowait < 0) {
-		Sleep(-dowait * 1000);
+	    struct timespec ts;
+		int msec = -dowait * 1000;
+
+	    ts.tv_sec = msec / 1000;
+   		ts.tv_nsec = (msec % 1000) * 1000000;
+	    nanosleep(&ts, NULL);
 	}
 
 	if (tpool != nil)

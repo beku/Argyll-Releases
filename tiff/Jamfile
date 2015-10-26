@@ -22,17 +22,12 @@ if $(NT) {
 
 ObjectKeep port/getopt.c ;
 
-# support library for generation utilities
-#Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c strtoul.c ] ;
-if $(UNIX) {
-	Library libport.lib : [ CatPaths port : strcasecmp.c ] ;
-} else {
-	Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c ] ;
-}
-
 # generation utilities
-Main mkg3states : libtiff/mkg3states.c ;
-LinkLibraries mkg3states : libport.lib ;
+if $(UNIX) {
+	Main mkg3states : libtiff/mkg3states.c [ CatPaths port : strcasecmp.c ] ;
+} else {
+	Main mkg3states : libtiff/mkg3states.c [ CatPaths port : getopt.c strcasecmp.c ] ;
+}
 GenFileND libtiff/tif_fax3sm.c : mkg3states -c const [ NormPaths libtiff/tif_fax3sm.c ] ;
 
 # tiff library

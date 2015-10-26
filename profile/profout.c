@@ -2276,22 +2276,22 @@ make_output_icc(
 						printf("Creating Gamut Mapping\n");
 			
 					/* Gamut mapping will extend given grid res to encompas */
-					/* source gamut by a margin. */
-					if (oquality == 3) {	/* Ultra High */
-			  	 		gres = 8.0;
-			  	 		mapres = 41;
+					/* source gamut by a margin of 1.20. */
+					if (oquality == 3) {			/* Ultra High */
+			  	 		gres = 7.0;
+			  	 		mapres = 49;
 					} else if (oquality == 2) {	/* High */
 			  	 		gres = 8.0;
-			  	 		mapres = 33;
+			  	 		mapres = 39;
 					} else if (oquality == 1) {	/* Medium */
 			  	 		gres = 10.0;
-			  	 		mapres = 25;
+			  	 		mapres = 29;
 					} else if (oquality == 0) {	/* Low quality */
 			  	 		gres = 12.0;
-			  	 		mapres = 17;
+			  	 		mapres = 19;
 					} else {					/* Extremely low */
 			  	 		gres = 14.0;
-			  	 		mapres = 9;
+			  	 		mapres = 11;
 					}
 
 					/* We could lift this restriction by allowing for separate */

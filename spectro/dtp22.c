@@ -164,7 +164,7 @@ dtp22_command(dtp22 *p, char *in, char *out, int bsize, double to) {
 
 /* Establish communications with a DTP22 */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return DTP22_COMS_FAIL on failure to establish communications */
 static inst_code
 dtp22_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	dtp22 *p = (dtp22 *) pp;
@@ -930,6 +930,7 @@ dtp22_del(inst *pp) {
 	dtp22 *p = (dtp22 *)pp;
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
+	p->vdel(pp);
 	free(p);
 }
 

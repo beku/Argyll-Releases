@@ -796,8 +796,8 @@ static int read_cxf(namedc *p, const char *filename, int options) {
 			}
 
 			if (!found_io) {
-				p->ill = icIlluminantD50;
-				p->obs = icStdObs1931TwoDegrees;
+				p->ill = icxIT_D50;
+				p->obs = icxOT_CIE_1931_2;
 				a1logd(p->log, 2, "read_cxf: failed to locate ColorSpecification - assuming D50 2 degree observer\n");
 			}
 

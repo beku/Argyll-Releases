@@ -309,6 +309,8 @@ EXP_FUNC int STDCALL ssl_read(SSL *ssl, uint8_t **in_data)
     return ret;
 }
 
+int basic_readi(SSL *ssl, uint8_t **in_data);
+
 /*
  * Internal read the SSL connection used for setup
  */

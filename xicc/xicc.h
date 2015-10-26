@@ -194,6 +194,8 @@ typedef struct {
 	char *desc;			/* Possible description of this VC */
 } icxViewCond;
 
+#define XICC_DEFAULT_GLARE 5	/* Default glare in % */
+
 /* Method of black point adaptation */
 typedef enum {
 	gmm_BPadpt    = 0,		/* Adapt source black point to destination */
@@ -222,6 +224,7 @@ typedef struct {
 	double gamcknf;			/* Gamut compression knee factor, 0.0 - 1.0 */
 	double gamxknf;			/* Gamut expansion knee factor, 0.0 - 1.0 */
 	double gampwf;			/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
+	double gamlpwf;			/* Gamut Lightness preserving perceptual Map whtg. factor, 0.0 - 1.0 */
 	double gamswf;			/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
 	double satenh;			/* Saturation enhancement value, 0.0 - Inf */
 	char *as;				/* Alias string (option name) */

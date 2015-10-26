@@ -52,6 +52,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "counters.h"
 #include "icc.h"
 #include "numlib.h"
 #include "rspl.h"
@@ -60,12 +61,14 @@
 #include "vrml.h"
 
 #undef SAVE_VRMLS		/* [Und] Save various vrml's */
+#undef PLOT_SMOOTHING_CHANGE	/* [Und] Dest point change due to smoothing in "dst_smvec.wrl" */
 #undef PLOT_MAPPING_INFLUENCE	/* [Und] Plot sci_gam colored by dominant guide influence: */ 
 		                /* Absolute = red, Relative = yellow, Radial = blue, Depth = green */
 #undef PLOT_AXES		/* [Und] */
 #undef PLOT_EVECTS		/* [Und] Create VRML of error correction vectors */
 #undef VERB  			/* [Und] [0] If <= 1, print progress headings */
 						/* if  > 1, print information about everything */
+#undef SHOW_NEIGB		/* [Und] Show the neighborhood point group in src */
 #undef SHOW_NEIGB_WEIGHTS	/* [Und] Show the weighting for each point of neighbours in turn */
 
 #undef DIAG_POINTS		/* [Und] Short circuite mapping and show vectors of various */
@@ -78,9 +81,8 @@
 #define DARK_L  5.0		/* "dark" L/J value */
 #define NEUTRAL_C  20.0	/* "neutral" C value */
 #define NO_TRIALS 6		/* [6] Number of random trials */
-#define VECSMOOTHING	/* [Def] Enable vector smoothing */
-#define VECADJPASSES 3	/* [3] Adjust vectors after smoothing to be on dest gamut */
-#define RSPLPASSES 4	/* [4] Number of rspl adjustment passes */
+#define VECADJPASSES 8	/* [8] Vector smoothing and adjust passes. */
+#define RSPLPASSES 4	/* [4] Number of rspl smoothing & adjustment passes */
 #define RSPLSCALE 1.8	/* [1.8] Offset within gamut for rspl smoothing to aim for */
 #define SHRINK 5.0		/* [5.0] Shrunk destination evect surface factor */
 #define CYLIN_SUBVEC	/* [Def] Make sub-vectors always cylindrical direction */
@@ -114,7 +116,7 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #if defined(SAVE_VRMLS) && defined(PLOT_MAPPING_INFLUENCE)
-static void create_influence_plot(nearsmth *smp, int nmpts);
+static void create_influence_plot(nearsmth *smp, int nmpts, int mapres);
 #endif
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -194,7 +196,7 @@ double sumpow			/* Sum power. 0.0 == 2.0 */
 
 /* Compute the LCh differences squared of in1 - in2 */
 /* (This is like the CIE DE94) */
-static void diffLCh(
+static void diffLChsq(
 double out[3],
 double in1[3],			/* Destination location */
 double in2[3]			/* Source location */
@@ -258,7 +260,7 @@ double dcratio,		/* Depth compression ratio of mapping */
 double dxratio		/* Depth expansion ratio of mapping */
 ) {
 	double a_o;
-	double va, vr = 0.0, vl, vd, vv = 0.0;
+	double va, vr, vd, vv = 0.0;
 
 	/* Absolute, Delta E^2 between test point and destination closest */
 	/* aodv is already positioned acording to the LCh weights, */
@@ -267,7 +269,7 @@ double dxratio		/* Depth expansion ratio of mapping */
 	va = wdesq(dtp, aodv, a_o, a_o, a_o, SUM_POW);
 
 	/* Radial. Delta E^2 between test point and source mapped radially to dest gamut */
-	vl = wdesq(dtp, drv, w->rl.l, w->rl.c, w->rl.h, SUM_POW);
+	vr = wdesq(dtp, drv, w->rl.l, w->rl.c, w->rl.h, SUM_POW);
 
 	/* Depth ratio error^2. */
 	vd = w->d.co * dcratio * dcratio
@@ -276,17 +278,16 @@ double dxratio		/* Depth expansion ratio of mapping */
 	/* Diagnostic values */
 	p->dbgv[0] = va;
 	p->dbgv[1] = vr;
-	p->dbgv[2] = vl;
-	p->dbgv[3] = vd;
+	p->dbgv[2] = vd;
 	
-	vv = va + vr + vl + vd;		/* Sum of squares */
-//	vv = sqrt(va) + sqrt(vr) + sqrt(vl) + sqrt(vd);		/* Linear sum is better ? */
-//	vv = pow(va, 0.7) + pow(vr, 0.7) + pow(vl, 0.7) + pow(vd, 0.7);		/* Linear sum is better ? */
+	vv = va + vr + vd;		/* Sum of squares */
+//	vv = sqrt(va) + sqrt(vr) + sqrt(vd);		/* Linear sum is better ? */
+//	vv = pow(va, 0.7) + pow(vr, 0.7) + pow(vd, 0.7);		/* Linear sum is better ? */
 
 #ifdef NEVER
 	printf("~1 dtp %f %f %f\n", dtp[0], dtp[1], dtp[2]);
 	printf("~1 va = %f from aodv %f %f %f, weight %f\n", va, aodv[0], aodv[1], aodv[2], a_o);
-	printf("~1 vl = %f from drv %f %f %f, weights %f %f %f\n", vl, drv[0], drv[1], drv[2], w->rl.l, w->rl.c, w->rl.h);
+	printf("~1 vr = %f from drv %f %f %f, weights %f %f %f\n", vr, drv[0], drv[1], drv[2], w->rl.l, w->rl.c, w->rl.h);
 	printf("~1 vd = %f from d.co %f d.xo %f, weights %f %f\n", vd, w->d.co,w->d.xo,dcratio * dcratio,dxratio * dxratio);
 	printf("~1 return vv = %f\n", vv);
 #endif /* NEVER */
@@ -300,12 +301,13 @@ double dxratio		/* Depth expansion ratio of mapping */
 /* and cusp mapping function. */
 struct _smthopt {
 	/* optimisation */
+	int debug;				/* debug flag */
 	int pass;				/* Itteration round */
 	int ix;					/* Index of point being optimized */
 	nearsmth *p;			/* Point being optimised */
 	int useexp;				/* Flag indicating whether expansion is permitted */
-	int debug;				/* debug flag */
-	gamut *shgam;			/* for optfunc1a */
+	double *wn;				/* Target of weighted nearest */
+	gamut *wngam;			/* for optfunc1 and optfunc1a */
 
 	/* Setup state */
 	int isJab;				/* Flag indicating Jab rather than Lab space */
@@ -334,7 +336,7 @@ struct _smthopt {
 
 }; typedef struct _smthopt smthopt;
 
-static void init_ce(smthopt *s, gamut *sc_gam, gamut *d_gam, int src_kbp, int dst_kbp, double d_bp[3]);
+static void init_ce(smthopt *s, gamut *sc_gam, gamut *si_gam, gamut *d_gam, int src_kbp, int dst_kbp, double d_bp[3]);
 static void comp_ce(smthopt *s, double out[3], double in[3], gammapweights *wt);
 static void inv_comp_ce(smthopt *s, double out[3], double in[3], gammapweights *wt);
 static double comp_naxbf(smthopt *s, double in[3]);
@@ -357,9 +359,55 @@ static void spow3(double *out, double *in, double ex) {
 	}
 }
 
-/* Powell optimisation function for setting minimal absolute error target point. */
+/* Absolute error function, used by optfunc1() & optfunc1a() */
+static double aerrf(
+	nearsmth *p,
+	double *dv,
+	double *sv
+) {
+	double delch[3], rv;
+
+#ifdef NEVER
+	/* Absolute weighted delta E between source and dest test point */
+	rv = wdesq(dv, sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, SUM_POW);
+#else
+	{
+		double ppp = p->wt.a.lxpow;	/* Extra power when L de is over thr */
+		double thr = p->wt.a.lxthr;	/* Xover between normal and power */
+		double sumpow = SUM_POW; 
+		double del;
+
+		diffLChsq(delch, dv, sv);
+		del = sqrt(delch[0]);		/* delta L */
+
+		if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
+#ifdef LINEAR_HUE_SUM
+			double ll, cc, hh;
+			ll = p->wt.ra.l * pow(delch[0], 1.0 + (ppp - 1.0) * del/(del + thr));
+			cc = p->wt.ra.c * delch[1];
+			hh = p->wt.ra.h * delch[2];
+			rv = sqrt(ll + cc) + sqrt(hh);
+			rv *= rv;
+#else
+			rv = p->wt.ra.l * pow(delch[0], 1.0 + (ppp - 1.0) * del/(del + thr))
+			   + p->wt.ra.c * delch[1]
+			   + p->wt.ra.h * delch[2];
+#endif
+		} else {
+			sumpow *= 0.5;
+			rv = p->wt.ra.l * pow(delch[0], (1.0 + (ppp - 1.0) * del/(del + thr)) * sumpow)
+			   + p->wt.ra.c * pow(delch[1], sumpow)
+			   + p->wt.ra.h * pow(delch[2], sumpow);
+		}
+	}
+#endif
+	return rv;
+}
+
+/* Powell optimisation function for setting minimal absolute error target point, */
+/* with a correction for swap. */
 /* We get a 2D plane in the 3D space, of the destination point, */
-/* who's location we are optimizing. */
+/* who's location we are optimizing to wngam. */
 static double optfunc1(
 void *fdata,
 double *_dv
@@ -368,9 +416,8 @@ double *_dv
 	nearsmth *p = s->p;	/* Point being optimised */
 	int i, j, k;
 	double dv[3];		/* 3D point in question */
-	double ddv[3];		/* Point in question mapped to dst surface */
-	double delch[3];
-	double rv;		/* Out of gamut, return value */
+	double ddv[3];		/* Point in question mapped to wngam surface */
+	double rv;			/* Out of gamut, return value */
 
 	/* Convert from 2D to 3D. */
 	dv[2] = _dv[1];
@@ -379,7 +426,7 @@ double *_dv
 	icmMul3By3x4(dv, p->m3d, dv);
 
 //printf("~1 optfunc1 got 2D %f %f -> 3D %f %f %f\n", _dv[0], _dv[1], dv[0], dv[1], dv[2]);
-	p->dgam->radial(p->dgam, ddv, dv);	/* Map to dst surface to check current location */
+	s->wngam->radial(s->wngam, ddv, dv);	/* Map to dst surface to check current location */
 //printf("~1 optfunc1 got %f %f %f -> surface %f %f %f\n", dv[0], dv[1], dv[2], ddv[0], ddv[1], ddv[2]);
 
 	if (p->swap) {
@@ -389,52 +436,20 @@ double *_dv
 //printf("~1 after cusp rot got %f %f %f\n",ddv[0],ddv[1],ddv[2]);
 	}
 
-#ifdef NEVER
-	/* Absolute weighted delta E between source and dest test point */
-	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, SUM_POW);
-#else
-	{
-		double ppp = p->wt.a.lxpow;
-		double thr = p->wt.a.lxthr;	/* Xover between normal and power */
-		double sumpow = SUM_POW; 
-
-		diffLCh(delch, ddv, p->sv);
-
-		if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
-#ifdef LINEAR_HUE_SUM
-			double ll, cc, hh;
-			ll = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp);
-			cc = p->wt.ra.c * delch[1];
-			hh = p->wt.ra.h * delch[2];
-			rv = sqrt(ll + cc) + sqrt(hh);
-			rv *= rv;
-#else
-			rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
-			   + p->wt.ra.c * delch[1]
-			   + p->wt.ra.h * delch[2];
-#endif
-		} else {
-			sumpow *= 0.5;
-			
-			rv = p->wt.ra.l * pow(delch[0], ppp * sumpow) * thr/pow(thr, ppp * sumpow)
-			   + p->wt.ra.c * pow(delch[1], sumpow)
-			   + p->wt.ra.h * pow(delch[2], sumpow);
-		}
-	}
-#endif
+	rv = aerrf(p, ddv, s->wn);
 
 	if (s->debug)
-		printf("debug: rv = %f from %f %f %f\n",rv, ddv[0], ddv[1], ddv[2]);
+		printf("debug: rv = %f from %f %f %f -> %f %f %f\n",rv, s->wn[0], s->wn[1], s->wn[2], ddv[0], ddv[1], ddv[2]);
 
-//printf("~1 sv %4.2f %4.2f %4.2f, ddv %4.2f %4.2f %4.2f\n", p->sv[0], p->sv[1], p->sv[2], ddv[0], ddv[1], ddv[2]);
+//printf("~1 sv %4.2f %4.2f %4.2f, ddv %4.2f %4.2f %4.2f\n", p->wm[0], p->wm[1], p->wm[2], ddv[0], ddv[1], ddv[2]);
 //printf("~1 rv = %f\n",rv);
 	return rv;
 }
 
 /* Powell optimisation function for setting minimal absolute error target point, */
-/* from dest gamut to shrunk destination gamut. */
+/* with no correction for swap. */
 /* We get a 2D plane in the 3D space, of the destination point, */
-/* who's location we are optimizing. */
+/* who's location we are optimizing to wngam. */
 static double optfunc1a(
 void *fdata,
 double *_dv
@@ -443,9 +458,8 @@ double *_dv
 	nearsmth *p = s->p;	/* Point being optimised */
 	int i, j, k;
 	double dv[3];		/* 3D point in question */
-	double ddv[3];		/* Point in question mapped to shgam surface */
-	double delch[3];
-	double rv;		/* Out of gamut, return value */
+	double ddv[3];		/* Point in question mapped to wngam surface */
+	double rv;			/* Out of gamut, return value */
 
 	/* Convert from 2D to 3D. */
 	dv[2] = _dv[1];
@@ -453,48 +467,16 @@ double *_dv
 	dv[0] = 50.0;
 	icmMul3By3x4(dv, p->m3d, dv);
 
-//printf("~1 optfunc1a got 2D %f %f -> 3D %f %f %f\n", _dv[0], _dv[1], dv[0], dv[1], dv[2]);
-	s->shgam->radial(s->shgam, ddv, dv);	/* Map to shgam surface to check current location */
-//printf("~1 optfunc1a got %f %f %f -> surface %f %f %f\n", dv[0], dv[1], dv[2], ddv[0], ddv[1], ddv[2]);
+//if (s->debug) printf("~1 optfunc1a got 2D %f %f -> 3D %f %f %f\n", _dv[0], _dv[1], dv[0], dv[1], dv[2]);
+	s->wngam->radial(s->wngam, ddv, dv);	/* Map to shgam surface to check current location */
+//if (s->debug) printf("~1 optfunc1a got %f %f %f -> surface %f %f %f\n", dv[0], dv[1], dv[2], ddv[0], ddv[1], ddv[2]);
 
-#ifdef NEVER
-	/* Absolute weighted delta E between source and dest test point */
-	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, SUM_POW);
-#else
-	{
-		double ppp = p->wt.a.lxpow;
-		double thr = p->wt.a.lxthr;	/* Xover between normal and power */
-		double sumpow = SUM_POW;
-
-		diffLCh(delch, ddv, p->dv);
-
-		if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
-#ifdef LINEAR_HUE_SUM
-			double ll, cc, hh;
-			ll = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp);
-			cc = p->wt.ra.c * delch[1];
-			hh = p->wt.ra.h * delch[2];
-			rv = sqrt(ll + cc) + sqrt(hh);
-			rv *= rv;
-#else
-			rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
-			   + p->wt.ra.c * delch[1]
-			   + p->wt.ra.h * delch[2];
-#endif
-		} else {
-			sumpow *= 0.5;
-			
-			rv = p->wt.ra.l * pow(delch[0], ppp * sumpow) * thr/pow(thr, ppp * sumpow)
-			   + p->wt.ra.c * pow(delch[1], sumpow)
-			   + p->wt.ra.h * pow(delch[2], sumpow);
-		}
-	}
-#endif
+	rv = aerrf(p, ddv, s->wn);
 
 	if (s->debug)
-		printf("debug: rv = %f from %f %f %f\n",rv, ddv[0], ddv[1], ddv[2]);
+		printf("debug: rv = %f from %f %f %f -> %f %f %f\n",rv, s->wn[0], s->wn[1], s->wn[2], ddv[0], ddv[1], ddv[2]);
 
-//printf("~1 sv %4.2f %4.2f %4.2f, ddv %4.2f %4.2f %4.2f\n", p->sv[0], p->sv[1], p->sv[2], ddv[0], ddv[1], ddv[2]);
+//if (s->debug) printf("~1 sv %4.2f %4.2f %4.2f, ddv %4.2f %4.2f %4.2f\n", p->wm[0], p->wm[1], p->wm[2], ddv[0], ddv[1], ddv[2]);
 //printf("~1 rv = %f\n",rv);
 	return rv;
 }
@@ -563,7 +545,7 @@ double *dv		/* 3D Location being evaluated */
 	}
 }
 
-/* Powell optimisation function for non-relative error optimization. */
+/* Powell optimisation function for overall non-relative smoothed error optimization. */
 /* We get a 2D point in the 3D space. */
 static double optfunc2(
 void *fdata,
@@ -582,8 +564,8 @@ double *_dv
 //printf("~1 optfunc2 got 2D %f %f -> 3D %f %f %f\n", _dv[0], _dv[1], dv[0], dv[1], dv[2]);
 
 	p->dgam->radial(p->dgam, ddv, dv);	/* Map to dst surface to check current location */
-//printf("~1 optfunc2 got %f %f %f -> surface %f %f %f\n", dv[0], dv[1], dv[2], ddv[0], ddv[1], ddv[2]);
 
+//printf("~1 optfunc2 got %f %f %f -> surface %f %f %f\n", dv[0], dv[1], dv[2], ddv[0], ddv[1], ddv[2]);
 //printf("~1 optfunc2 sv %4.2f %4.2f %4.2f, dv %4.2f %4.2f %4.2f\n", p->sv[0], p->sv[1], p->sv[2], ddv[0], ddv[1], ddv[2]);
 
 	/* Compute available depth errors p->dcratio and p->dxratio */
@@ -597,12 +579,13 @@ double *_dv
 		printf("~1 dv = %f %f %f\n", ddv[0], ddv[1], ddv[2]);
 		printf("~1 aodv = %f %f %f\n", p->aodv[0], p->aodv[1], p->aodv[2]);
 		printf("~1 drv = %f %f %f\n", p->drv[0], p->drv[1], p->drv[2]);
+		printf("~1 va = %f, vr = %f, vd = %f\n", p->dbgv[0], p->dbgv[1], p->dbgv[2]);
 		printf("debug:%d: rv = %f from %f %f %f\n",s->ix, rv, dv[0], dv[1], dv[2]);
 	}
 
 //printf("~1 rv = %f from %f %f\n",rv, _dv[0], _dv[1]);
-
 //printf("~1 rv = %f\n\n",rv);
+
 	return rv;
 }
 
@@ -612,6 +595,7 @@ double *_dv
 static void init_ce(
 smthopt *s,			/* Context for cusp mapping being set. */
 gamut *sc_gam,		/* Source colorspace gamut */
+gamut *si_gam,		/* Source image gamut */
 gamut *d_gam,		/* Destination colorspace gamut */
 int src_kbp,		/* Use K only black point as src gamut black point */
 int dst_kbp,		/* Use K only black point as dst gamut black point */
@@ -640,9 +624,9 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 
 	/* Set some default values for src white/black/grey */
 
-	/* Get the white and black point info */
+	/* Get the colorspace white and black point info */
 	if (src_kbp) {
-		if (sc_gam->getwb(sc_gam, NULL, NULL, NULL, s->cusps[0][6], NULL, s->cusps[0][7]) != 0) {
+		if (sc_gam->getwb(sc_gam, s->cusps[0][6], NULL, s->cusps[0][7], NULL, NULL, NULL) != 0) {
 			VB(("getting src wb points failed\n"));
 			s->cusps[0][6][0] = 100.0;
 			s->cusps[0][7][0] = 0.0;
@@ -650,7 +634,7 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 			s->donaxis = 0;
 		}
 	} else {
-		if (sc_gam->getwb(sc_gam, NULL, NULL, NULL, s->cusps[0][6], s->cusps[0][7], NULL) != 0) {
+		if (sc_gam->getwb(sc_gam, s->cusps[0][6], s->cusps[0][7], NULL, NULL, NULL, NULL) != 0) {
 			VB(("getting src wb points failed\n"));
 			s->cusps[0][6][0] = 100.0;
 			s->cusps[0][7][0] = 0.0;
@@ -660,7 +644,7 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 	}
 
 	if (dst_kbp) {
-		if (d_gam->getwb(d_gam, NULL, NULL, NULL, s->cusps[1][6], NULL, s->cusps[1][7]) != 0) {
+		if (d_gam->getwb(d_gam, s->cusps[1][6], NULL, s->cusps[1][7], NULL, NULL, NULL) != 0) {
 			VB(("getting dest wb points failed\n"));
 			s->cusps[1][6][0] = 100.0;
 			s->cusps[1][7][0] = 0.0;
@@ -668,7 +652,7 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 			s->donaxis = 0;
 		}
 	} else {
-		if (d_gam->getwb(d_gam, NULL, NULL, NULL, s->cusps[1][6], s->cusps[1][7], NULL) != 0) {
+		if (d_gam->getwb(d_gam, s->cusps[1][6], s->cusps[1][7], NULL, NULL, NULL, NULL) != 0) {
 			VB(("getting dest wb points failed\n"));
 			s->cusps[1][6][0] = 100.0;
 			s->cusps[1][7][0] = 0.0;
@@ -679,6 +663,21 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 	if (d_bp != NULL) {		/* Use override destination black point */
 		icmCpy3(s->cusps[1][7], d_bp);
 	}
+
+#ifdef NEVER
+	{
+		double iwp[3] = { -1, -1, -1}, ibp[3] = { -1, -1, -1};
+		if (src_kbp) {
+			si_gam->getwb(si_gam, NULL, NULL, NULL, iwp, NULL, ibp);
+		} else {
+			si_gam->getwb(si_gam, NULL, NULL, NULL, iwp, ibp, NULL);
+		}
+		printf("~1 src white = %f, black = %f\n",s->cusps[0][6][0],s->cusps[0][7][0]);
+		printf("~1 img white = %f, black = %f\n",s->cusps[0][6][0],s->cusps[0][7][0]);
+		printf("~1 dst white = %f, black = %f\n",s->cusps[1][6][0],s->cusps[1][7][0]);
+	}
+
+#endif /* NEVER */
 
 	/* Get the cusp info */
 	if (sc_gam->getcusps(sc_gam, s->cusps[0]) != 0 || d_gam->getcusps(d_gam, s->cusps[1]) != 0) {
@@ -1166,6 +1165,7 @@ gammapweights *src
 
 	NSCOPY(r.rdl);
 	NSCOPY(r.rdh);
+	NSCOPY(r.dsm);
 
 	NSCOPY(d.co);
 	NSCOPY(d.xo);
@@ -1207,6 +1207,50 @@ gammapweights *src2, double wgt2
 
 	NSBLEND(r.rdl);
 	NSBLEND(r.rdh);
+	NSBLEND(r.dsm);
+
+	NSBLEND(d.co);
+	NSBLEND(d.xo);
+
+	NSBLEND(f.x);
+#undef NSBLEND
+}
+
+/* Blend a three groups of individual weights into one, given three weightings */
+void near_wblend3(
+gammapweights *dst,
+gammapweights *src1, double wgt1,
+gammapweights *src2, double wgt2,
+gammapweights *src3, double wgt3
+) {
+
+#define NSBLEND(xxx) dst->xxx = wgt1 * src1->xxx + wgt2 * src2->xxx + wgt3 * src3->xxx
+
+	NSBLEND(c.w.l);
+	NSBLEND(c.w.c);
+	NSBLEND(c.w.h);
+	NSBLEND(c.tw);
+	NSBLEND(c.cx);
+
+	NSBLEND(l.o);
+	NSBLEND(l.h);
+	NSBLEND(l.l);
+
+	NSBLEND(a.o);
+	NSBLEND(a.h);
+	NSBLEND(a.wl);
+	NSBLEND(a.gl);
+	NSBLEND(a.bl);
+
+	NSBLEND(a.wlth);
+	NSBLEND(a.blpow);
+
+	NSBLEND(a.lxpow);
+	NSBLEND(a.lxthr);
+
+	NSBLEND(r.rdl);
+	NSBLEND(r.rdh);
+	NSBLEND(r.dsm);
 
 	NSBLEND(d.co);
 	NSBLEND(d.xo);
@@ -1349,8 +1393,9 @@ void tweak_weights(gammapweights out[14], int dst_cmymap, int rel_oride)  {
 		}
 
 		if (rel_oride == 1) {		/* A high saturation "clip" like mapping */
-			out[i].r.rdl = 1.0;		/* No relative neighbourhood */
-			out[i].r.rdh = 1.0;		/* No relative neighbourhood */
+			out[i].r.rdl = 1.0;		/* No relative neighbourhood/smoothing */
+			out[i].r.rdh = 1.0;		/* No relative neighbourhood/smoothing */
+			out[i].r.dsm = 0.0;		/* No relative neighbourhood/smoothing */
 			out[i].d.co = 0.0;		/* No depth weighting */
 			out[i].d.xo = 0.0;		/* No depth weighting */
 			
@@ -1361,7 +1406,7 @@ void tweak_weights(gammapweights out[14], int dst_cmymap, int rel_oride)  {
 	}
 }
 
-/* Blend a two expanded groups of individual weights into one */
+/* Blend two expanded groups of individual weights into one */
 void near_xwblend(
 gammapweights *dst,
 gammapweights *src1, double wgt1,
@@ -1370,6 +1415,18 @@ gammapweights *src2, double wgt2
 	int i;
 	for (i = 0; i < 14; i++)
 		near_wblend(&dst[i], &src1[i], wgt1, &src2[i], wgt2);
+}
+
+/* Blend three expanded groups of individual weights into one */
+void near_xwblend3(
+gammapweights *dst,
+gammapweights *src1, double wgt1,
+gammapweights *src2, double wgt2,
+gammapweights *src3, double wgt3
+) {
+	int i;
+	for (i = 0; i < 14; i++)
+		near_wblend3(&dst[i], &src1[i], wgt1, &src2[i], wgt2, &src3[i], wgt3);
 }
 
 /* Convert overall, hue dom & l dom to iweight */
@@ -1536,14 +1593,15 @@ void interp_xweights(gamut *gam, gammapweights *out, double pos[3],
 	}
 }
 
-/* Callback used by compdstgamut() to establish the expected compression */
-/* mapping direction. */
+/* Callback used by expdstbysrcmdst() to establish the expected compression */
+/* mapping direction. p2 should be the center point, so depth from the center */
+/* can be computed. We return a point on the neutral axis. */
 static void cvect(
 void *cntx,			/* smthopt * */
 double *p2,			/* Return point displaced from p1 in desired direction */
 double *p1			/* Given point */
 ) {
-	double vv, gv[3], lv[3];
+	double vv, lv[3];
 	smthopt *s = (smthopt *)cntx;
 	gammapweights out;
 
@@ -1559,18 +1617,26 @@ double *p1			/* Given point */
 
 	/* Parameter along neutral axis black to white */
 	vv = (p1[0] - s->cusps[0][7][0])/(s->cusps[0][6][0] - s->cusps[0][7][0]);
+
 	/* lv is point at same L on neutral axis */
 	lv[0] = p1[0];
 	lv[1] = vv * (s->cusps[0][6][1] - s->cusps[0][7][1]) + s->cusps[0][7][1];
 	lv[2] = vv * (s->cusps[0][6][2] - s->cusps[0][7][2]) + s->cusps[0][7][2];
-	icmSub3(lv, lv, p1);		/* Vector */
-	icmNormalize3(lv, lv, out.ra.l);
 
-	icmSub3(gv, s->cusps[0][8], p1);	/* Grey vector */
-	icmNormalize3(gv, gv, out.ra.c);
+	/* Normalise l * c weight to sum to 1.0 */
+	vv = fabs(out.ra.l + out.ra.c);
+	if (vv < 1e-7) {		/* Hmm.  */
+		out.ra.l = out.ra.c = 0.5;
+	} else {
+		out.ra.l /= vv;
+		out.ra.c /= vv;
+	}
 
-	icmAdd3(p2, gv, p1);
-	icmAdd3(p2, lv, p2);				/* Combined destination */
+	/* Make p2 the weighted sum of equivalent L value and grey value on */
+	/* the neutral axis. */
+	icmScale3(lv, lv, out.ra.l);
+	icmScale3(p2, s->cusps[0][8], out.ra.c);
+	icmAdd3(p2, p2, lv);
 //printf("~1 p2 %f %f %f\n", p2[0], p2[1], p2[2]);
 }
 
@@ -1687,18 +1753,23 @@ double p1[3]		/* Point */
 /* ============================================ */
 
 /* Return the maximum number of points that will be generated */
+/* (This isn't accurate due to manipulation of the gamuts in nearsmth!) */
 int near_smooth_np(
+	gamut **pp_gam,		/* Return gamut that was used for points */
 	gamut *sc_gam,		/* Source colorspace gamut */
 	gamut *si_gam,		/* Source image gamut (== sc_gam if none) */
-	gamut *d_gam,		/* Destination colorspace gamut */
-	double xvra			/* Extra vertex ratio */
+	gamut *dc_gam,		/* Destination colorspace gamut */
+	double xvra,		/* Extra vertex ratio */
+	int gmult,			/* Guide point multiplier, typically 4 */
+	int surfgres		/* surface grid point resolution, 0 for none */
 ) {
 	gamut *p_gam;		/* Gamut used for points - either source colorspace or image */
 	int ntpts, nmpts, nspts, nipts, ndpts;
+	int hsurfgres = (surfgres + 1)/2;	/* near_smooth uses half */
 
 	nspts = sc_gam->nverts(sc_gam);
 	nipts = si_gam->nverts(si_gam);
-	ndpts = d_gam->nverts(d_gam);
+	ndpts = dc_gam->nverts(dc_gam);
 	p_gam = sc_gam;
 
 	/* Target number of points is max of any gamut */
@@ -1714,6 +1785,16 @@ int near_smooth_np(
 	xvra = ntpts/(double)nspts;
 	nmpts = p_gam->nssverts(p_gam, xvra);	/* Stratified Sampling source points */
 
+	nmpts *= gmult;		/* Allow for sub-surface points etc. */
+
+	if (hsurfgres >= 4) {
+		nmpts += hsurfgres * hsurfgres * hsurfgres
+	             - (hsurfgres -4) * (hsurfgres -4) * (hsurfgres -4);
+	}
+
+	if (pp_gam != NULL)
+		*pp_gam = p_gam;
+
 	return nmpts;
 }
 
@@ -1726,7 +1807,7 @@ int verb,			/* Verbose flag */
 int *npp,			/* Return the actual number of points returned */
 gamut *sc_gam,		/* Source colorspace gamut - uses cusp info if availablle */
 gamut *si_gam,		/* Source image gamut (== sc_gam if none), just used for surface. */
-gamut *d_gam,		/* Destination colorspace gamut */
+gamut *dc_gam,		/* Destination colorspace gamut */
 int src_kbp,		/* Use K only black point as src gamut black point */
 int dst_kbp,		/* Use K only black point as dst gamut black point */
 double d_bp[3],		/* Override destination target black point - may be NULL */
@@ -1738,22 +1819,22 @@ int    useexp,		/* Flag indicating whether smoothed expanded value will be used 
 double xvra,		/* Extra number of vertexes ratio */
 int    mapres,		/* Grid res for 3D RSPL */
 double mapsmooth,	/* Target smoothing for 3D RSPL */
-datai map_il,		/* Preliminary rspl input range */
+double gexp,		/* Grid expansion ratio, none = 1.0 */
+int   surfpnts,		/* Flag - add surface grid points */
+datai map_il,		/* Return expanded input range */
 datai map_ih,
-datao map_ol,		/* Preliminary rspl output range */
+datao map_ol,		/* Return expanded output range */
 datao map_oh 
 ) {
 	smthopt opts;	/* optimisation and cusp mapping context */
 	int ix, i, j, k;
-	gamut *p_gam;	/* Gamut used for points - either source colorspace or image */
-	gamut *sci_gam;	/* Intersection of src and img gamut gamut */
-	gamut *di_gam;	/* Modified destination gamut suitable for mapping from sci_gam. */
-					/* If just compression, this is the smaller of sci_gam and d_gam. */
-					/* If just expansion, this is the sci_gam expanded by d_gam - sc_gam. */
-					/* If both exp & comp, then where
-						d_gam is outside sci_gam this is sci_gam expanded by d_gam - sc_gam
-						                    else it is the smaller of sci_gam and d_gam */
-	gamut *nedi_gam;/* Same as above, but not expanded. */
+	gamut *p_gam;	/* Gamut used for points == either source colorspace or image */
+	gamut *src_gam;	/* Intersection of src and img gamut gamut */
+	gamut *dst_gam;	/* Modified destination gamut suitable for mapping from src_gam. */
+					/* If compression, this is the intersection of src_gam and dc_gam. */
+					/* If expansion, this is the src_gam expanded by dc_gam - sc_gam. */
+	gamut *nedst_gam;/* Same as above, but not expanded. */
+	int mxnmpts;	/* Allocated number of mapping points */
 	int nmpts;		/* Number of mapping gamut points */
 	nearsmth *smp;	/* Absolute delta E weighting */
 	int pass;
@@ -1762,39 +1843,21 @@ datao map_oh
 	double codf;	/* Itteration overshoot/damping factor */
 	double mxmv;	/* Maximum a point gets moved */
 	int nmxmv;		/* Number of maxmoves less than stopping threshold */
+	int dmapres = 1;	/* Change in mapres when applying gexp */
+	int hmapres;	/* Half mapres */
+	int hdmapres;	/* Half change in mapres */
+	rspl *lastmap = NULL;	/* Last gamut mapping map created, if any */
 
 	/* Check gamuts are compatible */
-	if (sc_gam->compatible(sc_gam, d_gam) == 0
+	if (sc_gam->compatible(sc_gam, dc_gam) == 0
 	 || (si_gam != NULL && sc_gam->compatible(sc_gam, si_gam) == 0)) {
 		fprintf(stderr,"gamut map: Gamuts aren't compatible\n");
 		*npp = 0;
 		return NULL;
 	}
 
-	{
-		int ntpts, nspts, nipts, ndpts;
-
-		nspts = sc_gam->nverts(sc_gam);
-		nipts = si_gam->nverts(si_gam);
-		ndpts = d_gam->nverts(d_gam);
-		p_gam = sc_gam;
-
-		/* Target number of points is max of any gamut */
-		ntpts = nspts > nipts ? nspts : nipts;
-		ntpts = ntpts > ndpts ? ntpts : ndpts;
-		ntpts = (int)(ntpts * xvra + 0.5);
-
-		/* Use image gamut if it exists */
-		if (nspts < nipts || si_gam != sc_gam) {
-			nspts = nipts;		/* Use image gamut instead */
-			p_gam = si_gam;
-		}
-		xvra = ntpts/(double)nspts;
-		nmpts = p_gam->nssverts(p_gam, xvra);	/* Stratified Sampling source points */
-
-		if (verb) printf("Vertex count: mult. = %f, src %d, img %d dst %d, target %d\n",
-		                                                   xvra,nspts,nipts,ndpts,nmpts);
-	}
+	mxnmpts = near_smooth_np(&p_gam, sc_gam, si_gam, dc_gam, xvra, 1, surfpnts ? mapres : 0);
+	nmpts = 0;
 
 	/* Setup opts structure */
 	opts.useexp = useexp;	/* Expansion used ? */
@@ -1805,80 +1868,106 @@ datao map_oh
 	/* Setup source & dest neutral axis transform if white/black available. */
 	/* If cusps are available, also figure out the transformations */
 	/* needed to map source cusps to destination cusps */
-	init_ce(&opts, sc_gam, d_gam, src_kbp, dst_kbp, d_bp);
+	init_ce(&opts, sc_gam, si_gam, dc_gam, src_kbp, dst_kbp, d_bp);
 
 	/* Allocate our guide points */
-	if ((smp = (nearsmth *)calloc(nmpts, sizeof(nearsmth))) == NULL) { 
+	if ((smp = (nearsmth *)calloc(mxnmpts, sizeof(nearsmth))) == NULL) { 
 		fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
 		*npp = 0;
 		return NULL;
 	}
 
-	/* Create a source gamut surface that is the intersection of the src colorspace */
-	/* and image gamut, in case (for some strange reason) the image gamut. */
-	/* exceeds the source colorspace size. */
-	sci_gam = sc_gam;			/* Alias to source space gamut */
+	/* Create a source gamut surface that is the image gamut intersected */
+	/* with the source colorspace gamut, in case something strange with the */
+	/* image gamut. (gammap.c may have already done this) */
+	src_gam = sc_gam;			/* Alias to source space gamut */
 	if (si_gam != sc_gam) {
-		if ((sci_gam = new_gamut(0.0, 0, 0)) == NULL) {
+		if ((src_gam = new_gamut(0.0, 0, 0)) == NULL) {
 			fprintf(stderr,"gamut map: new_gamut failed\n");
 			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
 		}
-		sci_gam->intersect(sci_gam, sc_gam, si_gam);
+		src_gam->intersect(src_gam, si_gam, sc_gam);
 #ifdef SAVE_VRMLS
 		{
-			char sci_gam_name[40] = "sci_gam";
-			strcat(sci_gam_name, vrml_ext());
-			printf("###### gamut/nearsmth.c: writing diagnostic sci_gam%s and di_gam%s\n",vrml_ext(),vrml_ext());
-			sci_gam->write_vrml(sci_gam, sci_gam_name, 1, 0);
+			char src_gam_name[40] = "si_gam";
+
+			printf("###### gamut/nearsmth.c: writing diagnostic si_gam%s, src_gam%s\n",vrml_ext(),vrml_ext());
+
+			strcat(src_gam_name, vrml_ext());
+			src_gam->write_vrml(si_gam, src_gam_name, 1, 0);
+
+			strcpy(src_gam_name, "src_gam");
+			strcat(src_gam_name, vrml_ext());
+			src_gam->write_vrml(src_gam, src_gam_name, 1, 0);
 		}
 #endif
 	}
 
-	di_gam = sci_gam;			/* Default no compress or expand */
+	dst_gam = src_gam;			/* Default no compress or expand */
+
+	/* non-expanded dst_gam for testing double back img points against: */
+	nedst_gam = src_gam;			/* Default same as dst_gam */
+
+	/* Convert dst_gam to compress and/or expand target for mapping src_gam to. */
 	if (usecomp || useexp) {
-		if ((di_gam = new_gamut(0.0, 0, 0)) == NULL) {
+
+		if ((nedst_gam = dst_gam = new_gamut(0.0, 0, 0)) == NULL) {
 			fprintf(stderr,"gamut map: new_gamut failed\n");
-			if (si_gam != sc_gam)
-				sci_gam->del(sci_gam);
+			if (src_gam != sc_gam)
+				src_gam->del(src_gam);
 			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
 		}
+		/* For compression only, nedst_gam and dst_gam are smaller of src_gam and dc_gam space. */
+		/* Augment the dst_gam with neutral axis points in case the source gamut */
+		/* has a "spike" that separates it from the neutral axis, allowing */
+		/* mapping. */
+		nedst_gam->nexpintersect(nedst_gam, dc_gam, src_gam);
+		
 		if (useexp) {
-			/* Non-expand di_gam for testing double back img points against */
-			if ((nedi_gam = new_gamut(0.0, 0, 0)) == NULL) {
-				fprintf(stderr,"gamut map: new_gamut failed\n");
-				di_gam->del(di_gam);
-				if (si_gam != sc_gam)
-					sci_gam->del(sci_gam);
-				free_nearsmth(smp, nmpts);
-				*npp = 0;
-				return NULL;
-			}
-		} else {
-			nedi_gam = di_gam;
-		}
+			/* No image gamut - dest colorspace is target */
+			if (si_gam == sc_gam) {
+				dst_gam = dc_gam;			/* Expanded dest is colorspace dest */
 
-		/* Initialise this gamut with a destination mapping gamut. */
-		/* This will be the smaller of the image and destination gamut if compressing, */
-		/* and will be expanded by the (dst - src) if expanding. */
-		di_gam->compdstgamut(di_gam, sci_gam, sc_gam, d_gam, usecomp, useexp, nedi_gam,
-		                     cvect, &opts);
+			/* There is an image gamut, so */
+			/* Expand nedst_gam to create dst_gam expanded in proportion to where */
+			/* dc_gam is outside sc_gam */ 
+			} else {
+				if ((dst_gam = new_gamut(0.0, 0, 0)) == NULL) {
+					fprintf(stderr,"gamut map: new_gamut failed\n");
+					if (src_gam != sc_gam)
+						src_gam->del(src_gam);
+					free_nearsmth(smp, nmpts);
+					*npp = 0;
+					return NULL;
+				}
+
+				/* Initialise this gamut with the nedst_gam expanded by ((dc_gam - sc_gam) > 0) */
+				dst_gam->expdstbysrcmdst(dst_gam, nedst_gam, sc_gam, dc_gam, cvect, &opts);
+			}
+		}
 	}
 
 #ifdef SAVE_VRMLS
 	{
-		char di_gam_name[30] = "di_gam";
-		strcat(di_gam_name, vrml_ext());
-		di_gam->write_vrml(di_gam, di_gam_name, 1, 0);
+		char dst_gam_name[30] = "dst_gam";
+
+		printf("###### gamut/nearsmth.c: writing diagnostic dst_gam%s, nedst_gam%s\n",vrml_ext(),vrml_ext());
+		strcat(dst_gam_name, vrml_ext());
+		dst_gam->write_vrml(dst_gam, dst_gam_name, 1, 0);
+
+		strcpy(dst_gam_name, "nedst_gam");
+		strcat(dst_gam_name, vrml_ext());
+		nedst_gam->write_vrml(nedst_gam, dst_gam_name, 1, 0);
 	}
 #endif
 
 	/* Create a list of the mapping guide points, setup for a null mapping */
 	VA(("Creating the mapping guide point list\n"));
-	for (ix = i = 0; i < nmpts; i++) {
+	for (ix = i = 0; i < mxnmpts; i++) {
 		double imv[3], imr;		/* Image gamut source point and radius */
 		double inorm[3];		/* Normal of image gamut surface at src point */
 
@@ -1890,12 +1979,12 @@ datao map_oh
 //printf("~1 got point %d out of %d\n",i+1,nmpts);
 
 		if (p_gam != sc_gam) {		/* If src colorspace point, map to img gamut surface */
-			imr = sci_gam->radial(sci_gam, imv, imv);
+			imr = src_gam->radial(src_gam, imv, imv);
 		}
 
 		/* If point is within non-expanded modified destination gamut, */
-		/* then it is a "double back" image point, and should be ignored. */
-		if (nedi_gam->radial(nedi_gam, NULL, imv) > (imr + 1e-4)) {
+		/* then it is a "double back"/convex image point, and should be ignored. */
+		if (nedst_gam->radial(nedst_gam, NULL, imv) > (imr + 1e-4)) {
 			VB(("Rejecting point %d because it's inside destination\n",i));
 			i--;
 			continue;
@@ -1903,17 +1992,18 @@ datao map_oh
 
 		/* Lookup radialy equivalent point on modified destination gamut, */
 		/* in case we need it for compression or expansion */
-		smp[i].drr = di_gam->radial(di_gam, smp[i].drv, imv);
+		smp[i].drr = dst_gam->radial(dst_gam, smp[i].drv, imv);
 
 		/* Default setup a null mapping of source image space point to source image point */
-		smp[i].vflag = smp[i].gflag = 0;
+		smp[i].uflag = smp[i].vflag = smp[i].gflag = 0;
 		smp[i].dr = smp[i].sr = smp[i]._sr = imr;
 		smp[i].dv[0] = smp[i].sv[0] = smp[i]._sv[0] = imv[0];
 		smp[i].dv[1] = smp[i].sv[1] = smp[i]._sv[1] = imv[1];
 		smp[i].dv[2] = smp[i].sv[2] = smp[i]._sv[2] = imv[2];
-		smp[i].sgam = sci_gam;
-		smp[i].dgam = sci_gam;
-		smp[i].mapres = mapres;	
+		smp[i].w1 = 1.0;
+		smp[i].sgam = src_gam;
+		smp[i].dgam = src_gam;
+		smp[i].dcgam = dc_gam;
 
 		VB(("In Src %d = %f %f %f\n",i,smp[i].sv[0],smp[i].sv[1],smp[i].sv[2]));
 
@@ -1927,7 +2017,7 @@ datao map_oh
 			double mv[3], ml;		/* Radial inward mapping vector */
 			double dir;
 
-			icmSub3(mv, sci_gam->cent, smp[i].sv);	/* Vector to center */
+			icmSub3(mv, src_gam->cent, smp[i].sv);	/* Vector to center */
 			ml = icmNorm3(mv);						/* It's length */
 
 			if (ml > 0.001) {
@@ -1947,6 +2037,7 @@ datao map_oh
 		smp[i].anv[0] = smp[i].aodv[0] = smp[i].dv[0];
 		smp[i].anv[1] = smp[i].aodv[1] = smp[i].dv[1];
 		smp[i].anv[2] = smp[i].aodv[2] = smp[i].dv[2];
+		smp[i].w1 = 1.01;		/* Use 1.01 as marker value */
 
 		VB(("Src %d = %f %f %f\n",i,smp[i].sv[0],smp[i].sv[1],smp[i].sv[2]));
 		VB(("Dst %d = %f %f %f\n",i,smp[i].dv[0],smp[i].dv[1],smp[i].dv[2]));
@@ -1955,17 +2046,17 @@ datao map_oh
 	*npp = nmpts;
 
 	/* Don't need this anymore */
-	if (nedi_gam != di_gam)
-		nedi_gam->del(nedi_gam);
-	nedi_gam = NULL;
+	if (nedst_gam != src_gam && nedst_gam != dst_gam)
+		nedst_gam->del(nedst_gam);
+	nedst_gam = NULL;
 
 	/* If nothing to be compressed or expanded, then return */
 	if (usecomp == 0 && useexp == 0) {
 		VB(("Neither compression nor expansion defined\n"));
-		if (si_gam != sc_gam)
-			sci_gam->del(sci_gam);
-		if (di_gam != sci_gam && di_gam != sci_gam)
-			di_gam->del(di_gam);
+		if (src_gam != sc_gam)
+			src_gam->del(src_gam);
+		if (dst_gam != src_gam && dst_gam != dc_gam)
+			dst_gam->del(dst_gam);
 		return smp;
 	}
 
@@ -1977,6 +2068,15 @@ datao map_oh
 		/* Determine the parameter weighting for this point */
 		interp_xweights(opts.sgam, &smp[i].wt, smp[i]._sv, opts.xwh, &opts, 0);
 	}
+
+	/* ~~ would be nice to eliminate the need for dst_gam that is the intersection
+	 * of dc_gam and sc/img_gam here. Problem is determining expansion vector
+	 * direction in a way that is consistent with the absolute error weighting.
+	 *	
+	 * For the moment leave the current appoach of using the dst_gam that has been
+	 * expanded in proportion to dc_gam - sc_gam in cvec() direction, since
+ 	 * the absolute error weighting is use to map the sv to that surface.
+	 */
 
 	VA(("Setting up cusp rotated compression or expansion mappings\n"));
 	VB(("rimv = Cusp rotated cspace/image gamut source point\n"));
@@ -2000,7 +2100,7 @@ datao map_oh
 		/* Compute the cusp rotated version of the cspace/image points */
 		comp_ce(&opts, rimv, imv, &smp[i].wt);
 		VB(("%f de, ix %d: cusp mapped %f %f %f -> %f %f %f\n", icmNorm33(rimv,imv), i, imv[0], imv[1], imv[2], rimv[0], rimv[1], rimv[2]));
-		rimr = icmNorm33(rimv, sci_gam->cent);
+		rimr = icmNorm33(rimv, src_gam->cent);
 
 		/* Default setup a no compress or expand mapping of */
 		/* source space/image point to modified destination gamut. */
@@ -2008,8 +2108,8 @@ datao map_oh
 		smp[i].sv[0] = rimv[0];		/* Temporary rotated src point */
 		smp[i].sv[1] = rimv[1];
 		smp[i].sv[2] = rimv[2];
-		smp[i].sgam = sci_gam;
-		smp[i].dgam = di_gam;
+		smp[i].sgam = src_gam;
+		smp[i].dgam = dst_gam;
 
 		VB(("\n"));
 		VB(("point %d:, rimv = %f %f %f, rimr = %f\n",i,rimv[0],rimv[1],rimv[2],rimr)); 
@@ -2043,7 +2143,7 @@ datao map_oh
 		double tc[3] = { 0.0, 0.0, 0.0 };
 		
 		for (ix = 0; ix < nmpts; ix++) {
-			/* Coompute a rotation that brings the target point location to 50,0,0 */
+			/* Compute a rotation that brings the target point location to 50,0,0 */
 			icmVecRotMat(smp[ix].m2d, smp[ix].sv, sc_gam->cent, ta, tc);
 
 			/* And inverse */
@@ -2052,171 +2152,149 @@ datao map_oh
 	}
 
 	/* Figure out which neighbors of the source values to use */
-	/* for the relative error calculations. */
+	/* for the relative error & smoothing calculations. */
 	/* Locate the neighbor within the radius for this point, */
 	/* and weight them with a Gausian filter weight. */
 	/* The radius is computed on the normalised surface for this point. */ 
 	VA(("Establishing filter neighbourhoods\n"));
 	{
-		double mm[3][4];	/* Tangent alignment rotation */
-		double m2[2][2];	/* Additional matrix to alight a with L axis */
-		double ta[3] = { 50.0, 0.0, 0.0 };
-		double tc[3] = { 0.0, 0.0, 0.0 };
 		double avgnd = 0.0;	/* Total the average number of neighbours */
 		int minnd = 1e6;	/* Minimum number of neighbours */
 		
 		for (ix = 0; ix < nmpts; ix++) {
-			double tt[3], rrdl, rrdh, rrdc, dd;
-			double msv[3], ndx[4];	/* Midpoint source value, quadrant distance */
-			double pr;				/* Average point radius */
+			int sit;
+			double rr;
+			double rrdl, rrdh;
 
 //printf("~1 computing neigbourhood for point %d at %f %f %f\n",ix, smp[ix].sv[0], smp[ix].sv[1], smp[ix].sv[2]);
-			/* Compute a rotation that brings the target point location to 50,0,0 */
-			icmNormalize33(tt, smp[ix].sv, smp[ix].sgam->cent, 1.0);
-			icmVecRotMat(mm, tt, smp[ix].sgam->cent, ta, tc);
 
-			/* Add another rotation to orient it so that [1] corresponds */
-			/* with the L direction, and [2] corresponds with the */
-			/* hue direction. */
-			m2[0][0] = m2[1][1] = 1.0;
-			m2[0][1] = m2[1][0] = 0.0;
-			tt[0] = smp[ix].sv[0] + 1.0;
-			tt[1] = smp[ix].sv[1];
-			tt[2] = smp[ix].sv[2];
-			icmNormalize33(tt, tt, smp[ix].sgam->cent, 1.0);
-			icmMul3By3x4(tt, mm, tt);
-			dd = tt[1] * tt[1] + tt[2] * tt[2];
-			if (dd > 1e-6) {		/* There is a sense of L direction */
-
-				/* Create the 2x2 rotation matrix */
-				dd = sqrt(dd);
-				tt[1] /= dd;
-				tt[2] /= dd;
-
-				m2[0][0] = m2[1][1] = tt[1];
-				m2[0][1] = tt[2];
-				m2[1][0] = -tt[2];
-			}
-
-			/* Make rr inversely proportional to radius, so that */
-			/* filter scope is constant delta E */
 			rrdl = smp[ix].wt.r.rdl;
 			rrdh = smp[ix].wt.r.rdh;
-//printf("~1 rdl %f, rdh %f\n",smp[ix].wt.r.rdl,smp[ix].wt.r.rdh);
+//printf("~1 rdl %f, rdh %f\n",rrdl, rrdh);
+
 			if (rrdl < 1e-3) rrdl = 1e-3;
 			if (rrdh < 1e-3) rrdh = 1e-3;
 
-			/* Average radius of source and destination */
-			pr = 0.5 * (smp[ix]._sr + smp[ix].dr);
+			rr = sqrt(smp[ix].sv[1] * smp[ix].sv[1] + smp[ix].sv[2] * smp[ix].sv[2]);
 
-//printf("~1 pr = %f from _sr %f & dr %f\n",pr,smp[ix]._sr,smp[ix].dr);
-			if (pr < 5.0)
-				pr = 5.0;
-			rrdl *= 50.0/pr;
-			rrdh *= 50.0/pr;
-			rrdc = 0.5 * (rrdl + rrdh);		/* Chrominance radius */
+			if (rr < 5.0)
+				rr = 5.0;
+			rr = sqrt(rr / 50.0);
 
-			/* Scale the filter radius by the L/C value, */
-			/* so that the filters are largest at the equator, and smallest */
-			/* at the white & black points. This allows the wt.a.lx wt.a.cx to work. */
-			pr = smp[ix].naxbf + 0.1;	/* "spherical" type weighting, 0.707 at 45 degrees */
-			rrdl *= pr;
-			rrdh *= pr;
-			rrdc *= pr;
-//printf("~1 at %f %f %f, rrdl = %f, rrdh = %f\n",smp[ix]._sv[0], smp[ix]._sv[1], smp[ix]._sv[2], rrdl, rrdh);
+			// Scale radius aprox. by cylindrical distance ?? */
+			//rrdh *= rr;
 
-			smp[ix].nnd = 0;		/* Nothing in lists */
+			rrdl = 1.0/rrdl;
+			rrdh = 1.0/rrdh;
 
-			/* Search for points within the gausian radius */
-			for (i = 0; i < nmpts; i++) {
-				double x, y, z, tv[3];
+			smp[ix].nnd = 0;
 
-				/* compute tangent alignment rotated location */
-				icmNormalize33(tt, smp[i].sv, smp[ix].sgam->cent, 1.0);
-				icmMul3By3x4(tv, mm, tt);
-				icmMulBy2x2(&tv[1], m2, &tv[1]);
+			/* Until we get a minimum number of neighbors */
+			for (sit = 0; smp[ix].nnd < 8 && sit < 10; sit++) {
 
-				x = tv[1]/rrdl;
-				y = tv[2]/rrdh;
-				z = (tv[0] - 50.0)/rrdc;
-			
-				/* Compute normalized delta normalized tangent surface */ 
-				dd = x * x + y * y + z * z;
+				smp[ix].nnd = 0;
 
-				/* If we're within the direction filtering radius, */
-				/* and not of the opposite hue */
-				if (dd <= 1.0 && tv[0] > 0.0) {
-					double w;
+				/* Search for points within the radius */
+				for (i = 0; i < nmpts; i++) {
+					double tt, dd, tv;
 
-					dd = sqrt(dd);		/* Convert to radius <= 1.0 */
+					/* Dot of neighbor color and point */
+					tv = smp[i].sv[1] * smp[ix].sv[1] + smp[i].sv[2] * smp[ix].sv[2];
 
-					/* Add this point into the list */
-					if (smp[ix].nnd >= smp[ix]._nnd) {
-						neighb *nd;
-						int _nnd;
-						_nnd = 5 + smp[ix]._nnd * 2;
-						if ((nd = (neighb *)realloc(smp[ix].nd, _nnd * sizeof(neighb))) == NULL) {
-							VB(("realloc of neighbs at vector %d failed\n",ix));
-							if (si_gam != sc_gam)
-								sci_gam->del(sci_gam);
-							if (di_gam != sci_gam && di_gam != sci_gam)
-								di_gam->del(di_gam);
-							free_nearsmth(smp, nmpts);
-							*npp = 0;
-							return NULL;
+					/* Ignore if of the opposote hue */
+					if (tv < 0.0)
+						continue;
+
+					dd = 0.0;
+					tt = rrdl * (smp[i].sv[0] - smp[ix].sv[0]); 
+					dd += tt * tt;
+					tt = rrdh * (smp[i].sv[1] - smp[ix].sv[1]); 
+					dd += tt * tt;
+					tt = rrdh * (smp[i].sv[2] - smp[ix].sv[2]); 
+					dd += tt * tt;
+
+					/* If we're within the filtering radius, */
+					/* and not of the opposite hue */
+					if (dd <= 1.0) {
+						double w;
+
+						dd = sqrt(dd);		/* Convert to radius <= 1.0 */
+
+						/* Add this point into the list */
+						if (smp[ix].nnd >= smp[ix]._nnd) {
+							neighb *nd;
+							int _nnd;
+							_nnd = 5 + smp[ix]._nnd * 2;
+							if ((nd = (neighb *)realloc(smp[ix].nd, _nnd * sizeof(neighb))) == NULL) {
+								VB(("realloc of neighbs at vector %d failed\n",ix));
+								if (src_gam != sc_gam)
+									src_gam->del(src_gam);
+								if (dst_gam != src_gam && dst_gam != dc_gam)
+									dst_gam->del(dst_gam);
+								free_nearsmth(smp, nmpts);
+								*npp = 0;
+								return NULL;
+							}
+							smp[ix].nd = nd;
+							smp[ix]._nnd = _nnd;
 						}
-						smp[ix].nd = nd;
-						smp[ix]._nnd = _nnd;
-					}
-					smp[ix].nd[smp[ix].nnd].n = &smp[i];
+						smp[ix].nd[smp[ix].nnd].n = &smp[i];
 
-					/* Box filter */
-//					w = 1.0;
+						/* Box filter */
+//						w = 1.0;
 
-					/* Triangle filter */
-//					w = 1.0 - dd; 
+						/* Triangle filter */
+//						w = 1.0 - dd; 
 
-//					/* Cubic spline filter */
-//					w = 1.0 - dd; 
-//					w = w * w * (3.0 - 2.0 * w);
+//						/* Cubic spline filter (default) */
+						w = 1.0 - dd; 
+						w = w * w * (3.0 - 2.0 * w);
 
-					/* Gaussian filter (default) */
-					w = exp(-9.0 * dd/2.0);
+						/* Gaussian filter */
+//						w = exp(-9.0 * dd/2.0);
 
-					/* Sphere filter */
-//					w = sqrt(1.0 - dd * dd); 
+						/* Sphere filter */
+//						w = sqrt(1.0 - dd * dd); 
 
-					/* Sinc^2 filter */
-//					w = 3.1415926 * dd;
-//					if (w < 1e-9)
-//						w = 1e-9;
-//					w = sin(w)/w;
-//					w = w * w;
+						/* Sinc^2 filter */
+//						w = 3.1415926 * dd;
+//						if (w < 1e-9)
+//							w = 1e-9;
+//						w = sin(w)/w;
+//						w = w * w;
 
-					smp[ix].nd[smp[ix].nnd].w = w;		/* Will be normalized to sum to 1.0 */
+						/* Save weighting */
+						smp[ix].nd[smp[ix].nnd].w = w;		/* Will be normalized to sum to 1.0 */
 
-//					/* Sphere filter for depth */
-//					w = sqrt(1.0 - dd * dd); 
+//						/* Sphere filter for depth */
+//						w = sqrt(1.0 - dd * dd); 
 
-					/* Cubic spline filter for depth */
-//					w = 1.0 - dd; 
-//					w = w * w * (3.0 - 2.0 * w);
+						/* Cubic spline filter for depth (default) */
+//						w = 1.0 - dd; 
+//						w = w * w * (3.0 - 2.0 * w);
 
-					/* Gaussian filter for depth (default) */
-					w = exp(-9.0 * dd/2.0);
+//						/* Gaussian filter for depth */
+//						w = exp(-9.0 * dd/2.0);
 
-					smp[ix].nd[smp[ix].nnd].rw = w;		/* Won't be normalized */
+						/* Save weighting */
+						smp[ix].nd[smp[ix].nnd].rw = w;		/* Won't be normalized */
 
 //printf("~1 adding %d at %f %f %f, rad %f L %f, w %f dir.\n",i, smp[i].sv[0], smp[i].sv[1], smp[i].sv[2],sqrt(dd),tv[0],smp[ix].nd[smp[ix].nnd].w);
 
-					smp[ix].nnd++;
+						smp[ix].nnd++;
+					}
 				}
+				/* Increase radius in case we haven't found enough neighbors */
+				rrdl /= 1.5;
+				rrdh /= 1.5;
 			}
+
+//if (smp[ix].nnd < 8) printf("~1 point %d has %d neighbors\n",ix,smp[ix].nnd);
+
 			if (smp[ix].nnd < minnd)
 				minnd = smp[ix].nnd;
 			avgnd += (double)smp[ix].nnd;
-//printf("~1 total of %d dir neigbours\n\n",smp[ix].nnd);
-
+//printf("~1 total of %d dir neigbours after try %d\n",smp[ix].nnd, sit);
 		}
 		avgnd /= (double)nmpts;
 
@@ -2233,16 +2311,44 @@ datao map_oh
 			for (j = 0; j < smp[i].nnd; j++) {
 				smp[i].nd[j].w /= tw;
 			}
-
 		}
 	}
+
+#ifdef SHOW_NEIGB
+	{
+		vrml *wrl = NULL;
+		double yellow[3] = { 1.0, 1.0, 0.0 };
+		double red[3] = { 1.0, 0.0, 0.0 };
+		double green[3] = { 0.0, 1.0, 0.0 };
+		double magenta[3] = { 1.0, 0.0, 1.0 };
+		double pp[3];
+
+		for (i = 0; i < nmpts; i++) {
+
+			if ((wrl = new_vrml("neigb", 1, vrml_lab)) == NULL)
+				error("New %s failed for '%s%s'",vrml_format(),"neigb",vrml_ext());
+			for (j = 0; j < smp[i].nnd; j++) {
+				if (smp[i].nd[j].n == &smp[i])
+					continue;
+				wrl->add_col_vertex(wrl, 0, smp[i].sv, yellow);
+				wrl->add_col_vertex(wrl, 0, smp[i].nd[j].n->sv, yellow);
+			}
+			wrl->make_lines(wrl, 0, 2);
+
+			wrl->add_marker(wrl, smp[i].sv, red, 0.5);
+
+			wrl->del(wrl);
+			printf("Waiting for input after writing 'neigb%s' for point %d:\n",vrml_ext(),i);
+			getchar();
+		}
+	}
+#endif /* SHOW_NEIGB */
 
 #ifdef SHOW_NEIGB_WEIGHTS
 	{
 		vrml *wrl = NULL;
 		double yellow[3] = { 1.0, 1.0, 0.0 };
 		double red[3] = { 1.0, 0.0, 0.0 };
-		double green[3] = { 0.0, 1.0, 0.0 };
 		double pp[3];
 
 		for (i = 0; i < nmpts; i++) {
@@ -2258,7 +2364,7 @@ datao map_oh
 			}
 			for (j = 0; j < smp[i].nnd; j++) {
 				wrl->add_col_vertex(wrl, 0, smp[i].sgam->cent, smp[i].nd[j].n == &smp[i] ? red : yellow);
-				icmNormalize33(pp, smp[i].nd[j].n->_sv, smp[i].sgam->cent, smp[i].nd[j].w * 50.0/maxw);
+				icmNormalize33(pp, smp[i].nd[j].n->sv, smp[i].sgam->cent, smp[i].nd[j].w * 50.0/maxw);
 				wrl->add_col_vertex(wrl, 0, pp, smp[i].nd[j].n == &smp[i] ? red : yellow);
 			}
 			wrl->make_lines(wrl, 0, 2);
@@ -2315,6 +2421,8 @@ datao map_oh
 				smp[i].sv[1] = smp[i].drv[1];
 				smp[i].sv[2] = smp[i].drv[2];
 			}
+			opts.wngam = smp[i].dgam;		/* Nearest to dgam */ 
+			opts.wn = smp[i].sv;			/* minimize optfunc1 sv -> dgam */
 			
 			/* Convert our start value from 3D to 2D for speed. */
 			icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
@@ -2350,10 +2458,10 @@ datao map_oh
 				nv[1] = iv[1] = iv[2];
 				powell(NULL, 2, nv, s, 0.01, 1000, optfunc1, (void *)(&opts), NULL, NULL);
 #endif
-				if (si_gam != sc_gam)
-					sci_gam->del(sci_gam);
-				if (di_gam != sci_gam && di_gam != sci_gam)
-					di_gam->del(di_gam);
+				if (src_gam != sc_gam)
+					src_gam->del(src_gam);
+				if (dst_gam != src_gam && dst_gam != dc_gam)
+					dst_gam->del(dst_gam);
 				free_nearsmth(smp, nmpts);
 				*npp = 0;
 				return NULL;
@@ -2391,14 +2499,12 @@ datao map_oh
 				smp[i].aodv[2] = smp[i].drv[2];
 			}
 		}
-		if (verb) {
-			printf("."); fflush(stdout);
-		}
 	}
 
-	VA(("Locating weighted mapping vectors without smoothing:\n"));
+	VA(("Locating weighted mapping vectors without smoothing\n"));
+
 	/* Second pass to locate the optimized overall weighted point nrdv[], */
-	/* not counting relative error. */
+	/* which is a balance of absolute error, radial error, depth room weighting */
 	{
 		double s[2] = { 20.0, 20.0 };		/* 2D search area */
 		double iv[3];						/* Initial start value */
@@ -2455,10 +2561,10 @@ datao map_oh
 				nv[1] = iv[1] = iv[2];
 				powell(NULL, 2, nv, s, 0.01, 1000, optfunc2, (void *)(&opts), NULL, NULL);
 #endif
-				if (si_gam != sc_gam)
-					sci_gam->del(sci_gam);
-				if (di_gam != sci_gam && di_gam != sci_gam)
-					di_gam->del(di_gam);
+				if (src_gam != sc_gam)
+					src_gam->del(src_gam);
+				if (dst_gam != src_gam && dst_gam != dc_gam)
+					dst_gam->del(dst_gam);
 				free_nearsmth(smp, nmpts);
 				*npp = 0;
 				return NULL;
@@ -2473,37 +2579,90 @@ datao map_oh
 			/* Remap it to the destinaton gamut surface */
 			smp[i].dgam->radial(smp[i].dgam, tp, tp);
 
+			icmCpy3(smp[i].dv, tp);			/* Default current solution */
 			icmCpy3(smp[i].nrdv, tp);		/* Non smoothed result */
 			icmCpy3(smp[i].anv, tp);		/* Starting point for smoothing */
-			icmCpy3(smp[i].dv, tp);			/* Default current solution */
 			smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);
 //printf("~1 %d: dv %f %f %f\n", i, smp[i].dv[0], smp[i].dv[1], smp[i].dv[2]);
 
 		}
-		if (verb) {
-			printf("."); fflush(stdout);
+	}
+
+	/* Make sure the input and output ranges encompas the points */ 
+	for (i = 0; i < nmpts; i++) {
+		for (j = 0; j < 3; j++) {
+			if (smp[i]._sv[j] < map_il[j])
+				map_il[j] = smp[i]._sv[j];;
+			if (smp[i]._sv[j] > map_ih[j])
+				map_ih[j] = smp[i]._sv[j];
+
+			if (smp[i].sv[j] < map_il[j])
+				map_il[j] = smp[i].sv[j];;
+			if (smp[i].sv[j] > map_ih[j])
+				map_ih[j] = smp[i].sv[j];
+
+			if (smp[i].dv[j] < map_ol[j])
+				map_ol[j] = smp[i].dv[j];;
+			if (smp[i].dv[j] > map_oh[j])
+				map_oh[j] = smp[i].dv[j];
 		}
 	}
 
-#ifdef DIAG_POINTS
-	/* Show just the closest vectors etc. */
-	for (i = 0; i < nmpts; i++) {		/* Move all the points */
-//		icmCpy3(smp[i].dv, smp[i].drv);			/* Radial */
-		icmCpy3(smp[i].dv, smp[i].aodv);		/* Nearest */
-//		icmCpy3(smp[i].dv, smp[i].nrdv);		/* No smoothed weighted */
-//		icmCpy3(smp[i].dv, smp[i].dv);			/* pre-filter smooothed */
-		smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);
+#ifdef NEVER
+	if (verb) {
+		printf("Input bounding box:\n");
+		printf(" %f -> %f, %f -> %f, %f -> %f\n",
+		map_il[0], map_ih[0], map_il[1], map_ih[1], map_il[2], map_ih[2]);
 	}
-#else
-	/* The smoothed direction and raw depth is a single pass, */
-	/* but we use multiple passes to determine the extra depth that */
-	/* needs to be added so that the smoothed result lies within */
-	/* the destination gamut. */
+#endif
 
-#if VECADJPASSES > 0 || RSPLPASSES > 0
-	/* We will need inward pointing correction vectors */
+	/* Expand the bounding box by gexp so that our surface grid points */
+	/* establish the extrapolation behaviour. Ensure that boundary */
+	/* lands on the new grid though. */
 	{
-		gamut *shgam;		/* Shrunken di_gam */
+		double scale;
+
+		dmapres = (int)(((mapres-1) - (mapres-1)/gexp)/2.0 + 0.5);
+		if (dmapres < 1)
+			dmapres = 1;
+
+		scale = (double)(mapres-1-dmapres)/(double)(mapres-1 - 2 * dmapres);
+
+		for (j = 0; j < 3; j++) {
+			double low, high;
+			high = map_ih[j];
+			low = map_il[j];
+			map_ih[j] = (scale * (high - low)) + low;
+			map_il[j] = (scale * (low - high)) + high;
+		}
+#ifdef NEVER
+		if (verb) {
+			printf("After scaling up by %f, input bounding box:\n",scale);
+			printf(" %f -> %f, %f -> %f, %f -> %f\n",
+			map_il[0], map_ih[0], map_il[1], map_ih[1], map_il[2], map_ih[2]);
+		}
+#endif
+
+		/* Values for grid surface points */
+		hmapres = (mapres+1)/2;
+		hdmapres = (dmapres+1)/2;
+	}
+
+#if RSPLPASSES > 0 || VECADJPASSES > 0
+
+	VA(("Computing fine tuning correction direction:\n")); 
+
+	/* We need inward pointing correction vectors to be able */
+	/* to do clipping and fine tuning. We create a shrunken */
+	/* version of the dst_gamut and a mapping based on the */
+	/* weighted minimum absolute error metric, and then */
+	/* create a rspl to represent that mapping. */
+
+	/* This sort of clipping direction helps preserve the */
+	/* mapping shape (hence smoothness), while minimizing the */
+	/* loss of saturation and change in dest. mapping location. */
+	{
+		gamut *shgam;		/* Shrunken dst_gam */
 		double cusps[6][3];
 		double wp[3], bp[3], kp[3];
 		double p[3], p2[3], rad;
@@ -2523,14 +2682,13 @@ datao map_oh
 		double avgdev[MXDO];
 
 		/* Create a gamut that is a shrunk version of the destination */
-
-		if ((shgam = new_gamut(di_gam->getsres(di_gam), di_gam->getisjab(di_gam),
-		                                           di_gam->getisrast(di_gam))) == NULL) {
+		if ((shgam = new_gamut(dst_gam->getsres(dst_gam), dst_gam->getisjab(dst_gam),
+		                                           dst_gam->getisrast(dst_gam))) == NULL) {
 			fprintf(stderr, "new_gamut failed\n");
-			if (si_gam != sc_gam)
-				sci_gam->del(sci_gam);
-			if (di_gam != sci_gam && di_gam != sci_gam)
-				di_gam->del(di_gam);
+			if (src_gam != sc_gam)
+				src_gam->del(src_gam);
+			if (dst_gam != src_gam && dst_gam != dc_gam)
+				dst_gam->del(dst_gam);
 			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
@@ -2542,14 +2700,14 @@ datao map_oh
 		for (i = 0;;) {
 			double len;
 
-			if ((i = di_gam->getrawvert(di_gam, p, i)) < 0)
+			if ((i = dst_gam->getrawvert(dst_gam, p, i)) < 0)
 				break;
 
 			doshrink(&opts, p, p, SHRINK);
 			shgam->expand(shgam, p);
 		}
 		/* Translate cusps */
-		if (di_gam->getcusps(di_gam, cusps) == 0) {
+		if (dst_gam->getcusps(dst_gam, cusps) == 0) {
 			shgam->setcusps(shgam, 0, NULL);
 			for (i = 0; i < 6; i++) {
 				doshrink(&opts, p, cusps[i], SHRINK);
@@ -2558,7 +2716,7 @@ datao map_oh
 			shgam->setcusps(shgam, 2, NULL);
 		}
 		/* Translate white and black points */
-		if (di_gam->getwb(di_gam, wp, bp, kp, NULL, NULL, NULL) == 0) {
+		if (dst_gam->getwb(dst_gam, wp, bp, kp, NULL, NULL, NULL) == 0) {
 			doshrink(&opts, wp, wp, SHRINK);
 			doshrink(&opts, bp, bp, SHRINK);
 			doshrink(&opts, kp, kp, SHRINK);
@@ -2568,10 +2726,10 @@ datao map_oh
 		if ((gpnts = (cow *)malloc(nmpts * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
 			shgam->del(shgam);
-			if (si_gam != sc_gam)
-				sci_gam->del(sci_gam);
-			if (di_gam != sci_gam && di_gam != sci_gam)
-				di_gam->del(di_gam);
+			if (src_gam != sc_gam)
+				src_gam->del(src_gam);
+			if (dst_gam != src_gam && dst_gam != dc_gam)
+				dst_gam->del(dst_gam);
 			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
@@ -2579,7 +2737,7 @@ datao map_oh
 
 		/* Now locate the closest points on the shrunken gamut */
 		/* and set them up for creating a rspl */
-		opts.shgam = shgam;
+		opts.wngam = shgam;
 		for (i = 0; i < nmpts; i++) {		/* Move all the points */
 			gtri *ctri = NULL;
 			double tmp[3];
@@ -2591,9 +2749,10 @@ datao map_oh
 			opts.pass = 0;		/* Itteration pass */
 			opts.ix = i;		/* Point to optimise */
 			opts.p = &smp[i];
+			opts.wn = smp[i].dv;		/* minimize optfunc1a dv -> shgam */
 
 			/* Convert our start value from 3D to 2D for speed. */
-			icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
+			icmMul3By3x4(iv, smp[i].m2d, smp[i].nrdv);
 			nv[0] = iv[0] = iv[1];
 			nv[1] = iv[1] = iv[2];
 
@@ -2619,16 +2778,16 @@ datao map_oh
 #ifdef DEBUG_POWELL_FAILS
 				/* Optimise the point with debug on */
 				opts.debug = 1;
-				icmMul3By3x4(iv, smp[i].m2d, smp[i].dv);
+				icmMul3By3x4(iv, smp[i].m2d, smp[i].nrdv);
 				nv[0] = iv[0] = iv[1];
 				nv[1] = iv[1] = iv[2];
 				powell(NULL, 2, nv, s, 0.01, 1000, optfunc1a, (void *)(&opts), NULL, NULL);
 #endif
 				shgam->del(shgam);		/* Done with this */
-				if (si_gam != sc_gam)
-					sci_gam->del(sci_gam);
-				if (di_gam != sci_gam && di_gam != sci_gam)
-					di_gam->del(di_gam);
+				if (src_gam != sc_gam)
+					src_gam->del(src_gam);
+				if (dst_gam != src_gam && dst_gam != dc_gam)
+					dst_gam->del(dst_gam);
 				free_nearsmth(smp, nmpts);
 				*npp = 0;
 				return NULL;
@@ -2644,12 +2803,11 @@ datao map_oh
 			shgam->radial(shgam, tp, tp);
 
 			/* Compute mapping vector from dst to shdst */
-			icmSub3(smp[i].temp, tp, smp[i].dv);
-
+			icmSub3(smp[i].temp, tp, smp[i].nrdv);
 
 			/* In case shrunk vector is very short, add a small part */
 			/* of the nearest normal.  */
-			smp[i].dgam->nearest_tri(smp[i].dgam, NULL, smp[i].dv, &ctri);
+			smp[i].dgam->nearest_tri(smp[i].dgam, NULL, smp[i].nrdv, &ctri);
 			icmScale3(tmp, ctri->pe, 0.1);		/* Scale to small inwards */
 			icmAdd3(smp[i].temp, smp[i].temp, tmp);
 
@@ -2657,13 +2815,12 @@ datao map_oh
 			icmNormalize3(smp[i].temp, smp[i].temp, 1.0);
 
 			/* Place it in rspl setup array */
-			icmCpy3(gpnts[i].p, smp[i].dv);
+			icmCpy3(gpnts[i].p, smp[i].nrdv);
 			icmCpy3(gpnts[i].v, smp[i].temp);
 			gpnts[i].w = 1.0;
 		}
 
 		for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
-//			gres[j] = (mapres+1)/2;		/* Half resolution */
 			gres[j] = mapres;			/* Full resolution */
 			avgdev[j] = GAMMAP_RSPLAVGDEV;
 		}
@@ -2672,7 +2829,6 @@ datao map_oh
 		evectmap->fit_rspl_w(evectmap, GAMMAP_RSPLFLAGS, gpnts, nmpts,
 		                map_il, map_ih, gres, map_ol, map_oh, 1.0, avgdev, NULL);
 
-// ~~999
 #ifdef PLOT_EVECTS		/* Create VRML of error correction vectors */
 		{
 			vrml *wrl = NULL;
@@ -2690,7 +2846,7 @@ datao map_oh
 			printf("###### gamut/nearsmth.c: writing diagnostic evects%s\n",vrml_ext());
 			if ((wrl = new_vrml("evects", doaxes, vrml_lab)) == NULL)
 				error("new_vrml failed for '%s%s'","evects",vrml_ext());
-			wrl->make_gamut_surface_2(wrl, di_gam, 0.6, 0, cc);
+			wrl->make_gamut_surface_2(wrl, dst_gam, 0.6, 0, cc);
 			cc[0] = -1.0;
 			wrl->make_gamut_surface(wrl, shgam, 0.2, cc);
 
@@ -2698,16 +2854,16 @@ datao map_oh
 			wrl->start_line_set(wrl, 0);
 
 			for (i = 0; i < nmpts; i++) {
-				wrl->add_col_vertex(wrl, 0, smp[i].dv, red);
+				wrl->add_col_vertex(wrl, 0, smp[i].nrdv, red);
 #ifdef NEVER	/* Plot created vectors */
 				icmScale3(tmp, smp[i].temp, 4.0);
-				icmSub3(tmp, smp[i].dv, tmp);
+				icmSub3(tmp, smp[i].nrdv, tmp);
 #else
 				/* Plot interpolated vectors */
-				icmCpy3(cp.p, smp[i].dv);
+				icmCpy3(cp.p, smp[i].nrdv);
 				evectmap->interp(evectmap, &cp);
 				icmScale3(tmp, cp.v, 4.0);
-				icmSub3(tmp, smp[i].dv, tmp);
+				icmSub3(tmp, smp[i].nrdv, tmp);
 #endif
 				wrl->add_col_vertex(wrl, 0, tmp, green);
 			}
@@ -2718,267 +2874,265 @@ datao map_oh
 		shgam->del(shgam);		/* Done with this */
 		free(gpnts);
 	}
-#endif /* VECADJPASSES > 0 || RSPLPASSES > 0 */
 
-#ifdef VECSMOOTHING
-	VA(("Smoothing guide vectors:\n"));
-
-	/* Compute the neighbourhood smoothed anv[] from dv[] */
-	for (i = 0; i < nmpts; i++) {
-		double anv[3];			/* new anv[] */
-		double tmp[3];
-	
-		/* Compute filtered value */
-		anv[0] = anv[1] = anv[2] = 0.0;
-		for (j = 0; j < smp[i].nnd; j++) {
-			nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
-			double nw = smp[i].nd[j].w;			/* Weight */
-			double tmp[3];
-	
-			icmSub3(tmp, smp[i].sv, np->sv);	/* Vector from neighbour src to src */
-			icmAdd3(tmp, tmp, np->dv);			/* Neigbour dst + vector */
-
-			icmScale3(tmp, tmp, nw);			/* weight for filter */
-			icmAdd3(anv, anv, tmp);				/* sum filtered value */
-		}
-
-		/* Blend to un-smoothed value on neutral axis */
-		icmBlend3(anv, smp[i].dv, anv, smp[i].naxbf);
-
-		icmCpy3(smp[i].dv, anv);
-		icmCpy3(smp[i].anv, anv);
-		smp[i].rext = 0.0;				/* No correction */
-	}
+#endif /* RSPLPASSES > 0 */
 
 #if VECADJPASSES > 0
 	/* Fine tune vectors to compensate for side effects of vector smoothing */
 
-	VA(("Fine tuning out of gamut guide vectors:\n"));
+	/* Lookup correction vectors */
+	VA(("Smoothing guide vectors:\n"));
+	{
+		int pncliped = nmpts;
+		double delta;
 
-	/* Loopkup correction vectors */
-	VA(("Computing fine tuning direction:\n")); 
-	for (i = 0; i < nmpts; i++) {
-		co cp;
-		double nd, id, tmp[3];
-
-		icmCpy3(cp.p, smp[i].dv);
-		evectmap->interp(evectmap, &cp);
-		icmNormalize3(smp[i].evect, cp.v, 1.0);
-
-		/* ~~99 ?? should we deal with white & black direction here ?? */
-
-		/* Use closest as a default */
-		smp[i].dgam->nearest(smp[i].dgam, smp[i].tdst, smp[i].dv);
-		nd = icmNorm33(smp[i].tdst, smp[i].dv);		/* Dist to nearest */
-
-		/* Compute intersection with dest gamut as tdst */
-		if (!vintersect2(smp[i].dgam, NULL, tmp, smp[i].evect, smp[i].dv)) {
-			/* Got an intersection */
-			id = icmNorm33(tmp, smp[i].dv);		/* Dist to intersection */
-			if (id <= (nd + 5.0)) 				/* And it seems sane */
-				icmCpy3(smp[i].tdst, tmp);
-		}
-
-		smp[i].rext = 0.0;
-	}
-
-	VA(("Fine tuning guide vectors:\n"));
-	for (it = 0; it < VECADJPASSES; it++) {
-		double avgog = 0.0, maxog = 0.0, nog = 0.0;
-		double avgig = 0.0, maxig = 0.0, nig = 0.0;
-
-		/* Filter the level of out/in gamut, and apply correction vector */
+		/* Compute the source to destination neighborhood scale factors */
 		for (i = 0; i < nmpts; i++) {
-			double cvec[3], clen;
-			double minext = 1e80;
-			double maxext = -1e80;		/* Max weighted depth extension */
-			double dext, gain;
+			double tmp[3];
+			double sav[3], dav[3];		/* Average center locations */
+			double sdev[3], ddev[3];	/* Average devation in each direction from center */
+			double scev, dcev;			/* Average spherical deviation */
 		
-			minext = -20.0;
+			for (j = 0; j < 3; j++)
+				sav[j] = dav[j] = sdev[j] = ddev[j] = 0.0;
+			scev = dcev = 0.0;
 
-			/* Compute filtered value */
+			/* Compute center average values */
 			for (j = 0; j < smp[i].nnd; j++) {
 				nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
-				double nw = smp[i].nd[j].rw;		/* Weight */
-				double tmpl;
-
-				icmSub3(cvec, np->tdst, np->anv);		/* Vector needed to target for neighbour */
-				clen = icmDot3(smp[i].evect, cvec);		/* Error in this direction */
-
-				tmpl = nw * (clen - minext);	/* Track maximum weighted extra depth */
-				if (tmpl < 0.0)
-					tmpl = 0.0;
-				if (tmpl > maxext)
-					maxext = tmpl;
+				double nw = smp[i].nd[j].w;			/* Weight */
+	
+				icmScale3(tmp, np->sv, nw);
+				icmAdd3(sav, sav, tmp);
+				icmScale3(tmp, np->dv, nw);
+				icmAdd3(dav, dav, tmp);
 			}
-			maxext += minext;
 
-			if (it == 0)
-				gain = 1.2;
-			else
-				gain = 0.8;
+			/* Compute average deviation in each direction */
+			for (j = 0; j < smp[i].nnd; j++) {
+				nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
+				double nw = smp[i].nd[j].w;			/* Weight */
+				double tt;
+	
+				icmSub3(tmp, sav, np->sv);
+				icmAbs3(tmp, tmp);
+				icmScale3(tmp, tmp, nw);
+				icmAdd3(sdev, sdev, tmp);
 
-			/* Accumulate correction with damping */
-			smp[i].rext += gain * maxext;
+				tt = icmNorm33(sav, np->sv);
+				tt *= nw;
+				scev += tt;
+	
+				icmSub3(tmp, dav, np->dv);
+				icmAbs3(tmp, tmp);
+				icmScale3(tmp, tmp, nw);
+				icmAdd3(ddev, ddev, tmp);
 
-			/* Error for just this point */
-			icmSub3(cvec, smp[i].tdst, smp[i].anv);
-			clen = icmDot3(smp[i].evect, cvec);
-
-			/* Blend to individual correction on neutral axis */
-			dext = smp[i].naxbf * smp[i].rext + (1.0 - smp[i].naxbf) * clen;
-
-			/* Apply integrated correction */
-			icmScale3(cvec, smp[i].evect, dext);
-			icmAdd3(smp[i].anv, smp[i].dv, cvec);
-
-			if (clen > 0.0) {		/* Compression */
-				if (clen > maxog)
-					maxog = clen;
-				avgog += clen;
-				nog++;
-
-			} else {						/* Expansion */
-				if (-clen > maxig)
-					maxig = -clen;
-				avgig += -clen;
-				nig++;
+				tt = icmNorm33(dav, np->dv);
+				tt *= nw;
+				dcev += tt;
 			}
+
+//printf("~1 %d: sdev %f %f %f, scev %f\n",i,sdev[0],sdev[1],sdev[2],scev);
+//printf("~1 %d: ddev %f %f %f, dcev %f\n",i,ddev[0],ddev[1],ddev[2],dcev);
+
+			/* Try and protect against silliness */
+			if (scev < 1e-3 || dcev < 1e-3)
+				scev = dcev = 1e-3;
+
+			for (j = 0; j < 3; j++) {
+				if (sdev[j] < 1e-3 || ddev[j] < 1e-3) {
+					sdev[j] = scev;
+					ddev[j] = dcev;
+				}
+			}
+
+			/* Compute scale factors */
+			icmDiv3(smp[i].nscale, ddev, sdev);		/* Scale = ddev/sdev */
+
+#ifdef NEVER
+if (smp[i].nscale[0] > 1.5 || smp[i].nscale[0] < 0.01
+ || smp[i].nscale[1] > 1.5 || smp[i].nscale[1] < 0.01
+ || smp[i].nscale[2] > 1.5 || smp[i].nscale[2] < 0.01) {
+	printf("~1 %d: scale factors %f %f %f\n",i,smp[i].nscale[0], smp[i].nscale[1], smp[i].nscale[2]);
+	printf("~1 %d: from sdev %f %f %f\n",i,sdev[0], sdev[1], sdev[2]);
+	printf("~1 %d: from ddev %f %f %f\n",i,ddev[0], ddev[1], ddev[2]);
+}
+#endif /* NEVER */
+
 		}
-		if (verb)
-			printf("No og %4.0f max %f avg %f, No ig %4.0f max %f avg %f\n",
-			       nog,maxog,nog > 1 ? avgog/nog : 0.0, nig,maxig,nig > 1 ? avgig/nig : 0.0);
-	}
 
-	/* Copy final results */
-	for (i = 0; i < nmpts; i++) {
-		icmCpy3(smp[i].dv, smp[i].anv);
-		smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);
-	}
+		/* Itterate smoothing until we're happy */
+		for (it = 0; it < VECADJPASSES; it++) {
+			int ncliped = 0;
+			double maxclipby = 0.0;
+			double avgclipby = 0.0;
+	
+			/* Compute the neighbourhood smoothed anv[] from dv[] */
+			for (i = 0; i < nmpts; i++) {
+				double sav[3], dav[3];	/* Average locations */
+				double tmp[3], c1[3], c2[3];
+				double rdsm;
+			
+				/* Compute average values */
+				sav[0] = sav[1] = sav[2] = 0.0;
+				dav[0] = dav[1] = dav[2] = 0.0;
+				for (j = 0; j < smp[i].nnd; j++) {
+					nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
+					double nw = smp[i].nd[j].w;			/* Weight */
+		
+					icmScale3(tmp, np->sv, nw);			/* weight for filter */
+					icmAdd3(sav, sav, tmp);				/* sum filtered value */
+		
+					/* weight for filter */
+					tmp[0] = nw * np->dv[0];			/* Don't itterate J */
+					tmp[1] = nw * np->anv[1];
+					tmp[2] = nw * np->anv[2];
+					icmAdd3(dav, dav, tmp);				/* sum filtered value */
+				}
+		
+				/* Compute filtered value with source to dest scaling */
+				icmSub3(tmp, smp[i].sv, sav);		/* Vector from average to src */
+				icmMul3(tmp, tmp, smp[i].nscale);	/* Scale */
+				icmAdd3(tmp, tmp, dav);				/* average dst + vector */
 
-	if (verb) {
-		double avgog = 0.0, maxog = 0.0, nog = 0.0;
-		double avgig = 0.0, maxig = 0.0, nig = 0.0;
+				rdsm = 1.0 - sqrt(smp[i].wt.r.dsm);	/* To degree of blending with unchanged */
 
-		/* Check the result */
+				icmBlend3(tmp, tmp, smp[i].dv, rdsm);	/* Less than full imprint */
+				
+#if VECADJPASSES > 1
+				/* Clip to gamut */
+				if (dc_gam->nradial(dc_gam, c1, tmp) > (1.0 + 1e-6)) {
+					co cp;
+					double cvec[3];
+
+					/* Lookup "shrunk gamut" cliping direction */
+					icmCpy3(cp.p, tmp);
+					evectmap->interp(evectmap, &cp);
+					icmNormalize3(cvec, cp.v, 1.0);
+
+					if (!vintersect2(dc_gam, NULL, c2, cvec, tmp)) { /* Got an intersection */
+						double id;
+	
+//printf("~1 clipped %f %f %f -> %f %f %f\n", tmp[0], tmp[1], tmp[2], c2[0], c2[1], c2[2]);
+						id = icmNorm33(c2, tmp);		/* Dist to intersection */
+						icmCpy3(tmp, c2);
+	
+						ncliped++;
+						if(id > maxclipby)
+							maxclipby = id;
+						avgclipby += id;
+					} else {
+//printf("~1 rclipped %f %f %f -> %f %f %f\n", tmp[0], tmp[1], tmp[2], c1[0], c1[1], c1[2]);
+						icmCpy3(tmp, c1);			/* Use radial clip */
+					}
+				}
+#endif
+	
+				/* Blend to un-smoothed value on neutral axis */
+				icmBlend3(tmp, smp[i].dv, tmp, smp[i].naxbf);
+	
+				/* Updated value for next itteration */
+				icmCpy3(smp[i].anv, tmp);
+			}
+
+			if (ncliped > 0)
+				avgclipby /= (double)ncliped;
+
+			delta = (pncliped - ncliped)/(double)nmpts;
+	
+			if (verb) {
+				printf("It %d: No clip %d/%d delta %f max by %f, avg by %f\n",it,ncliped, nmpts+1, delta, maxclipby, avgclipby);
+			}
+			pncliped = ncliped;
+		}
+	
+		/* Copy final results */
 		for (i = 0; i < nmpts; i++) {
-			double cvec[3], clen;
-
-			/* Error for just this point, for stats */
-			icmSub3(cvec, smp[i].tdst, smp[i].anv);
-			clen = icmDot3(smp[i].evect, cvec);
-
-			if (clen > 0.0) {		/* Compression */
-				if (clen > maxog)
-					maxog = clen;
-				avgog += clen;
-				nog++;
-
-			} else {						/* Expansion */
-				if (-clen > maxig)
-					maxig = -clen;
-				avgig += -clen;
-				nig++;
-			}
+			icmCpy3(smp[i].dv, smp[i].anv);
+			smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);
 		}
-		printf("No og %4.0f max %f avg %f, No ig %4.0f max %f avg %f\n",
-			       nog,maxog,nog > 1 ? avgog/nog : 0.0, nig,maxig,nig > 1 ? avgig/nig : 0.0);
 	}
-#endif /* VECADJUST */
+
 #endif /* VECADJPASSES > 0 */
 
+#ifdef DIAG_POINTS
+	/* Show just the closest vectors etc. */
+	for (i = 0; i < nmpts; i++) {		/* Move all the points */
+//		icmCpy3(smp[i].dv, smp[i].drv);			/* Radial */
+		icmCpy3(smp[i].dv, smp[i].aodv);		/* Nearest */
+//		icmCpy3(smp[i].dv, smp[i].nrdv);		/* No smoothed weighted */
+		smp[i].dr = icmNorm33(smp[i].dv, smp[i].dgam->cent);	/* Vector smoothed */
+	}
+#else
+	/* The smoothed direction and raw depth is a single pass, */
+	/* but we use multiple passes to determine the extra depth that */
+	/* needs to be added so that the smoothed result lies within */
+	/* the destination gamut. */
+
 #if RSPLPASSES > 0
+
+	VA(("Fine tuning vectors to allow for rspl smoothing:\n"));
+
 	/* We need to adjust the vectors with extra depth to compensate for */
 	/* for the effect of rspl smoothing. */
 	{
 		cow *gpnts = NULL;	/* Mapping points to create 3D -> 3D mapping */
 		rspl *map = NULL;	/* Test map */
-		datai il, ih;
-		datao ol, oh;
 		int gres[MXDI];
 		double avgdev[MXDO];
 		double icgain, ixgain;		/* Initial compression, expansion gain */
 		double fcgain, fxgain;		/* Final compression, expansion gain */
 
-		VA(("Fine tuning vectors to allow for rspl smoothing:\n"));
-
-		for (j = 0; j < 3; j++) {	/* Copy ranges */
-			il[j] = map_il[j];
-			ih[j] = map_ih[j];
-			ol[j] = map_ol[j];
-			oh[j] = map_oh[j];
-		}
-
-		/* Adjust the input ranges for guide vectors */
-		for (i = 0; i < nmpts; i++) {
-			for (j = 0; j < 3; j++) {
-				if (smp[i]._sv[j] < il[j])
-					il[j] = smp[i]._sv[j];
-				if (smp[i]._sv[j] > ih[j])
-					ih[j] = smp[i]._sv[j];
-			}
-		}
-
-		/* Now expand the bounding box by aprox 5% margin, but scale grid res */
-		/* to match, so that the natural or given boundary still lies on the grid. */
-		/* (This duplicates code in gammap applied after near_smooth() returns) */
-		/* (We are assuming that our changes to the giude vectprs won't expand the ranges) */
-		{
-			int xmapres;
-			double scale;
-
-			xmapres = (int) ((mapres-1) * 0.05 + 0.5);
-			if (xmapres < 1)
-				xmapres = 1;
-
-			scale = (double)(mapres-1 + xmapres)/(double)(mapres-1);
-
-			for (j = 0; j < 3; j++) {
-				double low, high;
-				high = ih[j];
-				low = il[j];
-				ih[j] = (scale * (high - low)) + low;
-				il[j] = (scale * (low - high)) + high;
-			}
-
-			mapres += 2 * xmapres;
-		}
-
 		if ((gpnts = (cow *)malloc(nmpts * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
 			if (evectmap != NULL)
 				evectmap->del(evectmap);
-			if (si_gam != sc_gam)
-				sci_gam->del(sci_gam);
-			if (di_gam != sci_gam && di_gam != sci_gam)
-				di_gam->del(di_gam);
+			if (src_gam != sc_gam)
+				src_gam->del(src_gam);
+			if (dst_gam != src_gam && dst_gam != dc_gam)
+				dst_gam->del(dst_gam);
 			free_nearsmth(smp, nmpts);
 			*npp = 0;
 			return NULL;
 		}
 
-		/* Loopkup correction vectors */
-		VA(("Computing fine tuning direction for vectors:\n")); 
+		/* Lookup correction vectors */
+		VA(("Computing fine tuning target for vectors:\n")); 
 		for (i = 0; i < nmpts; i++) {
-			co cp;
 			double nd, id, tmp[3];
 
-			icmCpy3(cp.p, smp[i].dv);
-			evectmap->interp(evectmap, &cp);
-			icmNormalize3(smp[i].evect, cp.v, 1.0);
-
-			/* ~~99 ?? should we deal with white & black direction here ?? */
-
-			/* Use closest as a default */
-			smp[i].dgam->nearest(smp[i].dgam, smp[i].tdst, smp[i].dv);
-			nd = icmNorm33(smp[i].tdst, smp[i].dv);		/* Dist to nearest */
-
-			/* Compute intersection with dest gamut as tdst */
-			if (!vintersect2(smp[i].dgam, NULL, tmp, smp[i].evect, smp[i].dv)) {
-				/* Got an intersection */
-				id = icmNorm33(tmp, smp[i].dv);		/* Dist to intersection */
-				if (id <= (nd + 5.0)) 				/* And it seems sane */
-					icmCpy3(smp[i].tdst, tmp);
+			/* If the sv and dv are within dc_gam, then this point doesn't need */
+			/* to be fine tuned to make it land on the gamut surface - this point */
+			/* either doesn't need gamut mapping, or is being expanded, in which */
+			/* case we prioritize smoothness over exactly hitting the expansion */
+			/* target */  
+			if (dc_gam->nradial(dc_gam, NULL, smp[i].sv) <= (1.0 + 1e-6)
+			 && dc_gam->nradial(dc_gam, NULL, smp[i].dv) <= (1.0 + 1e-6)) {
+				icmCpy3(smp[i].tdst, smp[i].dv);	/* Target is where we are */
+				smp[i].nott = 1;
+	
+			} else {
+				co cp;
+				double evect[3];
+	
+				/* Lookup fine tuning vector direction for current location */
+				icmCpy3(cp.p, smp[i].dv);
+				evectmap->interp(evectmap, &cp);
+				icmNormalize3(evect, cp.v, 1.0);
+	
+				/* Use closest as a default */
+				smp[i].dgam->nearest(smp[i].dgam, smp[i].tdst, smp[i].dv);
+				nd = icmNorm33(smp[i].tdst, smp[i].dv);		/* Dist to nearest */
+	
+				/* Compute intersection with dest gamut as tdst */
+				if (!vintersect2(smp[i].dgam, NULL, tmp, evect, smp[i].dv)) {
+					/* Got an intersection */
+					id = icmNorm33(tmp, smp[i].dv);		/* Dist to intersection */
+					if (id <= (nd + 5.0)) 				/* And it seems sane */
+						icmCpy3(smp[i].tdst, tmp);
+				}
+				smp[i].nott = 0;
 			}
 
 			smp[i].coff[0] = smp[i].coff[1] = smp[i].coff[2] = 0.0;
@@ -2996,6 +3150,8 @@ datao map_oh
 			double avgrext = 0.0;
 			double ovlen;
 
+			VA(("it %d: Creating rspl\n",it));
+
 			/* Setup the rspl guide points for creating rspl */
 			for (i = 0; i < nmpts; i++) {
 				icmCpy3(gpnts[i].p, smp[i]._sv);	/* The orgininal src point */
@@ -3004,13 +3160,14 @@ datao map_oh
 			}
 
 			for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
-//				gres[j] = (mapres+1)/2;		/* Half resolution for speed */
 				gres[j] = mapres;			/* Full resolution */
 				avgdev[j] = GAMMAP_RSPLAVGDEV;
 			}
 			map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
 			map->fit_rspl_w(map, GAMMAP_RSPLFLAGS, gpnts, nmpts,
-			                il, ih, gres, ol, oh, mapsmooth, avgdev, NULL);
+			                map_il, map_ih, gres, map_ol, map_oh, mapsmooth, avgdev, NULL);
+
+			VA(("it %d: Evaluate mapping\n",it));
 
 			/* See what the source actually maps to via rspl, and how far from */
 			/* the target point they are. */
@@ -3022,11 +3179,19 @@ datao map_oh
 				icmCpy3(cp.p, smp[i]._sv);
 				map->interp(map, &cp);
 				icmCpy3(smp[i].temp, cp.v);
-
+	
+				/* Lookup fine tuning vector direction for that value. */
+				/* (evect[] is then used in the local correction loop below) */
+				icmCpy3(cp.p, smp[i].temp);
+				evectmap->interp(evectmap, &cp);
+				icmNormalize3(smp[i].evect, cp.v, 1.0);
+	
 				/* Compute the correction needed and it's signed length */
 				icmSub3(cvec, smp[i].tdst, smp[i].temp);
 				smp[i].clen = icmDot3(smp[i].evect, cvec);
 			}
+
+			VA(("it %d: Compute correction vectors\n",it));
 
 			/* Compute local correction */
 			for (i = 0; i < nmpts; i++) {
@@ -3037,6 +3202,8 @@ datao map_oh
 				double tt;
 				double cgain, xgain;		/* This itters compression, expansion gain */
 				double gain;				/* Gain used */
+				co cp;
+				double evect[3];
 			
 				/* See what the worst case is in the local area, and */
 				/* aim to lower the whole local area by enough to */
@@ -3091,6 +3258,7 @@ datao map_oh
 
 				/* Keep stats of this point */
 				clen = smp[i].clen;
+
 				if (clen > 0.0) {
 					if (clen > maxog)
 						maxog = clen;
@@ -3115,20 +3283,32 @@ datao map_oh
 				gpnts[i].w = 1.0;
 			}
 
+			if ((it+1) < RSPLPASSES || !surfpnts)
+				map->del(map);			/* Not the last pass, or not doing grid surface points */
+			else
+				lastmap = map;			/* Let grid surface creation use this. */
+
+			VA(("it %d: Compute correction rspl\n",it));
+
+			/* Create rspl of corrections */
 			for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
-//				gres[j] = (mapres+1)/2;		/* Half resolution */
 				gres[j] = mapres;			/* Full resolution */
 				avgdev[j] = GAMMAP_RSPLAVGDEV;
 			}
 			map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
 			map->fit_rspl_w(map, GAMMAP_RSPLFLAGS, gpnts, nmpts,
-			                il, ih, gres, ol, oh, 2.0, avgdev, NULL);
+			                map_il, map_ih, gres, map_ol, map_oh, 1.0, avgdev, NULL);
+
+			VA(("it %d: Apply corrections\n",it));
 
 			/* Lookup the smoothed extension vector for each point and apply it */
 			for (i = 0; i < nmpts; i++) {
 				double tt;
 				co cp;
 			
+				if (smp[i].nott)	/* Don't alter points within the gamut */
+					continue;
+
 				icmCpy3(cp.p, smp[i].dv);
 				map->interp(map, &cp);
 #ifdef RSPLUSEPOW
@@ -3143,7 +3323,7 @@ datao map_oh
 				/* Apply accumulated offset */
 				icmAdd3(smp[i].anv, smp[i].dv, cp.v);
 			}
-			map->del(map);
+			map->del(map);			/* Not the last pass, or not doing grid surface points */
 
 			if (verb)
 				printf("No og %4.0f max %f avg %f, No ig %4.0f max %f avg %f, avg rext %f\n",
@@ -3174,18 +3354,15 @@ datao map_oh
 	}
 
 #endif /* RSPLPASSES > 0 */
-#endif /* NEVER (show debug values) */
+#endif /* !DIAG_POINTS */
 
 	VA(("Smoothing passes done, doing final houskeeping\n"));
 
-	if (verb)
-		printf("\n");
-
 #if defined(SAVE_VRMLS) && defined(PLOT_MAPPING_INFLUENCE)
-	create_influence_plot(smp, nmpts);
+	create_influence_plot(smp, nmpts, mapres);
 #endif
 
-	VB(("Final guide points:\n"));
+	VA(("Restoring non cusp-rotated source points:\n")); 
 
 	/* Restore the actual non cusp rotated source point */
 	for (i = 0; i < nmpts; i++) {
@@ -3236,7 +3413,7 @@ datao map_oh
 
 				/* Compute actual depth of ray into destination gamut */
 				/* to determine if this is expansion or contraction. */
-				if (di_gam->vector_isect(di_gam, smp[i].sv, smp[i].dv,
+				if (dst_gam->vector_isect(dst_gam, smp[i].sv, smp[i].dv,
 				                    minv, maxv, &mint, &maxt, &mintri, &maxtri) != 0) {
 					double wp[3], bp[3];		/* Gamut white and black points */
 					double p1, napoint[3] = { 50.0, 0.0, 0.0 };		/* Neutral axis point */
@@ -3249,7 +3426,7 @@ datao map_oh
 					/* the guide ray. We use this as a destination direction */
 					/* if the sub surface ray gets very long, and to compute */
 					/* a sanity check on the available depth. */
-					if (d_gam->getwb(d_gam, NULL, NULL, NULL, wp, dst_kbp ? NULL : bp, dst_kbp ? bp : NULL) == 0) {
+					if (dc_gam->getwb(dc_gam, NULL, NULL, NULL, wp, dst_kbp ? NULL : bp, dst_kbp ? bp : NULL) == 0) {
 						if (icmLineLineClosest(napoint, NULL, &p1, NULL, bp, wp,
 						                       smp[i].sv, smp[i].dv) == 0) {
 							double nalev[3];
@@ -3295,7 +3472,7 @@ datao map_oh
 					}
 #ifdef VERB
 					  else {
-						printf("d_gam->getwb failed\n");
+						printf("dc_gam->getwb failed\n");
 					}
 #endif
 
@@ -3444,54 +3621,345 @@ datao map_oh
 
 #ifdef SUBVEC_SMOOTHING
 	VB(("Smoothing sub-surface guide points:\n"));
+	{
+		double maxmv = 0.0, avgmv = 0.0, acount = 0.0;
 
-	/* Smooth the sub-surface mapping points */
-	/* dv2[] is duplicated in temp[], so use temp[] as the values to be filtered */
-	for (i = 0; i < nmpts; i++) {
-		double tmp[3];
-		double fdv2[3];			/* Filtered dv2[] */
-		double tw;				/* Total weight */
-		int rc;
-
-		if (smp[i].vflag == 0)
-			continue;
-
-		/* Compute filtered value */
-		tw = fdv2[0] = fdv2[1] = fdv2[2] = 0.0;
-		for (j = 0; j < smp[i].nnd; j++) {
-			nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
-			double nw = smp[i].nd[j].w;			/* Weight */
-			double tmp[3];
+		/* Smooth the sub-surface mapping points */
+		for (i = 0; i < nmpts; i++) {
+			double sav[3], dav[3];	/* Average locations */
+			double scr, dcr;		/* Cylindrical radius */
+			double scf;				/* Scale factor */
+			double tmp[3], de;
+				
+			if (smp[i].vflag == 0)
+				continue;			/* Sub value not valid */
 	
-			if (np->vflag) {
-				icmSub3(tmp, smp[i].sv2, np->sv2);	/* Vector from neighbour src to src */
-				icmAdd3(tmp, tmp, np->dv2);			/* Neigbour dst + vector */
+			/* Compute average values */
+			sav[0] = sav[1] = sav[2] = 0.0;
+			dav[0] = dav[1] = dav[2] = 0.0;
+			for (j = 0; j < smp[i].nnd; j++) {
+				nearsmth *np = smp[i].nd[j].n;		/* Pointer to neighbor */
+				double nw = smp[i].nd[j].w;			/* Weight */
 	
-				icmScale3(tmp, tmp, nw);			/* weight for filter */
-				icmAdd3(fdv2, fdv2, tmp);			/* sum filtered value */
-				tw += nw;
+				icmScale3(tmp, np->sv2, nw);		/* weight for filter */
+				icmAdd3(sav, sav, tmp);				/* sum filtered value */
+	
+				icmScale3(tmp, np->dv2, nw);		/* weight for filter */
+				icmAdd3(dav, dav, tmp);				/* sum filtered value */
 			}
-		}
+	
+			/* We want to transfer the relative location  (i.e. detail) from */
+			/* the source to destination, but we need to scale the features */
+			/* appropriately for the mapping. */
+			scr = sqrt(sav[1] * sav[1] + sav[2] * sav[2]);
+			dcr = sqrt(dav[1] * dav[1] + dav[2] * dav[2]);
+			scf = dcr/scr;
+	
+			/* Compute filtered value */
+			icmSub3(tmp, smp[i].sv2, sav);		/* Vector from average to src */
+			tmp[1] *=  scf;						/* Scale */
+			tmp[2] *=  scf;						/* Scale */
+			icmAdd3(tmp, tmp, dav);				/* average dst + vector */
+	
+			de = icmNorm33(smp[i].dv2, tmp);
+			icmCpy3(smp[i].dv2, tmp);
+	
+			if (de > maxmv)
+				maxmv = de;
+			avgmv += de;
+			acount++;
 
-		if (tw > 0.0) {
-//printf("~1 %d: moved %f %f %f -> %f %f %f de %f\n", i, smp[i].dv2[0], smp[i].dv2[1], smp[i].dv2[2], fdv2[0], fdv2[1], fdv2[2], icmNorm33(smp[i].dv2,fdv2));
-			icmScale3(smp[i].dv2, fdv2, 1.0/tw);
+			VB(("Smthd Src %d = %f %f %f\n",i,smp[i].sv2[0],smp2[i].sv[1],smp2[i].sv2[2]));
+			VB(("Smthd Dst %d = %f %f %f\n",i,smp[i].dv2[0],smp2[i].dv[1],smp2[i].dv2[2]));
 		}
+		if (acount > 0)
+			avgmv /= acount;
+
+		if (verb)
+			printf("Sub-surface smoothing changed by max %f, average %f\n",maxmv, avgmv);
+
 	}
 #endif /* SUBVEC_SMOOTHING */
 
 	VB(("near_smooth is done\n"));
 
+#ifdef PLOT_SMOOTHING_CHANGE
+	/* Plot change in destination point of un-smoothed to smoothed */
+	{
+		vrml *wrl = NULL;
+		int doaxes = 0;
+
+#ifdef PLOT_AXES
+		doaxes = 1;
+#endif
+		wrl = new_vrml("dst_smvec", doaxes, vrml_lab);
+
+		/* Start of guide vector plot */
+		wrl->start_line_set(wrl, 0);
+
+		for (i = 0; i < nmpts; i++) {
+			double red[3]    = { 1.0, 0.0, 0.0 };
+			double green[3]  = { 0.0, 1.0, 0.0 };
+
+			wrl->add_col_vertex(wrl, 0, smp[i].nrdv, red); 
+			wrl->add_col_vertex(wrl, 0, smp[i].dv, green);
+		}
+		wrl->make_lines(wrl, 0, 2);			/* Change vectors */
+
+#ifndef NEVER
+		/* Plot un-smoothed src to dst mappings */
+		wrl->start_line_set(wrl, 0);
+
+		for (i = 0; i < nmpts; i++) {
+			double lblue[3]    = { 0.4, 0.4, 0.8 };
+			double magenta[3]  = { 0.8, 0.4, 0.8 };
+
+			wrl->add_col_vertex(wrl, 0, smp[i].sv, lblue);
+			wrl->add_col_vertex(wrl, 0, smp[i].nrdv, magenta); 
+		}
+		wrl->make_lines(wrl, 0, 2);			/* Change vectors */
+#endif
+
+#ifdef NEVER
+		/* Plot index numbers */
+		for (i = 0; i < nmpts; i++) {
+			double cream[3] = { 0.7, 0.7, 0.5 };
+			char buf[100];
+			sprintf(buf, "%d", i);
+			wrl->add_text(wrl, buf, smp[i].dv, cream, 0.5);
+		}
+#endif /* NEVER */
+
+		/* Write transparent destination space gamut surface */
+		dc_gam->write_to_vrml(dc_gam, wrl, 0.5, 0);
+
+		/* Write file */
+		wrl->del(wrl);
+	}
+#endif /* PLOT_SMOOTHING_CHANGE */
+
+	/* If grid surface points are requested */
+	if (surfpnts) {
+		DCOUNT(gc, 3, 3, 0, 0, hmapres);
+		double cent[3];
+
+		VB(("Adding grid surface points:\n"));
+
+		/* If rspl smoothing didn't leave us a map */
+		if (lastmap == NULL) {
+
+			cow *gpnts = NULL;	/* Mapping points to create 3D -> 3D mapping */
+			int gres[MXDI];
+			double avgdev[MXDO];
+
+			VB(("Creating rspl map for grid surface points\n",it));
+
+			if ((gpnts = (cow *)malloc(nmpts * sizeof(cow))) == NULL) { 
+				fprintf(stderr,"gamut map: Malloc of near smooth points failed\n");
+				if (evectmap != NULL)
+					evectmap->del(evectmap);
+				if (src_gam != sc_gam)
+					src_gam->del(src_gam);
+				if (dst_gam != src_gam && dst_gam != dc_gam)
+					dst_gam->del(dst_gam);
+				free_nearsmth(smp, nmpts);
+				*npp = 0;
+				return NULL;
+			}
+
+			/* Setup the rspl guide points for creating rspl */
+			for (i = 0; i < nmpts; i++) {
+				icmCpy3(gpnts[i].p, smp[i].sv);	
+				icmCpy3(gpnts[i].v, smp[i].dv);	
+				gpnts[i].w = 1.0;
+			}
+
+			for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
+				gres[j] = mapres;			/* Full resolution */
+				avgdev[j] = GAMMAP_RSPLAVGDEV;
+			}
+			lastmap = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
+			lastmap->fit_rspl_w(lastmap, GAMMAP_RSPLFLAGS, gpnts, nmpts,
+			                map_il, map_ih, gres, map_ol, map_oh, mapsmooth, avgdev, NULL);
+			free(gpnts);
+		}
+
+		sc_gam->getcent(dc_gam, cent);
+
+		DC_INIT(gc);
+		for (;;) {
+			/* If point is in the outer two layers of grid */
+			if (   gc[0] == 0 || gc[0] == hdmapres
+				|| gc[0] == (hmapres-1) || gc[0] == (hmapres-1-hdmapres)
+			    || gc[1] == 0 || gc[1] == hdmapres
+				|| gc[1] == (hmapres-1) || gc[1] == (hmapres-1-hdmapres)
+			    || gc[2] == 0 || gc[2] == hdmapres
+				|| gc[2] == (hmapres-1) || gc[2] == (hmapres-1-hdmapres))
+
+			/* Only points around gamut, not on top or underneath */
+/*
+			if (   gc[1] == 0 || gc[1] == hdmapres
+				|| gc[1] == (hmapres-1) || gc[1] == (hmapres-1-hdmapres)
+			    || gc[2] == 0 || gc[2] == hdmapres
+				|| gc[2] == (hmapres-1) || gc[2] == (hmapres-1-hdmapres))
+*/
+			{
+				double grid2gamut, gamut2cent, ww;
+				co cp;
+
+				if (nmpts >= mxnmpts) {
+					warning("nearsmth ran out of space for points");
+					break;
+				}
+				smp[nmpts].uflag = 1;
+
+				/* Source location */
+				for (j = 0; j < 3; j++)
+					smp[nmpts].sv[j] = map_il[j] + gc[j]/(hmapres-1.0) * (map_ih[j] - map_il[j]);
+
+				/* If this point is within source gamut, skip it */
+				if (sc_gam->nradial(sc_gam, NULL, smp[nmpts].sv) <= (1.0 + 1e-6)) {
+//printf("~1 point %d %d %d = %f %f %f is inside source gamut\n", gc[0], gc[1], gc[2], smp[nmpts].sv[0], smp[nmpts].sv[1], smp[nmpts].sv[2]);
+					goto next_point;
+				}
+#ifdef NEVER
+				/* Clip the point to the closest location on the source */
+				/* colorspace gamut. */
+				sc_gam->nearest(sc_gam, cp.p, smp[nmpts].sv);
+#else
+				/* Map grid point to weighted nearest on source space gamut */
+	 			{
+					double ta[3] = { 50.0, 0.0, 0.0 };
+					double tc[3] = { 0.0, 0.0, 0.0 };
+					double s[2] = { 20.0, 20.0 };		/* 2D search area */
+					double nv[2];						/* 2D New value */
+					double tp[3];						/* Resultint value */
+					double ne;							/* New error */
+					int notrials = NO_TRIALS;
+					double bnv[3];					/* Best 3d value */
+					double brv;						/* Best return value */
+					int trial;
+					double mv;
+
+					/* Determine the parameter weighting at this location */
+					opts.pass = 0;		/* Itteration pass */
+					opts.ix = nmpts;
+					opts.p = &smp[nmpts];
+					opts.wngam = sc_gam;	/* Optimise to source colorspace gamut */
+					opts.wn = smp[nmpts].sv;	/* minimize optfunc1a sv -> sc_gam */
+
+					/* Compute weights at this point */
+					interp_xweights(sc_gam, &smp[nmpts].wt, smp[nmpts].sv, opts.xwh, &opts, 0);
+
+					/* Initial starting point */
+					sc_gam->nearest(sc_gam, bnv, smp[nmpts].sv);
+
+					/* Do several trials from different starting points to avoid */
+					/* any local minima, particularly with nearest mapping. */
+					brv = 1e38;
+					for (trial = 0; trial < notrials; trial++) {
+						double rv;			/* Temporary */
+
+						/* Setup the 3D -> 2D tangent conversion and inverse for our start point */
+						icmVecRotMat(smp[nmpts].m2d, bnv, sc_gam->cent, ta, tc);
+						icmVecRotMat(smp[nmpts].m3d, ta, tc, bnv, sc_gam->cent);
+
+						/* Convert our start value from 3D to 2D for speed. */
+						icmMul3By3x4(tp, smp[nmpts].m2d, bnv);
+						nv[0] = tp[1];
+						nv[1] = tp[2];
+			
+						if (trial >= 2) {
+							/* Use random offset to avoid local minima */
+							nv[0] += d_rand(-20.0, 20.0);
+							nv[1] += d_rand(-20.0, 20.0);
+						}
+
+						/* Optimise the point */
+						if (powell(&rv, 2, nv, s, 0.01, 1000, optfunc1a, (void *)(&opts), NULL, NULL) == 0
+						    && rv < brv) {
+							brv = rv;
+//printf("~1 point %d, trial %d, new best %f\n",i,trial,rv);
+
+							/* Convert best result 2D -> 3D */
+							tp[2] = nv[1];
+							tp[1] = nv[0];
+							tp[0] = 50.0;
+							icmMul3By3x4(tp, smp[nmpts].m3d, tp);
+				
+							/* Remap it to the source gamut surface */
+							sc_gam->radial(sc_gam, bnv, tp);
+						}
+//else printf("~1 powell failed with rv = %f\n",rv);
+					}
+					if (brv == 1e38) {		/* We failed to get a result */
+						fprintf(stderr, "multiple powells failed to get a result (4)\n");
+						sc_gam->nearest(sc_gam, cp.p, smp[nmpts].sv);
+
+					} else {
+						icmCpy3(cp.p, bnv);
+					}
+				}
+#endif /* NEVER */
+
+//printf("~1 grid %f %f %f -> src %f %f %f\n", smp[nmpts].sv[0], smp[nmpts].sv[1], smp[nmpts].sv[2], cp.p[0], cp.p[1], cp.p[2]);
+
+				/* Then lookup the gamut mapped value */
+				lastmap->interp(lastmap, &cp);
+
+//printf("~1 src %f %f %f -> dst %f %f %f\n", cp.p[0], cp.p[1], cp.p[2], cp.v[0], cp.v[1], cp.v[2]);
+
+				for (j = 0; j < 3; j++)
+					smp[nmpts].dv[j] = cp.v[j];
+
+				/* Compute the distance of the grid surface point to the to the */
+				/* source colorspace gamut, as well as the distance from there */
+				/* to the gamut center point. */
+				for (grid2gamut = gamut2cent = 0.0, j = 0; j < 3; j++) {
+					double tt;
+					tt = smp[nmpts].dv[j] - cp.p[j];
+					grid2gamut += tt * tt;
+					tt = cp.p[j] - cent[j];
+					gamut2cent += tt * tt;
+				}
+				grid2gamut = sqrt(grid2gamut);
+				gamut2cent = sqrt(gamut2cent);
+				if (gamut2cent < 0.1)
+					gamut2cent = 0.1;
+				
+				/* Make the weighting inversely related to distance, */
+				/* to reduce influence on in gamut mapping shape, */
+				/* while retaining some influence at the edge of the */
+				/* grid. */
+				ww = grid2gamut / gamut2cent;
+				if (ww > 1.0)
+					ww = 1.0;
+				
+				/* A low weight seems to be enough ? */
+				/* The lower the better in terms of geting best hull mapping fidelity */
+				smp[nmpts++].w1 = 0.1 * ww;
+			}
+		  next_point:;
+			DC_INC(gc);
+			if (DC_DONE(gc))
+				break;
+		}
+		*npp = nmpts;		/* Update returned number of points */
+
+		lastmap->del(lastmap);
+	}
+
 	if (evectmap != NULL)
 		evectmap->del(evectmap);
 #ifndef PLOT_DIGAM
-	if (si_gam != sc_gam)
-		sci_gam->del(sci_gam);
-	if (di_gam != sci_gam && di_gam != sci_gam)
-		di_gam->del(di_gam);
+	if (src_gam != sc_gam)
+		src_gam->del(src_gam);
+	if (dst_gam != src_gam && dst_gam != dc_gam)
+		dst_gam->del(dst_gam);
 	for (i = 0; i < nmpts; i++) {
 		smp[i].sgam = NULL;
 		smp[i].dgam = NULL;
+		smp[i].dcgam = NULL;
 	}
 #else /* !PLOT_DIGAM */
 	warning("!!!!! PLOT_DIGAM defined !!!!!");
@@ -3504,6 +3972,7 @@ datao map_oh
 void free_nearsmth(nearsmth *smp, int nmpts) {
 	int i;
 
+	/* Free contents that have been used */
 	for (i = 0; i < nmpts; i++) {
 		if (smp[i].nd != NULL)
 			free(smp[i].nd);
@@ -3518,7 +3987,7 @@ void free_nearsmth(nearsmth *smp, int nmpts) {
 
 /* Create a plot indicating how the source mapping has been guided by the */
 /* various weighting forces. */
-static void create_influence_plot(nearsmth *smp, int nmpts) {
+static void create_influence_plot(nearsmth *smp, int nmpts, int mapres) {
 	int i, j, k;
 	gamut *gam;
 	int src = 0;			/* 1 = src, 0 = dst gamuts */
@@ -3592,7 +4061,7 @@ static void create_influence_plot(nearsmth *smp, int nmpts) {
 
 	/* Create the diagnostic color rspl */
 	for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
-		gres[j] = smp->mapres;
+		gres[j] = mapres;
 		avgdev[j] = 0.001;
 	}
 	swdiag = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */

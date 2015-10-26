@@ -19,7 +19,11 @@
 #endif
 
 #include <stdio.h>
-#include "zlib.h"
+#ifdef UNIX
+# include <sys/types.h>
+# include <unistd.h>
+#endif
+# include "zlib.h"
 #ifdef STDC
 #  include <string.h>
 #  include <stdlib.h>

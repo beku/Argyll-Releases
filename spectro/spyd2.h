@@ -56,6 +56,7 @@
 #define SPYD2_TRIGTIMEOUT           0x04
 #define SPYD2_OVERALLTIMEOUT        0x05
 #define SPYD2_BAD_EE_CRC	        0x06
+#define SPYD2_TOOBRIGHT  	        0x07
 
 /* Internal software errors */
 #define SPYD2_BAD_EE_ADDRESS	    0x21

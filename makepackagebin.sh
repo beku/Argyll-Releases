@@ -1,6 +1,8 @@
 #!/bin/sh
 echo "Script to invoke Jam and then package the binary release."
 
+# Must use this rather than "jam -q" to ensure builtin libraries are used.
+
 #   Typical environment variables:
 #   (NOTE some systems don't export these ENV vars. by default !!!)
 #
@@ -51,7 +53,7 @@ rm -f bin/*.exe bin/*.dll
 rm -f ref/*.sp ref/*.cht ref/*.ti2
 
 # Make sure it's built and installed
-if ! jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true -sBUILTIN_JPEG=true install ; then
+if ! jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true -sBUILTIN_JPEG=true -sBUILTIN_PNG=true -sBUILTIN_Z=true -sBUILTIN_SSL=true install ; then
 	echo "Build failed!"
 	exit 1
 fi 
@@ -161,6 +163,7 @@ if [ X$USETAR = "Xtrue" ] ; then
 	tar -czvf $PACKAGE $TOPDIR
 	# tar -xzf to extract
 	# tar -tzf to list
+	# Should we use "COPYFILE_DISABLE=1 tar .." on OS X ??
 else
 	zip -9 -r $PACKAGE $TOPDIR
 	# unzip to extract

@@ -12,7 +12,8 @@
  * see the License.txt file for licencing details.
  *
  * Typically we need to set things up and then call the
- * "normal" main, called "uimain" in ArgyllCMS utils.
+ * "normal" main, called "uimain" in ArgyllCMS utils,
+ * created by ui.h #defining main to uimain.
  */
 
 #ifdef UNIX
@@ -48,6 +49,14 @@
 # include <Foundation/Foundation.h>
 # include <AppKit/AppKit.h>
 
+/* (Duplicate declaration from numsup.h) */
+
+/* Tell App Nap that this is user initiated */
+void osx_userinitiated_start();
+
+/* Done with user initiated */
+void osx_userinitiated_end();
+
 /* This is a mechanism to force libui to link */
 int ui_initialized = 0;
 
@@ -57,6 +66,9 @@ static char **g_argv;
 pthread_t ui_thid = 0;		/* Thread ID of main thread running io run loop */
 pthread_t ui_main_thid = 0;	/* Thread ID of thread running application main() */
 
+extern int uimain(int argc, char *argv[]);
+
+/* Thread that calls the real application main() */
 static void *callMain(void *p) {
 	int rv;
 
@@ -64,7 +76,12 @@ static void *callMain(void *p) {
 
 	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
 
+	/* Turn App Nap off */
+	osx_userinitiated_start();
+
 	rv = uimain(g_argc, g_argv);
+
+	osx_userinitiated_end();
 
 	[tpool release];
 
@@ -203,6 +220,8 @@ int ui_initialized = 0;
 //# pragma comment( linker, "/subsystem:console /ENTRY:WinMainCRTStartup" )
 //# pragma comment( linker, "/subsystem:windows /ENTRY:mainCRTStartup" )
 //# pragma comment( linker, "/subsystem:windows /ENTRY:WinMainCRTStartup" )
+
+extern int uimain(int argc, char *argv[]);
 
 APIENTRY WinMain(
     HINSTANCE hInstance,

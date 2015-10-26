@@ -140,6 +140,12 @@ static inst_code smcube_measure(smcube *p, double *XYZ);
 
 static void cube_rgb2XYZ(double *xyz, double *irgb);
 
+int static smcube_save_calibration(smcube *p);
+int static smcube_touch_calibration(smcube *p);
+int static smcube_restore_calibration(smcube *p);
+
+/* ------------------------------------------------- */
+
 /* Do a full command/response echange with the smcube */
 /* (This level is not multi-thread safe) */
 /* Return the smcube error code. */
@@ -849,6 +855,7 @@ smcube_del(inst *pp) {
 		if (p->icom != NULL)
 			p->icom->del(p->icom);
 		amutex_del(p->lock);
+		p->vdel(pp);
 		free(p);
 	}
 }
@@ -2009,7 +2016,7 @@ static void cube_rgb2XYZ(double *xyz, double *irgb) {
 /* The cube doesn't have an easily accessible serial number :-( */
 /* So if you have more than one, you'll be sharing the same calibration !! */
 
-int smcube_save_calibration(smcube *p) {
+int static smcube_save_calibration(smcube *p) {
 	int ev = SMCUBE_OK;
 	int i;
 	char fname[100];		/* Name */
@@ -2067,7 +2074,7 @@ int smcube_save_calibration(smcube *p) {
 }
 
 /* Restore the all modes calibration from the local system */
-int smcube_restore_calibration(smcube *p) {
+int static smcube_restore_calibration(smcube *p) {
 	int ev = SMCUBE_OK;
 	int i, j;
 	char fname[100];		/* Name */
@@ -2169,7 +2176,7 @@ int smcube_restore_calibration(smcube *p) {
 	return ev;
 }
 
-int smcube_touch_calibration(smcube *p) {
+int static smcube_touch_calibration(smcube *p) {
 	int ev = SMCUBE_OK;
 	char fname[100];		/* Name */
 	int rv;

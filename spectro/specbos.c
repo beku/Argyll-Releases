@@ -1434,6 +1434,7 @@ specbos_del(inst *pp) {
 		if (p->icom != NULL)
 			p->icom->del(p->icom);
 		amutex_del(p->lock);
+		p->vdel(pp);
 		free(p);
 	}
 }

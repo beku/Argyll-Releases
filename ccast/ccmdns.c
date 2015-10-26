@@ -75,6 +75,7 @@
 #else
 #include "numsup.h"
 #endif
+#include "conv.h"
 #include "ccmdns.h"
 
 #undef DEBUG
@@ -223,7 +224,7 @@ static int init_send_mDNS(SOCKET *psock) {
 	// If we're doing a one-shot, we shouldn't transmit from port 5353, */
 	// but ChromCast won't see the packet if we don't. */
 
-	/* We cant send from port 5353 if someone else is using it, */
+	/* We can't send from port 5353 if someone else is using it, */
 	/* so set the SO_REUSEADDR option (which is enough for MSWin), */
 	/* and SO_REUSEPORT for OS X and Linux */
 	{

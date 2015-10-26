@@ -192,6 +192,7 @@ main(int argc, char *argv[]) {
 		gmi.gampwf = 1.0;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
 		gmi.gamswf = 0.0;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
 	}
+	gmi.gamlpwf = 0.0;		/* Gamut Lightness preserving perceptual Map whtg. factor, 0.0 - 1.0 */
 	gmi.satenh = 0.0;		/* Saturation enhancement factor */
 	gmi.desc = "mapetest";
 	gmi.icci = 0;
@@ -205,7 +206,7 @@ main(int argc, char *argv[]) {
 		0, 0, 			/* Normal black points */
 		0,				/* Normal CMY cusp mapping */
 		0,				/* No relative weighting override */
-		17,				/* rspl resolution of 17 */
+		19,				/* rspl resolution of 17 */
 		NULL,			/* No input range override */
 		NULL,
 		gammapwrl		/* Diagnostic plot */

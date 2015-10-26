@@ -27,6 +27,9 @@
 /* 
 	TTBD:
 
+		Would be nice to have a way of not changing the target
+		instruments absolute calibration.
+
 		Would be nice to have a veryify option that produces
 		a fit report of a matrix vs. the input files.
 
@@ -34,7 +37,7 @@
 		(See post from umberto.guidali@tiscali.it)
 
 		Would be nice to be able to use an i1D3 to correct other instruments,
-		or an i1D3 created .ti3 as the reference.
+		or an i1D3 created .ti3 as the reference. (can do this with .ti3 files).
 
 		Would be nice to have an option of providing two ICC profiles,
 		instead of using .ti3 files (?? How well would it work though ?)

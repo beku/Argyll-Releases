@@ -26,13 +26,12 @@
 #include <math.h>
 #include "copyright.h"
 #include "aconfig.h"
+#include "numsup.h"
 #include "icc.h"
 #include "plot.h"
 #include "ui.h"
 
 #define PRES 100
-
-void error(char *fmt, ...), warning(char *fmt, ...);
 
 /* ---------------------------------------- */
 
@@ -203,30 +202,3 @@ main(
 	return 0;
 }
 
-/* ------------------------------------------------ */
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"monoplot: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"monoplot: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}

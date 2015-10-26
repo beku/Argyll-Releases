@@ -2165,7 +2165,7 @@ int main(int argc, char *argv[]) {
 			/* for some of these (new_prand).  */
 			if (uselat)	 {
 				/* A "greedy"/incremental far point approach */
-				t = new_ifarp(di, uilimit, fsteps, fxlist, fxno,
+				t = new_ifarp(verb, di, uilimit, fsteps, fxlist, fxno,
 				                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
 				pp->add_kword(pp, 0, "IFP_PATCHES", buf, NULL);

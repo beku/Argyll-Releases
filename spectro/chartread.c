@@ -198,6 +198,7 @@ alphix *paix,		/* Pass (row) index generators */
 alphix *saix,		/* Step (patch) index generators */
 int ixord,			/* Index order, 0 = pass then step */
 int rstart,			/* Random start/chart id */
+int rand,			/* Random order used  - can do auto strip ID & Bi-Dir */
 int hex,			/* Hexagon test patches */
 icompath *ipath,	/* Instrument path to open */
 flow_control fc,	/* flow control */
@@ -1389,7 +1390,7 @@ a1log *log			/* verb, debug & error log */
 					int xbdir;				/* Expected pass overall pass direction */
 					double xwerror = 0.0;	/* Expected pass worst error in best strip */
 
-					if (disbidi == 0 && (cap2 & inst2_bidi_scan))
+					if (rand && disbidi == 0 && (cap2 & inst2_bidi_scan))
 						dirrg = 2;			/* Enable bi-directional strip recognition */
 
 					/* DTP51 has a nasty habit of misaligning test squares by +/- 1 */
@@ -1463,7 +1464,7 @@ a1log *log			/* verb, debug & error log */
 							}
 						}
 					}
-					if (emit_warnings != 0 && boroi != oroi) {	/* Looks like the wrong strip */
+					if (emit_warnings != 0 && rand && boroi != oroi) {	/* Looks like the wrong strip */
 						char *mm = NULL;
 						mm = paix->aix(paix, boroi);
 #ifdef DEBUG
@@ -2110,6 +2111,7 @@ int main(int argc, char *argv[]) {
 	alphix *paix, *saix;		/* Pass and Step index generators */
 	int ixord = 0;				/* Index order, 0 = pass then step */
 	int rstart = 0;				/* Random start/chart id */
+	int rand = 0;				/* Random patch order, - can use auto strip ID and Bi-Di */
 	int hex = 0;				/* Hexagon pattern layout */
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
@@ -2472,10 +2474,13 @@ int main(int argc, char *argv[]) {
 			ixord = 1;
 	}
 
-	if ((ti = icg->find_kword(icg, 0, "RANDOM_START")) >= 0)
+	if ((ti = icg->find_kword(icg, 0, "RANDOM_START")) >= 0) {
 		rstart = atoi(icg->t[0].kdata[ti]);
-	else if ((ti = icg->find_kword(icg, 0, "CHART_ID")) >= 0)
+		rand = 1;
+	} else if ((ti = icg->find_kword(icg, 0, "CHART_ID")) >= 0) {
 		rstart = atoi(icg->t[0].kdata[ti]);
+		rand = 0;
+	}
 
 	if ((ti = icg->find_kword(icg, 0, "HEXAGON_PATCHES")) >= 0)
 		hex = 1;
@@ -2501,6 +2506,10 @@ int main(int argc, char *argv[]) {
 			tlen = 18.0;	/* Default for backwards compatibility */
 		} else 
 			tlen = atof(icg->t[0].kdata[ti]);
+	}
+
+	if (itype != instDTP20 && !rand && disbidi == 0) {
+		warning("Can't do bi-directional strip recognition without randomize patch locations");
 	}
 
 	if (verb) {
@@ -2838,7 +2847,7 @@ int main(int argc, char *argv[]) {
 
 	/* Read all of the strips in */
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
-	                saix, ixord, rstart, hex, ipath, fc, plen, glen, tlen,
+	                saix, ixord, rstart, rand, hex, ipath, fc, plen, glen, tlen,
 	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, ccxxname, obType,
 	                scan_tol, pbypatch, xtern, spectral, uvmode, accurate_expd,
 	                emit_warnings, g_log) == 0) {

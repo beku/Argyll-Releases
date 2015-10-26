@@ -25,8 +25,6 @@ yajl_parse.h
 yajl_parser.c
 yajl_parser.h
 yajl_test.c
-yajl_test.exe
-yajl_test.obj
 yajl_tree.c
 yajl_tree.h
 yajl_version.c

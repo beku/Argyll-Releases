@@ -217,7 +217,7 @@ double top) {		/* Timout in seconds */
 }
 
 /* Establish communications with a DTP20 */
-/* Return DTP_COMS_FAIL on failure to establish communications */
+/* Return DTP20_COMS_FAIL on failure to establish communications */
 static inst_code
 dtp20_init_coms(inst *pp, baud_rate br, flow_control fc, double tout) {
 	dtp20 *p = (dtp20 *)pp;
@@ -1402,7 +1402,8 @@ dtp20_del(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
 	if (p->icom != NULL)
 		p->icom->del(p->icom);
-	free (p);
+	p->vdel(pp);
+	free(p);
 }
 
 /* Set the instrument capabilities */

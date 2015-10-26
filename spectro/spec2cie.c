@@ -389,7 +389,7 @@ main(int argc, char *argv[])
 	if (illum == icxIT_none)
 		illum = icxIT_D50;
 	
-	if (observ = icxOT_none)
+	if (observ == icxOT_none)
 		observ = icxOT_CIE_1931_2;
 
 	/* Figure out what sort of device it is */

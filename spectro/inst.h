@@ -643,6 +643,10 @@ typedef enum {
 	void (*eventcallback)(void *cntx, inst_event_type event);					\
 	void *event_cntx;	/* Event callback function */							\
 																				\
+	/* Virtual delete. Cleans up things done by new_inst(). */					\
+	inst_code (*vdel)(															\
+        struct _inst *p);														\
+																				\
 	/* Establish communications at the indicated baud rate. */					\
 	/* (Serial parameters are ignored for USB instrument) */					\
 	/* Timout in to seconds, and return non-zero error code */					\

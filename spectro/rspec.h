@@ -33,12 +33,12 @@
 /* - - - - - - - - - - - - - */
 /* Collection of raw samples */
 typedef enum {
-	rspec_sensor,		/* Includes shielded/temperaturee values */
+	rspec_sensor,		/* Includes shielded/temperature values */
 	rspec_raw,			/* Potential light values */
 	rspec_wav			/* Valid wavelength values */
 } rspec_type;
 
-/* The order the state is changed in is device workflow dependent */
+/* The order the state is changed in, is device workflow dependent */
 typedef enum {
 	rspec_none = 0x0000,	/* No processing */
 	rspec_shld = 0x0002,	/* Shielded cell corrected */
@@ -136,7 +136,7 @@ struct _rspec_inf {
 /* Completely clear an rspec_inf. */
 void clear_rspec_inf(rspec_inf *inf);
 
-/* Completely free contesnt of rspec_inf. */
+/* Completely free contents of rspec_inf. */
 void free_rspec_inf(rspec_inf *inf);
 
 /* return the number of samples for the given spectral type */

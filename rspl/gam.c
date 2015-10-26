@@ -18,6 +18,52 @@
  * Latest simplex/linear equation version.
  */
 
+/*
+
+	This probably needs re-writing, since (I think) it doesn't take gamut
+	self intersection into account. Outline would be:
+
+	Have a spactial cache structure that contains list of potentialy
+	intersecting triangles for any point. Create this incrementally.
+	Each triangle can be replaced by a list of fragment triangles
+	sharing the same plane.
+
+	i.e.
+
+		triangle planes
+		triangles
+		edges
+		vertexes
+
+	Initialization:
+
+		Locate extreme vertex
+		Locate triangle that uses that vertex that is most elevated 
+		 in that direction as initial surface.
+		Intersect that triangle with all other triangles nearby, and
+		retain the fragment that has that vertex.
+		List of open edges is initial triangle edges.
+		Track outward and inward faces of all triangles in open surface.
+		
+	Basic loop:
+
+	While edge list is non-empty {
+		Locate adjacent triangle that is not part of surface that
+		is most accutely angled to outside face.
+	
+		Intersect that triangle with all other triangles using cache structure,
+		hanging on to all resulting fragments that are part of that edge.
+		
+		Add those fragments to the open surface. 
+
+	}
+
+	Each intersection adds new nodes, and splits a triangle into
+	about 8 smaller triangles. Trick is to avoid slivers and
+	numerical issues with triangles.
+*/
+	
+
 /* TTBD:
 
 	Add ouutput curve lookup callback support.
